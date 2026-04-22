@@ -49,17 +49,18 @@ Magazine
         └── Year
               └── Month (Issue)
                     ├── PDF (source — always uploaded as PDF)
-                    ├── EPUB (auto-converted from PDF)
-                    ├── MOBI (auto-converted from PDF)
+                    ├── EPUB (auto-converted from PDF — Phase 2)
+                    ├── MOBI (auto-converted from PDF — Phase 2)
                     ├── Metadata (title, description, tags, topics, page count)
-                    └── Extracted text (for full-text search indexing)
+                    └── Extracted text (OCR via Tesseract.js for full-text search indexing)
 ```
 
 ### File Handling
 - **Source format**: Always PDF (uploaded by admin)
-- **Auto-conversion**: System converts PDF → EPUB and PDF → MOBI on upload
-- **Bulk import**: Support uploading multiple PDFs at once with metadata assignment
+- **Auto-conversion**: PDF → EPUB and PDF → MOBI (planned — Phase 2)
+- **Bulk import**: Support uploading multiple PDFs at once with metadata assignment (planned)
 - **Naming convention**: `{Magazine Name} {Month}-{Year}.pdf` (e.g., `All India Magazine Apr-2026.pdf`)
+- **Note**: Current PDFs are Chrome print-to-PDF (Skia renderer) — no selectable text layer. OCR is required for text extraction.
 
 ---
 
@@ -70,130 +71,150 @@ Magazine
 - **Styling**: Tailwind CSS 4
 - **Animations**: Framer Motion (smooth, modern, slick transitions)
 - **PDF Viewer**: react-pdf (pdf.js wrapper) — in-app reading experience
-- **State Management**: Zustand (lightweight, simple)
+- **State Management**: Zustand (lightweight, bookmarks store with localStorage persistence)
 - **Icons**: Lucide React
 
 ### Mobile App
 - **Framework**: React Native with Expo (SDK 52+)
-- **Navigation**: React Navigation v7
+- **Navigation**: Expo Router (file-based, 4 tabs: Home, Browse, Search, Library)
 - **PDF Viewer**: react-native-pdf
 - **Offline Storage**: expo-file-system + SQLite (expo-sqlite)
-- **Shared Logic**: Shared TypeScript types/utilities with web
+- **Shared Logic**: Shared TypeScript types/utilities with web via @aim-archive/shared
 
 ### Backend & Infrastructure
-- **API**: Next.js API Routes (Route Handlers)
-- **Database**: Supabase (PostgreSQL) — free tier
-- **Authentication**: Supabase Auth (Google OAuth for optional sign-in)
-- **File Storage**: Supabase Storage (PDF/EPUB/MOBI files)
-- **Full-Text Search**: PostgreSQL Full-Text Search via Supabase (upgrade path: Meilisearch)
-- **PDF Text Extraction**: pdf-parse (Node.js, runs on upload for search indexing)
-- **PDF Conversion**: Calibre CLI (`ebook-convert`) for PDF → EPUB/MOBI
-- **Hosting**: Vercel (web app) — free tier
+- **API**: Next.js API Routes (Route Handlers) — 16 endpoints
+- **Database**: Supabase (PostgreSQL) — free tier, South Asia (Mumbai) region
+- **Project ID**: `glduurfsjyxpkdnxgdqz`
+- **Authentication**: Session cookie-based admin auth (admin email + shared password)
+- **File Storage**: Supabase Storage (`magazines` bucket, public access)
+- **Full-Text Search**: PostgreSQL Full-Text Search via Supabase RPC function (`search_issues`)
+  - Uses `plainto_tsquery`, `ts_rank` for relevance, `ts_headline` for highlighted snippets
+  - Fallback to ILIKE on titles/topics when no full-text results
+- **PDF Text Extraction**: OCR pipeline — Tesseract.js + pdfjs-dist (v4) + node-canvas
+  - Renders each PDF page to PNG via pdfjs-dist → node-canvas
+  - OCR via Tesseract.js (eng+hin languages)
+  - ~3-5 seconds per page, runs synchronously during admin upload
+  - Supports scanned/image-based PDFs (no text layer required)
+- **Hosting**: Vercel (web app) — free tier (planned deployment)
 - **CDN**: Vercel Edge Network (automatic with Vercel hosting)
 
 ### DevOps
-- **Version Control**: Git + GitHub
-- **CI/CD**: GitHub Actions
+- **Version Control**: Git + GitHub (`MugdhanilK/aim-archive`, private repo)
+- **CI/CD**: GitHub Actions (planned)
 - **Monorepo**: Turborepo (manages web + mobile + shared packages)
-- **Package Manager**: pnpm
-- **Linting**: ESLint + Prettier
-- **Testing**: Vitest (unit) + Playwright (e2e for web)
+- **Package Manager**: pnpm 10.33.0
+- **Linting**: ESLint + Prettier (Tailwind plugin)
+- **Testing**: Vitest (unit) + Playwright (e2e for web) — planned
 
 ---
 
-## 4. Features — Detailed Breakdown
+## 4. Current Implementation Status
 
-### 4.1 Public Features (No Login Required)
+### 4.1 What's Built and Working
 
-#### Browse & Discover
-- Browse by **magazine name** (AIM, Agnisikha, etc.)
-- Browse by **language**
-- Browse by **year → month** (timeline view)
-- Browse by **topic/theme** (tag-based)
-- **Latest issues** on homepage with cover thumbnails
-- **"On This Day"** or historical highlights section
+#### Public Web Pages (All Live)
+- **Homepage** — hero section, animated bookshelf, features grid, archive stats, CTA
+- **Browse page** — issue card grid with filters (magazine, year, language, topic)
+- **Issue detail page** — cover display, metadata, topics, download/read/bookmark buttons
+- **In-app PDF reader** — page navigation, zoom, fullscreen, page scrubber, bookmark
+- **Search page** — full-text search with highlighted snippets, page numbers, advanced filters
+- **Bookmarks page** — saved issues list with clear all (persisted via Zustand + localStorage)
+- **Header** — responsive nav, mobile hamburger menu, search/bookmark icons
+- **Footer** — links, branding, discreet admin link
 
-#### Read
-- **In-app PDF viewer** (web + mobile) — no need to download to read
-- Page-by-page navigation, zoom, fullscreen
-- **Reading progress** saved locally
-- Smooth, fast rendering
+#### Admin Panel (All Live)
+- **Login** (`/admin/login`) — email + password authentication, session cookies
+- **Dashboard** (`/admin`) — stat cards (magazines, issues, reads, downloads), popular issues, quick links
+- **Magazine management** (`/admin/magazines`) — add/edit/delete with language selector
+- **Issue management** (`/admin/issues`) — table with search, filters (magazine, year), sortable columns (title, date, reads, size), inline row editing (title, topics, description, month, year), publish/unpublish toggle, delete
+- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, auto-generated title, topics, description, uploads to Supabase Storage + OCR indexing
 
-#### Search
-- **Global full-text search** across ALL issues ever published
-- Search results show: issue name, year, page number, text snippet
-- **Sort** results by: relevance, date (newest/oldest)
-- **Filter** results by: magazine, language, year range, topic/theme
-- **Search within a specific PDF** while reading
+#### API Routes (16 endpoints)
+| Route | Methods | Purpose |
+|---|---|---|
+| `/api/magazines` | GET | List all magazines |
+| `/api/issues` | GET | List issues with filters/pagination |
+| `/api/issues/[id]` | GET | Single issue detail + increment read count |
+| `/api/search` | GET | Full-text search (RPC) with ILIKE fallback |
+| `/api/pdf/[...path]` | GET | Serve local PDFs during development |
+| `/api/admin/auth` | POST, DELETE | Admin login/logout |
+| `/api/admin/auth/check` | GET | Verify admin session |
+| `/api/admin/stats` | GET | Dashboard statistics |
+| `/api/admin/magazines` | GET, POST | List/create magazines |
+| `/api/admin/magazines/[id]` | PUT, DELETE | Update/delete magazine |
+| `/api/admin/issues` | GET | List all issues (admin view) |
+| `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue |
+| `/api/admin/issues/[id]/reindex` | POST | Re-run OCR on single issue |
+| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index |
+| `/api/admin/reindex` | POST | Batch reindex (one issue per call) |
 
-#### Download
-- Download **individual issues** (PDF, EPUB, or MOBI format)
-- **Bulk download**: select multiple issues → download as ZIP
-- Select by range (e.g., "AIM Jan 2020 – Dec 2020") for bulk download
+#### Database (8 tables, Supabase PostgreSQL)
+- `magazines` — 2 records (All India Magazine, Agnisikha)
+- `issues` — 8 records (Jan–Apr 2026 × 2 magazines)
+- `issue_search_index` — 384 pages of OCR-extracted text indexed
+- `admins` — 1 admin (admin@aurosociety.org)
+- `users` — empty (for future Google OAuth sync)
+- `user_bookmarks` — empty (for future sync)
+- `user_reading_history` — empty (for future sync)
+- `analytics_visibility` — 5 metric configs seeded
 
-#### Bookmark / Favorites
-- **Floating Action Button (FAB)** to bookmark/favorite an issue
-- Bookmarks stored locally (no login needed)
-- **"My Bookmarks"** page to view all saved issues
+#### OCR + Full-Text Search Pipeline
+- **384 pages** indexed across 8 issues via Tesseract.js OCR
+- Search returns page-level results with highlighted snippets and relevance ranking
+- Example: searching "smile" returns results like:
+  > **All India Magazine Apr-2026** — Page 24
+  > "...light and faith and confidence and joy. If difficulty comes, even that can be faced with a **smile**..."
+- New uploads are automatically OCR-indexed during the upload process
 
-#### User Preferences (Local — No Login)
-- Reading preferences (font size, theme if applicable)
-- Bookmarks and favorites
-- Reading history / recently viewed
-- All stored in localStorage (web) / AsyncStorage (mobile)
+#### Mobile App (Skeleton)
+- Expo project with 4 tab screens (Home, Browse, Search, Library)
+- Tab navigation configured with AIM color scheme
+- Placeholder content on all screens
 
-### 4.2 Optional Sign-In Features (Google OAuth)
+### 4.2 What's Not Built Yet
 
-#### Sync Across Devices
-- Sign in with Google (one-tap)
-- **Syncs**: bookmarks, reading history, preferences
-- Works seamlessly — app functions fully without login
-- Login is purely optional, only for cross-device sync
+#### Admin Enhancements (Planned)
+- Bulk select & bulk actions
+- Cover image upload per issue
+- View/open link to public page
+- Download count column
+- Pagination for large lists
+- Status filter (Published/Draft) + topic filter
+- Export as CSV
+- Bulk upload (multiple PDFs with auto-detect)
+- Duplicate issue for quick uploads
+- Confirmation toasts
 
-### 4.3 Admin Panel
+#### Phase 1.5: Polish & Deploy
+- SEO optimization (meta tags, sitemap, structured data)
+- Input validation with Zod on all API routes
+- Performance audit (Lighthouse)
+- Accessibility check
+- Deploy to Vercel
+- Connect domain (aimarchive.aurosociety.org)
 
-#### Authentication
-- Admin login (separate from public Google sign-in)
-- Multiple admins with equal access (no role hierarchy)
+#### Phase 2: Enhanced Web Features
+- PDF → EPUB/MOBI auto-conversion (Calibre CLI)
+- Bulk download (select issues → ZIP)
+- Google OAuth sign-in (optional, for cross-device sync)
+- Cross-device sync (bookmarks, history, preferences)
+- Advanced search (within-PDF search, highlighted results in reader)
+- Public analytics display (admin-controlled visibility)
+- Admin analytics dashboard (charts, search query analytics)
 
-#### Magazine Management
-- **Add/edit/delete** magazine editions
-- **Add/edit/delete** individual issues
-- **Upload PDFs** (single or bulk)
-- Auto-triggers: PDF → EPUB/MOBI conversion + text extraction for search
-- **Edit metadata**: title, description, tags/topics, cover image
-- **Bulk metadata editing** for imported issues
-- **Reorder** or organize issues
+#### Phase 3: Mobile App (Android + iOS)
+- Full feature parity with web
+- Offline reading (download + local storage)
+- My Library with storage management
+- Push notifications for new issues
+- Google Play + App Store deployment
 
-#### Analytics Dashboard (Admin View)
-- Total issues archived, total downloads, total reads
-- Most popular issues (by reads/downloads)
-- Traffic over time (daily/weekly/monthly)
-- Search query analytics (what are users searching for?)
-- Per-issue analytics (reads, downloads, time spent)
-
-#### Public Analytics Control
-- Admin decides **which stats to show publicly** (toggle per metric)
-- No data manipulation — exact data, just visibility control
-- Public-facing stats examples:
-  - "This issue was read 5,000 times"
-  - "Most popular issue this month"
-  - Total archive stats ("850 issues archived since 1990")
-
-### 4.4 Mobile-Specific Features
-
-#### Offline Reading
-- Download any issue for offline reading (tap download icon)
-- **"My Library"** section showing all downloaded issues
-- Full reader functionality offline (PDF viewer works without internet)
-- **Background sync** when online: updates bookmarks, checks for new issues
-- **Storage management**: shows space used per issue, total, option to delete
-
-#### Native Feel
-- Platform-appropriate navigation (bottom tabs on Android/iOS)
-- Native share sheet integration
-- Push notifications for new issues (optional)
-- Smooth native animations and gestures
+#### Phase 4: Polish & Scale
+- Meilisearch upgrade (if PostgreSQL FTS hits limits)
+- "On This Day" historical highlights
+- Guided tour / onboarding
+- Error monitoring (Sentry)
+- CDN optimization for large PDFs
 
 ---
 
@@ -201,29 +222,31 @@ Magazine
 
 ### Color Palette
 - **Primary**: White (#FFFFFF) — clean, bright
-- **Accent**: Light Gold / Saffron (#D4A843 or similar) — spiritual warmth
+- **Accent**: Light Gold / Saffron (#D4A843) — spiritual warmth
 - **Secondary accent**: Soft orange/amber tones (inspired by the logo flame)
 - **Text**: Dark charcoal (#1A1A1A) for readability
-- **Background**: Off-white / light cream for content areas
+- **Background**: Off-white / cream (#FFFCF5) for content areas
 - **Cards/Surfaces**: White with subtle gold border or shadow
+- **Implemented as**: Tailwind CSS 4 custom theme in `globals.css` with `gold-*` and `flame-*` color scales
 
 ### Logo
 - File: `images/AIM_logo.png`
 - A luminous golden flame with a figure of light — deeply spiritual
 - Logo should be used as-is, not modified
+- Copied to `apps/web/public/logo.png` for web use
 
 ### Typography
-- Clean, modern serif or sans-serif font
-- Consider: Inter (UI), Playfair Display (headings), or similar elegant pairing
+- **UI font**: Inter (variable, loaded via `next/font/google`)
+- **Heading font**: Playfair Display (variable, loaded via `next/font/google`)
 - Must support Devanagari, Tamil, Bengali, Marathi scripts for multilingual content
 
 ### Animation & Feel
 - **Modern, slick, smooth** — not flashy, but refined
 - Page transitions with Framer Motion
-- Subtle hover effects on cards
-- Smooth scroll animations
-- Loading skeletons (not spinners)
-- Micro-interactions on buttons, FABs, bookmarks
+- Subtle hover effects on cards (border-gold, shadow)
+- Loading skeletons (not spinners) — implemented on Browse, Search, Issue detail, Admin pages
+- Micro-interactions on buttons, bookmarks
+- **Performance note**: Removed backdrop-blur, infinite particle animations, and heavy CSS patterns after scroll lag was identified. Use GPU-friendly animations only.
 
 ### Design Philosophy
 - **State of the art** — this is NOT a legacy spiritual website
@@ -234,77 +257,81 @@ Magazine
 
 ---
 
-## 6. Database Schema (High-Level)
+## 6. Database Schema
 
-### Core Tables
-```
+### Core Tables (Supabase PostgreSQL)
+```sql
 magazines
-  - id (uuid, PK)
-  - name (text) — e.g., "All India Magazine"
-  - language (text) — e.g., "English"
-  - description (text)
-  - cover_image_url (text)
-  - created_at, updated_at
+  - id UUID PK DEFAULT uuid_generate_v4()
+  - name TEXT NOT NULL
+  - language TEXT NOT NULL DEFAULT 'english'
+  - description TEXT NOT NULL DEFAULT ''
+  - cover_image_url TEXT
+  - created_at TIMESTAMPTZ DEFAULT NOW()
+  - updated_at TIMESTAMPTZ DEFAULT NOW()
 
 issues
-  - id (uuid, PK)
-  - magazine_id (FK → magazines)
-  - title (text) — e.g., "All India Magazine Apr-2026"
-  - year (int)
-  - month (int)
-  - description (text)
-  - topics (text[]) — e.g., ["Surrender", "Divine Grace"]
-  - pdf_url (text)
-  - epub_url (text, nullable)
-  - mobi_url (text, nullable)
-  - cover_image_url (text, nullable)
-  - page_count (int, nullable)
-  - file_size_bytes (bigint)
-  - read_count (int, default 0)
-  - download_count (int, default 0)
-  - is_published (boolean, default true)
-  - created_at, updated_at
+  - id UUID PK DEFAULT uuid_generate_v4()
+  - magazine_id UUID FK → magazines(id) ON DELETE CASCADE
+  - title TEXT NOT NULL
+  - year INT NOT NULL
+  - month INT NOT NULL CHECK (1-12)
+  - description TEXT
+  - topics TEXT[] DEFAULT '{}'
+  - pdf_url TEXT NOT NULL
+  - epub_url TEXT (nullable)
+  - mobi_url TEXT (nullable)
+  - cover_image_url TEXT (nullable)
+  - page_count INT (nullable)
+  - file_size_bytes BIGINT DEFAULT 0
+  - read_count INT DEFAULT 0
+  - download_count INT DEFAULT 0
+  - is_published BOOLEAN DEFAULT TRUE
+  - created_at, updated_at TIMESTAMPTZ
+  - UNIQUE(magazine_id, year, month)
+  - Indexes: magazine_id, year+month, topics (GIN), is_published (partial)
 
 issue_search_index
-  - id (uuid, PK)
-  - issue_id (FK → issues)
-  - page_number (int)
-  - content (text) — extracted text
-  - search_vector (tsvector) — PostgreSQL FTS index
+  - id UUID PK
+  - issue_id UUID FK → issues(id) ON DELETE CASCADE
+  - page_number INT NOT NULL
+  - content TEXT NOT NULL
+  - search_vector TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED
+  - Indexes: search_vector (GIN), issue_id
 
 admins
-  - id (uuid, PK)
-  - email (text, unique)
-  - name (text)
-  - created_at
+  - id UUID PK, email TEXT UNIQUE, name TEXT, created_at
 
-users (optional — only for syncing preferences)
-  - id (uuid, PK)
-  - google_id (text, unique)
-  - email (text)
-  - display_name (text)
-  - created_at
+users (for future cross-device sync)
+  - id UUID PK, google_id TEXT UNIQUE, email TEXT, display_name TEXT, created_at
 
 user_bookmarks
-  - id (uuid, PK)
-  - user_id (FK → users)
-  - issue_id (FK → issues)
-  - created_at
+  - id UUID PK, user_id FK → users, issue_id FK → issues, UNIQUE(user_id, issue_id)
 
 user_reading_history
-  - id (uuid, PK)
-  - user_id (FK → users)
-  - issue_id (FK → issues)
-  - last_page (int)
-  - last_read_at (timestamp)
+  - id UUID PK, user_id FK → users, issue_id FK → issues, last_page INT, last_read_at
 
 analytics_visibility
-  - id (uuid, PK)
-  - metric_name (text) — e.g., "read_count", "most_popular"
-  - is_public (boolean)
-  - updated_by (FK → admins)
-  - updated_at
+  - id UUID PK, metric_name TEXT UNIQUE, is_public BOOLEAN, updated_by FK → admins
 ```
+
+### RPC Functions
+```sql
+search_issues(search_query, filter_magazine_id, filter_year_from, filter_year_to, result_limit, result_offset)
+  → TABLE (issue_id, issue_title, magazine_name, magazine_language, year, month, page_number, snippet, rank, cover_image_url, pdf_url)
+  -- Uses plainto_tsquery, ts_rank, ts_headline with <mark> highlights
+```
+
+### Row Level Security
+- Magazines: public SELECT
+- Issues: public SELECT where is_published = TRUE
+- Search index: public SELECT
+- Analytics visibility: public SELECT
+- Users/bookmarks/history: authenticated users can manage own data
+- Admin writes bypass RLS via service role key
+
+### Auto-update Triggers
+- `magazines.updated_at` and `issues.updated_at` auto-update on row change
 
 ---
 
@@ -312,83 +339,138 @@ analytics_visibility
 
 ```
 d:/AIM Project/
-├── CLAUDE.md                    # This file
-├── README.md                    # Project readme
-├── images/                      # Brand assets
-│   └── AIM_logo.png
-├── content/                     # Sample magazine PDFs (for development)
-│   ├── AIM 2026/
-│   └── Agnisikha 2026/
+├── CLAUDE.md                    # This file (project bible)
+├── ROADMAP.md                   # Phased development roadmap
+├── TO DO LIST.md                # Task tracking
+├── images/
+│   └── AIM_logo.png             # Brand logo
+├── AIM 2026/                    # Source PDFs (not in git)
+│   ├── All India Magazine Jan-2026.pdf
+│   ├── All India Magazine Feb-2026.pdf
+│   ├── All India Magazine Mar-2026.pdf
+│   └── All India Magazine Apr-2026.pdf
+├── Agnisikha 2026/              # Source PDFs (not in git)
+│   ├── Agnishikha Jan-2026.pdf
+│   ├── Agnishikha Feb-2026.pdf
+│   ├── Agnishikha Mar-2026.pdf
+│   └── Agnishikha Apr-2026.pdf
 ├── apps/
 │   ├── web/                     # Next.js 15 web app
-│   │   ├── app/                 # App Router pages
-│   │   │   ├── (public)/        # Public routes
-│   │   │   │   ├── page.tsx     # Homepage
-│   │   │   │   ├── browse/      # Browse magazines
-│   │   │   │   ├── read/[id]/   # PDF reader
-│   │   │   │   ├── search/      # Search page
-│   │   │   │   └── bookmarks/   # My bookmarks
-│   │   │   ├── admin/           # Admin panel
-│   │   │   │   ├── dashboard/
-│   │   │   │   ├── magazines/
-│   │   │   │   ├── issues/
-│   │   │   │   └── analytics/
-│   │   │   ├── api/             # API routes
-│   │   │   │   ├── magazines/
-│   │   │   │   ├── issues/
-│   │   │   │   ├── search/
-│   │   │   │   ├── upload/
-│   │   │   │   └── analytics/
-│   │   │   └── layout.tsx
-│   │   ├── components/          # React components
-│   │   │   ├── ui/              # Base UI components
-│   │   │   ├── magazine/        # Magazine-specific components
-│   │   │   ├── reader/          # PDF reader components
-│   │   │   ├── search/          # Search components
-│   │   │   └── admin/           # Admin components
-│   │   ├── lib/                 # Utilities, hooks, configs
-│   │   ├── public/              # Static assets
-│   │   └── styles/              # Global styles
-│   └── mobile/                  # React Native (Expo) app
-│       ├── app/                 # Expo Router pages
-│       ├── components/
-│       ├── hooks/
-│       ├── lib/
-│       └── assets/
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── layout.tsx          # Root layout (Inter + Playfair Display)
+│   │   │   │   ├── page.tsx            # Homepage (hero, bookshelf, features)
+│   │   │   │   ├── browse/page.tsx     # Browse with filters
+│   │   │   │   ├── search/page.tsx     # Full-text search with snippets
+│   │   │   │   ├── bookmarks/page.tsx  # Bookmarked issues
+│   │   │   │   ├── issue/[id]/page.tsx # Issue detail
+│   │   │   │   ├── read/[id]/page.tsx  # PDF reader
+│   │   │   │   ├── admin/
+│   │   │   │   │   ├── login/page.tsx
+│   │   │   │   │   └── (dashboard)/
+│   │   │   │   │       ├── layout.tsx      # Sidebar nav
+│   │   │   │   │       ├── page.tsx        # Dashboard
+│   │   │   │   │       ├── magazines/page.tsx
+│   │   │   │   │       └── issues/
+│   │   │   │   │           ├── page.tsx    # Issue table
+│   │   │   │   │           └── new/page.tsx # Upload
+│   │   │   │   └── api/                # 16 API routes
+│   │   │   ├── components/
+│   │   │   │   ├── home/animated-bookshelf.tsx
+│   │   │   │   ├── layout/header.tsx, footer.tsx
+│   │   │   │   ├── magazine/issue-card.tsx
+│   │   │   │   └── search/search-result-item.tsx
+│   │   │   ├── lib/
+│   │   │   │   ├── api.ts              # Client-side API + types
+│   │   │   │   ├── admin-auth.ts       # Session verification
+│   │   │   │   ├── bookmarks-store.ts  # Zustand store
+│   │   │   │   ├── mock-data.ts        # Dev mock data (still used as fallback)
+│   │   │   │   ├── pdf-extract.ts      # OCR pipeline (Tesseract + pdfjs + canvas)
+│   │   │   │   ├── search-indexer.ts   # Index pages into Supabase
+│   │   │   │   ├── supabase-server.ts  # Singleton Supabase clients
+│   │   │   │   └── utils.ts           # formatFileSize, formatMonthYear, cn
+│   │   │   └── styles/globals.css      # Tailwind theme (gold/flame colors)
+│   │   ├── public/logo.png
+│   │   ├── .env.local                  # Supabase keys (not in git)
+│   │   ├── .env.local.example
+│   │   ├── next.config.ts
+│   │   ├── postcss.config.mjs
+│   │   ├── eslint.config.mjs
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   └── mobile/                  # React Native (Expo) — skeleton
+│       ├── app/
+│       │   ├── _layout.tsx
+│       │   └── (tabs)/
+│       │       ├── _layout.tsx
+│       │       ├── index.tsx    # Home
+│       │       ├── browse.tsx
+│       │       ├── search.tsx
+│       │       └── library.tsx
+│       ├── app.json
+│       ├── tsconfig.json
+│       └── package.json
 ├── packages/
-│   ├── shared/                  # Shared TypeScript types & utilities
-│   │   ├── types/               # Shared type definitions
-│   │   ├── constants/           # Shared constants
-│   │   └── utils/               # Shared utility functions
-│   ├── supabase/                # Supabase client & migrations
-│   │   ├── migrations/          # SQL migration files
-│   │   ├── seed/                # Seed data
-│   │   └── client.ts            # Supabase client config
-│   └── eslint-config/           # Shared ESLint config
-├── turbo.json                   # Turborepo config
-├── pnpm-workspace.yaml          # pnpm workspace config
-├── package.json                 # Root package.json
-└── .github/
-    └── workflows/               # CI/CD pipelines
+│   ├── shared/                  # @aim-archive/shared
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── types.ts         # Magazine, Issue, SearchResult, etc.
+│   │       └── constants.ts     # MONTH_NAMES, LANGUAGE_NAMES, etc.
+│   ├── supabase/                # @aim-archive/supabase
+│   │   ├── migrations/
+│   │   │   ├── 00001_initial_schema.sql    # All tables + RLS + triggers
+│   │   │   └── 00002_search_rpc.sql        # search_issues() function
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── client.ts        # createClient, createServerClient
+│   │       └── database.types.ts
+│   └── eslint-config/           # @aim-archive/eslint-config
+├── turbo.json
+├── pnpm-workspace.yaml
+├── package.json
+└── pnpm-lock.yaml
 ```
 
 ---
 
-## 8. MVP Definition (Phase 1)
+## 8. Credentials & Configuration
 
-The MVP is what the user sees — the complete public-facing skeleton with real functionality:
+### Supabase
+- **Project URL**: `https://glduurfsjyxpkdnxgdqz.supabase.co`
+- **Project ID**: `glduurfsjyxpkdnxgdqz`
+- **Region**: South Asia (Mumbai)
+- **Storage bucket**: `magazines` (public)
+- Keys stored in `apps/web/.env.local` (not committed to git)
 
-### MVP Includes
-1. **Homepage** — hero section, latest issues grid, archive stats
-2. **Browse page** — filter by magazine, language, year
-3. **Issue detail page** — cover, metadata, download buttons, read button
-4. **In-app PDF reader** — smooth, responsive, page navigation
-5. **Search** — global full-text search with filters
-6. **Bookmarks** — FAB to save, bookmarks page to view (local storage)
-7. **Download** — individual PDF download (EPUB/MOBI conversion in Phase 2)
-8. **Responsive design** — works beautifully on desktop, tablet, mobile
-9. **Admin panel (basic)** — login, upload PDFs, edit metadata, view issues
-10. **Database + API** — full backend with Supabase
+### Admin Access
+- **Email**: `admin@aurosociety.org`
+- **Password**: `[REDACTED_ADMIN_PASSWORD]` (set via `ADMIN_PASSWORD` env var, defaults to this)
+- **Admin panel URL**: `/admin/login`
+
+### GitHub
+- **Repository**: `MugdhanilK/aim-archive` (private)
+- **Branch**: `main`
+
+---
+
+## 9. MVP Definition (Phase 1) — MOSTLY COMPLETE
+
+### MVP Includes ✅
+1. ✅ **Homepage** — hero section, animated bookshelf, archive stats, features
+2. ✅ **Browse page** — filter by magazine, language, year, topic
+3. ✅ **Issue detail page** — cover, metadata, download buttons, read button
+4. ✅ **In-app PDF reader** — smooth, responsive, page navigation, zoom, fullscreen
+5. ✅ **Search** — global full-text OCR search with highlighted snippets + page numbers
+6. ✅ **Bookmarks** — heart icon to save, bookmarks page to view (local storage)
+7. ✅ **Download** — individual PDF download via Supabase Storage CDN
+8. ✅ **Responsive design** — works on desktop, tablet, mobile
+9. ✅ **Admin panel** — login, upload PDFs, edit metadata, manage issues/magazines
+10. ✅ **Database + API** — full backend with Supabase (8 tables, 16 API routes)
+
+### MVP Remaining
+- Deploy to Vercel
+- SEO basics (meta tags, sitemap)
+- Input validation (Zod)
 
 ### MVP Excludes (Phase 2+)
 - EPUB/MOBI auto-conversion
@@ -404,17 +486,18 @@ The MVP is what the user sees — the complete public-facing skeleton with real 
 
 ---
 
-## 9. Development Phases
+## 10. Development Phases
 
-### Phase 1: Foundation + MVP Web App
-- Project scaffolding (monorepo, configs, tooling)
-- Supabase setup (database, storage, auth)
-- Core API routes (magazines, issues, search, upload)
-- Homepage, browse, issue detail, reader, search, bookmarks
-- Admin panel (basic CRUD + upload)
-- PDF text extraction pipeline
-- Responsive design + animations
-- Testing + deployment to Vercel
+### Phase 1: Foundation + MVP Web App ✅ ~95% COMPLETE
+- ✅ Project scaffolding (monorepo, configs, tooling)
+- ✅ Supabase setup (database, storage, auth)
+- ✅ Core API routes (magazines, issues, search, upload)
+- ✅ Homepage, browse, issue detail, reader, search, bookmarks
+- ✅ Admin panel (CRUD + upload + search/filter/sort)
+- ✅ PDF OCR text extraction pipeline (Tesseract.js)
+- ✅ Full-text search with ranked results and snippets
+- ✅ Responsive design + animations
+- ⬜ SEO optimization, Zod validation, deploy to Vercel
 
 ### Phase 2: Enhanced Web Features
 - EPUB/MOBI auto-conversion pipeline
@@ -426,13 +509,11 @@ The MVP is what the user sees — the complete public-facing skeleton with real 
 - Bulk import tool
 
 ### Phase 3: Mobile App
-- Expo project setup
-- Core screens (home, browse, reader, search, bookmarks)
+- Expo project build-out (mirrors web features)
 - Offline reading (download + local storage)
 - My Library with storage management
 - Background sync
-- Platform-native design adjustments
-- App store deployment (Google Play + Apple App Store)
+- App store deployment
 
 ### Phase 4: Polish & Scale
 - Performance optimization
@@ -446,7 +527,7 @@ The MVP is what the user sees — the complete public-facing skeleton with real 
 
 ---
 
-## 10. Coding Standards
+## 11. Coding Standards
 
 ### General
 - **TypeScript** everywhere — strict mode, no `any`
@@ -459,23 +540,24 @@ The MVP is what the user sees — the complete public-facing skeleton with real 
 
 ### Git
 - Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`
-- One logical change per commit
+- One logical change per commit (atomic commits going forward)
 - Branch naming: `feature/`, `fix/`, `chore/` prefixes
 
 ### API
 - RESTful conventions
 - Consistent error response format: `{ error: string, code: string }`
-- Input validation with Zod
-- Rate limiting on public endpoints
+- Input validation with Zod (planned)
+- Admin routes protected by `verifyAdmin()` check
 
 ### Database
 - All migrations in `packages/supabase/migrations/`
 - Use Row Level Security (RLS) policies
 - Index frequently queried columns
+- Admin writes use service role key (bypasses RLS)
 
 ---
 
-## 11. Key Decisions Log
+## 12. Key Decisions Log
 
 | Decision | Choice | Rationale |
 |---|---|---|
@@ -483,28 +565,43 @@ The MVP is what the user sees — the complete public-facing skeleton with real 
 | Mobile framework | React Native + Expo | Cross-platform, shares React knowledge |
 | Database | Supabase (PostgreSQL) | Free tier, built-in auth/storage/realtime |
 | Monorepo | Turborepo + pnpm | Fast builds, shared packages |
-| Styling | Tailwind CSS | Rapid development, consistent design |
+| Styling | Tailwind CSS 4 | Rapid development, consistent design |
 | Animations | Framer Motion | Smooth, declarative, React-native |
-| Search | PostgreSQL FTS | Free, built-in, sufficient for MVP |
+| Search | PostgreSQL FTS + OCR | Free, built-in, works on image PDFs |
+| PDF text extraction | Tesseract.js OCR | PDFs have no text layer (Chrome print-to-PDF) |
 | PDF viewer | react-pdf | Mature, pdf.js based, customizable |
-| Auth | Supabase Auth (Google) | Simple, free, works with existing stack |
+| Auth (admin) | Session cookies + admins table | Simple, no external auth provider needed |
+| Auth (public) | Supabase Auth (Google) | Simple, free, works with existing stack — Phase 2 |
 | Hosting | Vercel + Supabase | Free tiers, excellent DX |
+| PDF rendering for OCR | pdfjs-dist v4 + node-canvas | v4 compatible with node-canvas, v5 breaks |
 
 ---
 
-## 12. Environment & Accounts Needed
+## 13. Environment & Accounts
 
-- [ ] GitHub repository (to be created)
-- [ ] Supabase project (free tier — https://supabase.com)
+- [x] GitHub repository (`MugdhanilK/aim-archive`, private)
+- [x] Supabase project (free tier, Mumbai region)
 - [ ] Vercel account (free tier — https://vercel.com)
-- [ ] Google Cloud Console project (for OAuth client ID)
-- [ ] Expo account (for mobile builds — https://expo.dev)
+- [ ] Google Cloud Console project (for OAuth client ID — Phase 2)
+- [ ] Expo account (for mobile builds — https://expo.dev — Phase 3)
 - [ ] Domain DNS access (to configure aimarchive.aurosociety.org)
 
 ---
 
-## 13. Reference Files
+## 14. Reference Files
 
 - **Logo**: `images/AIM_logo.png` — Golden flame with luminous figure
-- **Sample PDFs**: `AIM 2026/` and `Agnisikha 2026/` folders
-- **TODO**: `TO DO LIST.md` — high-level task tracking
+- **Source PDFs**: `AIM 2026/` and `Agnisikha 2026/` folders (not in git)
+- **TODO**: `TO DO LIST.md` — task tracking
+- **Roadmap**: `ROADMAP.md` — phased development plan
+- **Env example**: `apps/web/.env.local.example` — environment variable template
+
+---
+
+## 15. Known Issues & Notes
+
+- **PDF text extraction**: PDFs created by Chrome Skia renderer have no selectable text. OCR (Tesseract.js) is required and adds ~3-5 seconds per page during upload.
+- **Hindi OCR**: The PostgreSQL full-text search uses `'english'` language config. Hindi text is tokenized but not stemmed properly. A future enhancement could use `'simple'` config for non-English content.
+- **pdfjs-dist version**: Must use v4.x (4.8.69). v5.x breaks compatibility with node-canvas for server-side rendering.
+- **Scroll performance**: Removed `backdrop-blur`, infinite CSS animations, and heavy radial gradients after observing scroll lag. Header uses `bg-white/95` instead of blur.
+- **Tesseract.js trained data**: `eng.traineddata` and `hin.traineddata` files are in `apps/web/` — these are auto-downloaded by Tesseract.js on first use.
