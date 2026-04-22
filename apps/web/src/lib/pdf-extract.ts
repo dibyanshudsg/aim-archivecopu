@@ -1,6 +1,3 @@
-import { createCanvas } from 'canvas';
-import { createWorker } from 'tesseract.js';
-
 export interface ExtractedPage {
   pageNumber: number;
   content: string;
@@ -8,8 +5,7 @@ export interface ExtractedPage {
 
 /**
  * Extract text from a PDF buffer using OCR (Tesseract.js).
- * Renders each page to an image via pdfjs-dist + node-canvas, then runs OCR.
- * Supports scanned PDFs and image-based PDFs.
+ * All heavy dependencies are dynamically imported to avoid build-time bundling issues.
  */
 export async function extractPdfText(
   buffer: Buffer,
@@ -17,14 +13,15 @@ export async function extractPdfText(
 ): Promise<ExtractedPage[]> {
   const pages: ExtractedPage[] = [];
 
-  // Dynamic import for ESM pdfjs-dist
+  // Dynamic imports — these only run server-side in API routes
+  const { createCanvas } = await import('canvas');
+  const { createWorker } = await import('tesseract.js');
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
   const data = new Uint8Array(buffer);
   const doc = await pdfjsLib.getDocument({ data }).promise;
   const totalPages = doc.numPages;
 
-  // Create Tesseract worker (English + Hindi)
   const worker = await createWorker('eng+hin');
 
   try {

@@ -48,3 +48,5 @@ Agnisikha 2026/
 
 # Misc
 *.tsbuildinfo
+
+.vercel
