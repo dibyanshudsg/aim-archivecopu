@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Color Palette — Spiritual warmth meets modern clarity */
+  --color-gold-50: #fefdf5;
+  --color-gold-100: #fdf9e4;
+  --color-gold-200: #faf0c4;
+  --color-gold-300: #f5e29a;
+  --color-gold-400: #efd06e;
+  --color-gold-500: #d4a843;
+  --color-gold-600: #be8c2e;
+  --color-gold-700: #9e6d24;
+  --color-gold-800: #825724;
+  --color-gold-900: #6e4821;
+
+  --color-flame-50: #fff8f1;
+  --color-flame-100: #feecdc;
+  --color-flame-200: #fcd5b8;
+  --color-flame-300: #fab689;
+  --color-flame-400: #f79058;
+  --color-flame-500: #f47234;
+  --color-flame-600: #e5561f;
+  --color-flame-700: #be4118;
+  --color-flame-800: #97351b;
+  --color-flame-900: #7a2e19;
+
+  --color-cream: #fffcf5;
+  --color-warm-white: #fefefe;
+
+  /* Fonts */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Playfair Display', ui-serif, Georgia, serif;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--color-gold-200);
+  color: var(--color-gold-900);
+}
+
+/* Focus ring style */
+*:focus-visible {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+}

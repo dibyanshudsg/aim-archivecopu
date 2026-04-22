@@ -1,0 +1,41 @@
+{
+  "name": "@aim-archive/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@aim-archive/shared": "workspace:*",
+    "@aim-archive/supabase": "workspace:*",
+    "@supabase/supabase-js": "^2.49.4",
+    "canvas": "^3.2.3",
+    "framer-motion": "^12.6.3",
+    "lucide-react": "^0.474.0",
+    "next": "15.3.1",
+    "pdf-parse": "1.1.1",
+    "pdfjs-dist": "4.8.69",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-pdf": "^9.2.1",
+    "tesseract.js": "^7.0.0",
+    "zod": "^3.24.2",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@aim-archive/eslint-config": "workspace:*",
+    "@eslint/eslintrc": "^3.3.5",
+    "@tailwindcss/postcss": "^4.1.4",
+    "@types/node": "^22.14.1",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "eslint": "^9.25.0",
+    "eslint-config-next": "15.3.1",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3"
+  }
+}

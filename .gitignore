@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+.turbo/
+.expo/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+
+# Supabase
+supabase/.temp/
+
+# Magazine PDFs (large binary files — tracked via Supabase Storage, not Git)
+content/**/*.pdf
+content/**/*.epub
+content/**/*.mobi
+AIM 2026/
+Agnisikha 2026/
+
+# Misc
+*.tsbuildinfo

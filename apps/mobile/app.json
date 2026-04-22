@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "AIM Archive",
+    "slug": "aim-archive",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "aim-archive",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFCF5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.aurosociety.aimarchive"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFCF5"
+      },
+      "package": "org.aurosociety.aimarchive"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

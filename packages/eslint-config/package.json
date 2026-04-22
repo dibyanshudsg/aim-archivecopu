@@ -1,0 +1,12 @@
+{
+  "name": "@aim-archive/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.mjs",
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.30.1",
+    "@typescript-eslint/parser": "^8.30.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0"
+  }
+}
