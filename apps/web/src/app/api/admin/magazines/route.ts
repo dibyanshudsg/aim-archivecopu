@@ -20,12 +20,17 @@ export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { magazineSchema, formatZodError } = await import('@/lib/validations');
   const body = await request.json();
-  const supabase = getClient();
+  const parsed = magazineSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
+  }
 
+  const supabase = getClient();
   const { data, error } = await supabase
     .from('magazines')
-    .insert({ name: body.name, language: body.language, description: body.description || '' })
+    .insert(parsed.data)
     .select()
     .single();
 

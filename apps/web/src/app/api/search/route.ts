@@ -9,16 +9,16 @@ function getClient() {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const query = searchParams.get('q');
+  const { searchQuerySchema, parseSearchParams } = await import('@/lib/validations');
 
-  if (!query || query.trim().length === 0) {
+  const raw = parseSearchParams(request.nextUrl.searchParams);
+  const parsed = searchQuerySchema.safeParse(raw);
+
+  if (!parsed.success) {
     return NextResponse.json({ data: [], total: 0, type: 'none' });
   }
 
-  const magazineId = searchParams.get('magazine_id');
-  const yearFrom = searchParams.get('year_from');
-  const yearTo = searchParams.get('year_to');
+  const { q: query, magazine_id: magazineId, year_from: yearFrom, year_to: yearTo } = parsed.data;
 
   const supabase = getClient();
 
@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
   const { data: ftsResults, error: ftsError } = await supabase.rpc('search_issues', {
     search_query: query,
     filter_magazine_id: magazineId || null,
-    filter_year_from: yearFrom ? parseInt(yearFrom) : null,
-    filter_year_to: yearTo ? parseInt(yearTo) : null,
+    filter_year_from: yearFrom || null,
+    filter_year_to: yearTo || null,
     result_limit: 50,
     result_offset: 0,
   });
@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
     .or(`title.ilike.%${query}%,description.ilike.%${query}%,topics.cs.{"${query}"}`);
 
   if (magazineId) fallbackQuery = fallbackQuery.eq('magazine_id', magazineId);
-  if (yearFrom) fallbackQuery = fallbackQuery.gte('year', parseInt(yearFrom));
-  if (yearTo) fallbackQuery = fallbackQuery.lte('year', parseInt(yearTo));
+  if (yearFrom) fallbackQuery = fallbackQuery.gte('year', yearFrom);
+  if (yearTo) fallbackQuery = fallbackQuery.lte('year', yearTo);
   fallbackQuery = fallbackQuery.order('read_count', { ascending: false }).limit(50);
 
   const { data: fallbackResults } = await fallbackQuery;

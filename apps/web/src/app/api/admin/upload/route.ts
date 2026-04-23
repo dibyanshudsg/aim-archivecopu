@@ -12,19 +12,33 @@ export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { issueUploadSchema, formatZodError } = await import('@/lib/validations');
+
   const formData = await request.formData();
   const file = formData.get('pdf') as File | null;
-  const magazineId = formData.get('magazine_id') as string;
-  const title = formData.get('title') as string;
-  const year = parseInt(formData.get('year') as string);
-  const month = parseInt(formData.get('month') as string);
-  const description = formData.get('description') as string;
-  const topicsStr = formData.get('topics') as string;
-  const topics = topicsStr ? topicsStr.split(',').map((t) => t.trim()).filter(Boolean) : [];
 
-  if (!file || !magazineId || !title || !year || !month) {
-    return NextResponse.json({ error: 'Missing required fields', code: 'VALIDATION' }, { status: 400 });
+  if (!file || file.type !== 'application/pdf') {
+    return NextResponse.json({ error: 'A valid PDF file is required', code: 'VALIDATION' }, { status: 400 });
   }
+  if (file.size > 100 * 1024 * 1024) {
+    return NextResponse.json({ error: 'PDF must be under 100MB', code: 'VALIDATION' }, { status: 400 });
+  }
+
+  const parsed = issueUploadSchema.safeParse({
+    magazine_id: formData.get('magazine_id'),
+    title: formData.get('title'),
+    year: formData.get('year'),
+    month: formData.get('month'),
+    description: formData.get('description'),
+    topics: formData.get('topics'),
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
+  }
+
+  const { magazine_id: magazineId, title, year, month, description, topics: topicsStr } = parsed.data;
+  const topics = topicsStr ? topicsStr.split(',').map((t) => t.trim()).filter(Boolean) : [];
 
   const supabase = getClient();
 

@@ -32,20 +32,72 @@ export const metadata: Metadata = {
     'Auroville',
     'yoga',
     'philosophy',
+    'spirituality',
+    'integral yoga',
   ],
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org'),
   openGraph: {
     title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
     description:
       'Free digital archive of All India Magazine and other Sri Aurobindo Society publications.',
     type: 'website',
     locale: 'en_IN',
+    siteName: 'AIM Archive',
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AIM Archive Logo' }],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
+    description:
+      'Free digital archive of All India Magazine and other Sri Aurobindo Society publications.',
+    images: ['/logo.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  alternates: {
+    canonical: '/',
+  },
+};
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'AIM Archive',
+  description:
+    'Digital archive of All India Magazine, Agnisikha, and other Sri Aurobindo Society publications.',
+  url: process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org',
+  publisher: {
+    '@type': 'Organization',
+    name: 'Sri Aurobindo Society',
+    url: 'https://aurosociety.org',
+    logo: {
+      '@type': 'ImageObject',
+      url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org'}/logo.png`,
+    },
+  },
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: `${process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org'}/search?q={search_term_string}`,
+    },
+    'query-input': 'required name=search_term_string',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body className="bg-warm-white font-sans text-gray-900 antialiased">{children}</body>
+      <body className="bg-warm-white font-sans text-gray-900 antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

@@ -10,10 +10,16 @@ function getAdminClient() {
 }
 
 export async function POST(request: NextRequest) {
-  const { email, password } = await request.json();
+  const { loginSchema, formatZodError } = await import('@/lib/validations');
+  const body = await request.json();
+  const parsed = loginSchema.safeParse(body);
 
-  // Simple admin auth: check if email exists in admins table
-  // Password is checked against env var (shared admin password for MVP)
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
+  }
+
+  const { email, password } = parsed.data;
+
   if (password !== (process.env.ADMIN_PASSWORD || '[REDACTED_ADMIN_PASSWORD]')) {
     return NextResponse.json({ error: 'Invalid credentials', code: 'UNAUTHORIZED' }, { status: 401 });
   }

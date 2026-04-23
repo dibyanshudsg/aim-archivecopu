@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient } from '@/lib/supabase-server';
 
 export async function GET(request: NextRequest) {
-  const supabase = createPublicClient();
-  const { searchParams } = request.nextUrl;
+  const { issuesQuerySchema, parseSearchParams } = await import('@/lib/validations');
 
-  const magazineId = searchParams.get('magazine_id');
-  const year = searchParams.get('year');
-  const language = searchParams.get('language');
-  const topic = searchParams.get('topic');
-  const page = parseInt(searchParams.get('page') || '1');
-  const pageSize = Math.min(parseInt(searchParams.get('page_size') || '20'), 100);
+  const supabase = createPublicClient();
+  const raw = parseSearchParams(request.nextUrl.searchParams);
+  const parsed = issuesQuerySchema.safeParse(raw);
+
+  const magazineId = parsed.success ? parsed.data.magazine_id : undefined;
+  const year = parsed.success ? parsed.data.year : undefined;
+  const language = parsed.success ? (raw.language as string) : undefined;
+  const topic = parsed.success ? parsed.data.topic : undefined;
+  const page = parsed.success ? parsed.data.page : 1;
+  const pageSize = parsed.success ? parsed.data.page_size : 20;
 
   let query = supabase
     .from('issues')
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     query = query.eq('magazine_id', magazineId);
   }
   if (year) {
-    query = query.eq('year', parseInt(year));
+    query = query.eq('year', year);
   }
   if (language) {
     query = query.eq('magazines.language', language);

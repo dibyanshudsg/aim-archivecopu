@@ -14,19 +14,17 @@ export async function PUT(
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
+  const { issueUpdateSchema, formatZodError } = await import('@/lib/validations');
   const body = await request.json();
-  const supabase = getClient();
+  const parsed = issueUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
+  }
 
+  const supabase = getClient();
   const { data, error } = await supabase
     .from('issues')
-    .update({
-      title: body.title,
-      description: body.description,
-      topics: body.topics,
-      year: body.year,
-      month: body.month,
-      is_published: body.is_published,
-    })
+    .update(parsed.data)
     .eq('id', id)
     .select()
     .single();
