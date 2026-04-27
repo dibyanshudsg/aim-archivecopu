@@ -37,6 +37,7 @@ export const issueUploadSchema = z.object({
 export const issuesQuerySchema = z.object({
   magazine_id: z.string().uuid().optional(),
   year: z.coerce.number().int().min(1950).max(2100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
   language: z.enum(['english', 'hindi', 'tamil', 'marathi', 'bengali', 'other']).optional(),
   topic: z.string().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),

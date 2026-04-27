@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   const magazineId = parsed.success ? parsed.data.magazine_id : undefined;
   const year = parsed.success ? parsed.data.year : undefined;
+  const month = parsed.success ? parsed.data.month : undefined;
   const language = parsed.success ? (raw.language as string) : undefined;
   const topic = parsed.success ? parsed.data.topic : undefined;
   const page = parsed.success ? parsed.data.page : 1;
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest) {
   }
   if (year) {
     query = query.eq('year', year);
+  }
+  if (month) {
+    query = query.eq('month', month);
   }
   if (language) {
     query = query.eq('magazines.language', language);

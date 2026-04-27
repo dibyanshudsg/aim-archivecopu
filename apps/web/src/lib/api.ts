@@ -1,4 +1,5 @@
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || '';
+// Use relative URLs so API calls always hit the same origin (no CORS issues)
+const BASE_URL = '';
 
 export interface ApiIssue {
   id: string;
@@ -55,6 +56,7 @@ export async function fetchMagazines(): Promise<ApiMagazine[]> {
 export async function fetchIssues(params?: {
   magazineId?: string;
   year?: string;
+  month?: string;
   language?: string;
   topic?: string;
   page?: number;
@@ -63,6 +65,7 @@ export async function fetchIssues(params?: {
   const searchParams = new URLSearchParams();
   if (params?.magazineId) searchParams.set('magazine_id', params.magazineId);
   if (params?.year) searchParams.set('year', params.year);
+  if (params?.month) searchParams.set('month', params.month);
   if (params?.language) searchParams.set('language', params.language);
   if (params?.topic) searchParams.set('topic', params.topic);
   if (params?.page) searchParams.set('page', String(params.page));
