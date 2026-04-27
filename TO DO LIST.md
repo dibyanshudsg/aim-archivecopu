@@ -79,3 +79,10 @@
 - [ ] Meilisearch upgrade (if PostgreSQL FTS hits limits)
 - [ ] Error monitoring (Sentry)
 - [ ] CDN optimization for large PDFs
+
+
+
+________________________________
+
+1. Implement Proper Pagination system in the Browse page. 
+2. is the deployment flow is properly updated in @CLAUDE.md file for references? If you have found something new or wrong,  update @CLAUDE.md file properly for future usage.  
