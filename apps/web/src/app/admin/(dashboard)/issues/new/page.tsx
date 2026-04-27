@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 import { formatFileSize } from '@/lib/utils';
+import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 
 interface Magazine {
   id: string;
@@ -23,6 +24,14 @@ export default function UploadIssuePage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
+  const [allTopics, setAllTopics] = useState<ManagedTopic[]>([]);
+
+  async function refetchTopics() {
+    try {
+      const res = await fetch('/api/admin/topics');
+      if (res.ok) setAllTopics(await res.json());
+    } catch {}
+  }
 
   const [form, setForm] = useState({
     magazine_id: '',
@@ -30,7 +39,7 @@ export default function UploadIssuePage() {
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
     description: '',
-    topics: '',
+    topics: [] as string[],
   });
 
   useEffect(() => {
@@ -40,6 +49,11 @@ export default function UploadIssuePage() {
         setMagazines(data);
         if (data.length > 0) setForm((f) => ({ ...f, magazine_id: data[0].id }));
       });
+  }, []);
+
+  // Pull the master topics list (with usage counts) for the dropdown.
+  useEffect(() => {
+    refetchTopics();
   }, []);
 
   // Auto-generate title when magazine/month/year change
@@ -76,7 +90,7 @@ export default function UploadIssuePage() {
     formData.append('year', String(form.year));
     formData.append('month', String(form.month));
     formData.append('description', form.description);
-    formData.append('topics', form.topics);
+    formData.append('topics', form.topics.join(','));
 
     try {
       const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
@@ -204,15 +218,13 @@ export default function UploadIssuePage() {
 
         {/* Topics */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Topics <span className="text-gray-400">(comma-separated)</span>
-          </label>
-          <input
-            type="text"
+          <label className="mb-1 block text-sm font-medium text-gray-700">Topics</label>
+          <TagsInput
             value={form.topics}
-            onChange={(e) => setForm({ ...form, topics: e.target.value })}
-            placeholder="e.g., Surrender, Divine Grace, Karma Yoga"
-            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+            onChange={(topics) => setForm({ ...form, topics })}
+            allTopics={allTopics}
+            onTopicsRefetch={refetchTopics}
+            placeholder="Click to manage topics"
           />
         </div>
 

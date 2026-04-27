@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, Trash2, Eye, EyeOff, Pencil, Search, X, Check, ChevronDown } from 'lucide-react';
 import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import { MONTH_NAMES } from '@aim-archive/shared';
+import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 
 interface Issue {
   id: string;
@@ -45,7 +46,22 @@ export default function AdminIssuesPage() {
 
   // Inline editing
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '', topics: '', year: 0, month: 1 });
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    topics: [] as string[],
+    year: 0,
+    month: 1,
+  });
+
+  // Master topics list with usage counts — drives the managed dropdown.
+  const allTopics = useMemo<ManagedTopic[]>(() => {
+    const counts = new Map<string, number>();
+    for (const i of issues) for (const t of i.topics) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }, [issues]);
 
   async function loadData() {
     const [issuesRes, magsRes] = await Promise.all([
@@ -109,7 +125,7 @@ export default function AdminIssuesPage() {
     setEditForm({
       title: issue.title,
       description: issue.description || '',
-      topics: issue.topics.join(', '),
+      topics: [...issue.topics],
       year: issue.year,
       month: issue.month,
     });
@@ -123,7 +139,7 @@ export default function AdminIssuesPage() {
         ...issue,
         title: editForm.title,
         description: editForm.description,
-        topics: editForm.topics.split(',').map((t) => t.trim()).filter(Boolean),
+        topics: editForm.topics,
         year: editForm.year,
         month: editForm.month,
       }),
@@ -246,12 +262,12 @@ export default function AdminIssuesPage() {
                             onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                             className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-gold-300 focus:outline-none"
                           />
-                          <input
-                            type="text"
+                          <TagsInput
                             value={editForm.topics}
-                            onChange={(e) => setEditForm({ ...editForm, topics: e.target.value })}
-                            placeholder="Topics (comma-separated)"
-                            className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-gold-300 focus:outline-none"
+                            onChange={(topics) => setEditForm({ ...editForm, topics })}
+                            allTopics={allTopics}
+                            onTopicsRefetch={loadData}
+                            placeholder="Click to manage topics"
                           />
                           <input
                             type="text"
