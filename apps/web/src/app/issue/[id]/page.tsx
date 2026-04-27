@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -88,20 +89,33 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
               className="lg:col-span-1"
             >
               <div className="sticky top-24 overflow-hidden rounded-2xl border border-gold-100 bg-gradient-to-br from-gold-50 to-gold-100/50 shadow-sm">
-                <div className="flex flex-col items-center justify-center px-8 py-16">
-                  <span className="text-xs font-medium tracking-widest text-gold-600 uppercase">
-                    {issue.magazine.name}
-                  </span>
-                  <span className="font-heading mt-2 text-4xl font-bold text-gray-900">
-                    {monthName}
-                  </span>
-                  <span className="font-heading text-5xl font-bold text-gold-500">
-                    {issue.year}
-                  </span>
-                  <span className="mt-2 text-sm text-gray-500">
-                    {LANGUAGE_NAMES[issue.magazine.language as Language]}
-                  </span>
-                </div>
+                {issue.coverImageUrl ? (
+                  <div className="relative aspect-[3/4]">
+                    <Image
+                      src={issue.coverImageUrl}
+                      alt={issue.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 100vw, 33vw"
+                      priority
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center px-8 py-16">
+                    <span className="text-xs font-medium tracking-widest text-gold-600 uppercase">
+                      {issue.magazine.name}
+                    </span>
+                    <span className="font-heading mt-2 text-4xl font-bold text-gray-900">
+                      {monthName}
+                    </span>
+                    <span className="font-heading text-5xl font-bold text-gold-500">
+                      {issue.year}
+                    </span>
+                    <span className="mt-2 text-sm text-gray-500">
+                      {LANGUAGE_NAMES[issue.magazine.language as Language]}
+                    </span>
+                  </div>
+                )}
               </div>
             </motion.div>
 
@@ -116,15 +130,17 @@ export default function IssueDetailPage({ params }: { params: Promise<{ id: stri
               </h1>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {issue.topics.map((topic) => (
-                  <Link
-                    key={topic}
-                    href={`/browse?topic=${encodeURIComponent(topic)}`}
-                    className="rounded-full bg-gold-50 px-3 py-1 text-sm font-medium text-gold-700 transition-colors hover:bg-gold-100"
-                  >
-                    {topic}
-                  </Link>
-                ))}
+                {[...issue.topics]
+                  .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+                  .map((topic) => (
+                    <Link
+                      key={topic}
+                      href={`/browse?subject=${encodeURIComponent(topic)}`}
+                      className="rounded-full bg-gold-50 px-3 py-1 text-sm font-medium text-gold-700 transition-colors hover:bg-gold-100"
+                    >
+                      {topic}
+                    </Link>
+                  ))}
               </div>
 
               <p className="mt-6 leading-relaxed text-gray-600">{issue.description}</p>
