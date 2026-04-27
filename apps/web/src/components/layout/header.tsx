@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Search, BookMarked } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useBookmarks } from '@/lib/bookmarks-store';
 
 const navLinks = [
   { href: '/browse', label: 'Browse' },
@@ -14,6 +15,7 @@ const navLinks = [
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const bookmarkCount = useBookmarks((s) => s.bookmarkedIds.length);
 
   return (
     <header className="sticky top-0 z-50 border-b border-gold-100 bg-white/95">
@@ -51,10 +53,24 @@ export function Header() {
           </Link>
           <Link
             href="/bookmarks"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gold-50 hover:text-gold-700"
-            aria-label="Bookmarks"
+            className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gold-50 hover:text-gold-700"
+            aria-label={`Bookmarks${bookmarkCount > 0 ? ` (${bookmarkCount})` : ''}`}
           >
             <BookMarked className="h-5 w-5" />
+            <AnimatePresence>
+              {bookmarkCount > 0 && (
+                <motion.span
+                  key={bookmarkCount}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: 'spring', damping: 18, stiffness: 380 }}
+                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-500 px-1 text-[10px] font-bold text-white shadow-sm"
+                >
+                  {bookmarkCount > 99 ? '99+' : bookmarkCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Link>
         </div>
 
