@@ -33,10 +33,27 @@
 - [x] Admin magazine management (add/edit/delete)
 - [x] Admin issues management (table, search, filters, sort, inline edit, upload)
 - [x] Admin PDF upload page (drag-drop, auto-title, topics, metadata)
+- [x] PDF cover thumbnail pipeline (auto-generated on upload via pdfjs + node-canvas)
+- [x] Backfill thumbnails endpoint (`POST /api/admin/thumbnails`, one issue per call)
+- [x] SEO optimization (meta tags, sitemap, structured data)
+- [x] Zod input validation on all API routes
+- [x] Browse page redesign (Phase 1 polish):
+  - [x] Collapsible side filter panel (5 multi-select sections with facet counts)
+  - [x] List/Grid view toggle with sortable list table
+  - [x] URL-synced filter state (`?year=…&subject=…&view=list&page=2`)
+  - [x] Pagination with smooth scroll + ellipsis truncation
+  - [x] Active filter chips above the grid
+  - [x] Mobile slide-out drawer + responsive panel
+  - [x] Animated row stagger + modern hover lift
+- [x] Web Share API on issue cards + list rows (cover thumbnail attached, clipboard fallback)
+- [x] Bookmark count badge in header
+- [x] Managed Topics dropdown in admin (add inline / rename / delete across all issues)
+- [x] Alphabetical topic sort across all surfaces (admin + public)
+- [x] Deploy to Vercel (`aim-archive.vercel.app`)
 
 ## Up Next — Admin Issues Page Enhancements
 - [ ] Bulk select & bulk actions (delete, publish/unpublish, edit topics in batch)
-- [ ] Cover image upload per issue
+- [ ] Manual cover image upload per issue (override auto-generated)
 - [ ] View/open link — quick link to public page or PDF
 - [ ] Download count column in table
 - [ ] Pagination for large issue lists (850+ issues)
@@ -46,15 +63,14 @@
 - [ ] Bulk upload — multiple PDFs at once with auto-detected month/year from filename
 - [ ] Duplicate issue — clone metadata for quick uploads
 - [ ] Last modified date shown per row
-- [ ] Confirmation toast after successful edit/delete/upload
+- [ ] Confirmation toast after successful edit/delete/upload (replace `window.alert` / `window.confirm`)
 
 ## Up Next — Phase 1.5: Polish & Deploy
-- [ ] SEO optimization (meta tags, sitemap, structured data)
 - [ ] Performance audit (Lighthouse score)
 - [ ] Accessibility check
-- [ ] Loading skeletons for all async pages
-- [ ] Deploy to Vercel
 - [ ] Connect domain (aimarchive.aurosociety.org)
+- [ ] Full-page search bar where the old horizontal filter row used to live (placeholder is in place)
+- [ ] Browse: remember user's last open/closed panel state per device (currently per-browser via localStorage; future: cross-device after auth lands)
 
 ## Future — Phase 2: Enhanced Web Features
 - [ ] PDF → EPUB/MOBI auto-conversion
@@ -84,5 +100,8 @@
 
 ________________________________
 
-1. Implement Proper Pagination system in the Browse page. 
-2. is the deployment flow is properly updated in @CLAUDE.md file for references? If you have found something new or wrong,  update @CLAUDE.md file properly for future usage.  
+## Notes for next session
+
+- ✅ Browse pagination shipped (Apr 2026) — see `components/browse/pagination.tsx` and `lib/use-browse-filters.ts`
+- ✅ CLAUDE.md deployment flow updated (see §16 — production URL, env vars, atomic-commit flow, lessons from initial deploy)
+- ⚠ Vercel build is sensitive to `noImplicitAny` on JSX event handlers — `<Link onClick={(e: React.MouseEvent) => …}>` must have an explicit event type. Local `pnpm build` may pass while Vercel fails because of this divergence.

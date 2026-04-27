@@ -95,7 +95,7 @@ Magazine
   - OCR via Tesseract.js (eng+hin languages)
   - ~3-5 seconds per page, runs synchronously during admin upload
   - Supports scanned/image-based PDFs (no text layer required)
-- **Hosting**: Vercel (web app) — free tier (planned deployment)
+- **Hosting**: Vercel (web app) — free tier, **deployed at `aim-archive.vercel.app`**
 - **CDN**: Vercel Edge Network (automatic with Vercel hosting)
 
 ### DevOps
@@ -114,26 +114,28 @@ Magazine
 
 #### Public Web Pages (All Live)
 - **Homepage** — hero section, animated bookshelf, features grid, archive stats, CTA
-- **Browse page** — issue card grid with filters (magazine, year, language, topic)
-- **Issue detail page** — cover display, metadata, topics, download/read/bookmark buttons
+- **Browse page** — collapsible side filter panel (5 multi-select sections: Year, Month, Magazine, Language, Subjects with live facet counts), grid/list view toggle (sortable list table on md+), URL-synced filter state (`?year=…&subject=…&view=list&page=2`), pagination with smooth scroll, active filter chips, animated row stagger, `localStorage`-remembered panel state, drawer overlay on mobile
+- **Issue detail page** — cover thumbnail, metadata, topics (alphabetically sorted, link to `?subject=`), download/read/bookmark buttons
 - **In-app PDF reader** — page navigation, zoom, fullscreen, page scrubber, bookmark
 - **Search page** — full-text search with highlighted snippets, page numbers, advanced filters
 - **Bookmarks page** — saved issues list with clear all (persisted via Zustand + localStorage)
-- **Header** — responsive nav, mobile hamburger menu, search/bookmark icons
+- **Header** — responsive nav, mobile hamburger menu, search/bookmark icons (bookmark icon shows live count badge)
 - **Footer** — links, branding, discreet admin link
+- **Issue card** (used on browse + bookmarks): whole-card click navigates to reader, hover lift via Framer, native Web Share button (with cover thumbnail attached as a `File` via `navigator.share({files})`, clipboard fallback with green ✓ feedback)
 
 #### Admin Panel (All Live)
 - **Login** (`/admin/login`) — email + password authentication, session cookies
 - **Dashboard** (`/admin`) — stat cards (magazines, issues, reads, downloads), popular issues, quick links
 - **Magazine management** (`/admin/magazines`) — add/edit/delete with language selector
 - **Issue management** (`/admin/issues`) — table with search, filters (magazine, year), sortable columns (title, date, reads, size), inline row editing (title, topics, description, month, year), publish/unpublish toggle, delete
-- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, auto-generated title, topics, description, uploads to Supabase Storage + OCR indexing
+- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, auto-generated title, topics, description, uploads to Supabase Storage + OCR indexing + auto-generated cover thumbnail
+- **Topics** — managed dropdown (component: `components/admin/tags-input.tsx`) used in upload + inline edit. Pill-style with click-to-toggle, add new (Enter or +Add button), inline rename via pencil icon (renames across every issue), delete via trash icon (removes from every issue with usage-count confirmation). All topic mutations sort alphabetically and dedupe.
 
-#### API Routes (16 endpoints)
+#### API Routes (19 endpoints)
 | Route | Methods | Purpose |
 |---|---|---|
 | `/api/magazines` | GET | List all magazines |
-| `/api/issues` | GET | List issues with filters/pagination |
+| `/api/issues` | GET | List issues with filters (magazine, year, **month**, language, topic) + pagination |
 | `/api/issues/[id]` | GET | Single issue detail + increment read count |
 | `/api/search` | GET | Full-text search (RPC) with ILIKE fallback |
 | `/api/pdf/[...path]` | GET | Serve local PDFs during development |
@@ -144,9 +146,12 @@ Magazine
 | `/api/admin/magazines/[id]` | PUT, DELETE | Update/delete magazine |
 | `/api/admin/issues` | GET | List all issues (admin view) |
 | `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue |
-| `/api/admin/issues/[id]/reindex` | POST | Re-run OCR on single issue |
-| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index |
+| `/api/admin/issues/[id]/reindex` | POST | Re-run OCR + regenerate thumbnail on single issue |
+| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index + thumbnail |
 | `/api/admin/reindex` | POST | Batch reindex (one issue per call) |
+| `/api/admin/thumbnails` | POST | Backfill cover thumbnails for issues missing one (one per call) |
+| `/api/admin/topics` | GET, DELETE | List all topics with usage counts / delete a topic from every issue |
+| `/api/admin/topics/rename` | POST | Rename a topic across every issue (`{from, to}`) |
 
 #### Database (8 tables, Supabase PostgreSQL)
 - `magazines` — 2 records (All India Magazine, Agnisikha)
@@ -157,6 +162,26 @@ Magazine
 - `user_bookmarks` — empty (for future sync)
 - `user_reading_history` — empty (for future sync)
 - `analytics_visibility` — 5 metric configs seeded
+
+#### Cover Thumbnail Pipeline
+- New uploads automatically render the first page of the PDF to a 600px JPEG (~85% quality) via `pdfjs-dist` v4 + `node-canvas`, upload alongside the source PDF in the `magazines` bucket as `<slug>-thumb.jpg`, and persist the public URL on `issues.cover_image_url`.
+- Implemented in `apps/web/src/lib/pdf-thumbnail.ts` (`generateAndUploadThumbnail`, `generateThumbnailFromUrl`).
+- Thumbnail generation is **non-blocking**: a failure logs and continues; the issue still gets created without a cover.
+- Backfill via `POST /api/admin/thumbnails` (one issue per call). Drive in a loop from the browser console:
+  ```js
+  async function backfill() {
+    let remaining = 1;
+    while (remaining > 0) {
+      const r = await fetch('/api/admin/thumbnails', { method: 'POST' });
+      const d = await r.json();
+      console.log(d);
+      remaining = d.remaining ?? 0;
+      if (d.error) break;
+    }
+  }
+  backfill();
+  ```
+- **Required Supabase config**: the `magazines` storage bucket must allow `image/jpeg` (and `image/png` for safety) in `allowed_mime_types`. Set via SQL: `UPDATE storage.buckets SET allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png'] WHERE id = 'magazines';`
 
 #### OCR + Full-Text Search Pipeline
 - **384 pages** indexed across 8 issues via Tesseract.js OCR
@@ -175,22 +200,22 @@ Magazine
 
 #### Admin Enhancements (Planned)
 - Bulk select & bulk actions
-- Cover image upload per issue
+- Manual cover image upload per issue (auto-generation already wired)
 - View/open link to public page
 - Download count column
-- Pagination for large lists
-- Status filter (Published/Draft) + topic filter
+- Pagination for large lists (admin issues table)
+- Status filter (Published/Draft) + topic filter (browse public side already has these)
 - Export as CSV
 - Bulk upload (multiple PDFs with auto-detect)
 - Duplicate issue for quick uploads
-- Confirmation toasts
+- Confirmation toasts (currently using `window.alert` / `window.confirm`)
 
 #### Phase 1.5: Polish & Deploy
-- SEO optimization (meta tags, sitemap, structured data)
-- Input validation with Zod on all API routes
+- ✅ SEO optimization (meta tags, sitemap, structured data)
+- ✅ Input validation with Zod on all API routes
+- ✅ Deploy to Vercel (`aim-archive.vercel.app`)
 - Performance audit (Lighthouse)
 - Accessibility check
-- Deploy to Vercel
 - Connect domain (aimarchive.aurosociety.org)
 
 #### Phase 2: Enhanced Web Features
@@ -360,7 +385,10 @@ d:/AIM Project/
 │   │   │   ├── app/
 │   │   │   │   ├── layout.tsx          # Root layout (Inter + Playfair Display)
 │   │   │   │   ├── page.tsx            # Homepage (hero, bookshelf, features)
-│   │   │   │   ├── browse/page.tsx     # Browse with filters
+│   │   │   │   ├── icon.png            # Favicon
+│   │   │   │   ├── browse/
+│   │   │   │   │   ├── page.tsx        # Server wrapper (Suspense for useSearchParams)
+│   │   │   │   │   └── browse-client.tsx # Main browse logic — filters, grid/list, pagination
 │   │   │   │   ├── search/page.tsx     # Full-text search with snippets
 │   │   │   │   ├── bookmarks/page.tsx  # Bookmarked issues
 │   │   │   │   ├── issue/[id]/page.tsx # Issue detail
@@ -374,11 +402,19 @@ d:/AIM Project/
 │   │   │   │   │       └── issues/
 │   │   │   │   │           ├── page.tsx    # Issue table
 │   │   │   │   │           └── new/page.tsx # Upload
-│   │   │   │   └── api/                # 16 API routes
+│   │   │   │   └── api/                # 19 API routes (incl. /admin/topics, /admin/topics/rename, /admin/thumbnails)
 │   │   │   ├── components/
+│   │   │   │   ├── admin/tags-input.tsx       # Pill-style topic editor with master-list CRUD
+│   │   │   │   ├── browse/                    # Browse-page-only components
+│   │   │   │   │   ├── filter-panel.tsx       # Side panel with 5 sections
+│   │   │   │   │   ├── filter-section.tsx     # Single accordion section + checkboxes + counts
+│   │   │   │   │   ├── view-toggle.tsx        # List/Grid pill toggle
+│   │   │   │   │   ├── active-filter-chips.tsx
+│   │   │   │   │   ├── issue-list-view.tsx    # Sortable table (md+) + compact rows (mobile)
+│   │   │   │   │   └── pagination.tsx
 │   │   │   │   ├── home/animated-bookshelf.tsx
 │   │   │   │   ├── layout/header.tsx, footer.tsx
-│   │   │   │   ├── magazine/issue-card.tsx
+│   │   │   │   ├── magazine/issue-card.tsx    # Whole-card click + share button
 │   │   │   │   └── search/search-result-item.tsx
 │   │   │   ├── lib/
 │   │   │   │   ├── api.ts              # Client-side API + types
@@ -386,8 +422,12 @@ d:/AIM Project/
 │   │   │   │   ├── bookmarks-store.ts  # Zustand store
 │   │   │   │   ├── mock-data.ts        # Dev mock data (still used as fallback)
 │   │   │   │   ├── pdf-extract.ts      # OCR pipeline (Tesseract + pdfjs + canvas)
+│   │   │   │   ├── pdf-thumbnail.ts    # Cover thumbnail render + upload
 │   │   │   │   ├── search-indexer.ts   # Index pages into Supabase
+│   │   │   │   ├── share-issue.ts      # Web Share API helper (cover file attached)
 │   │   │   │   ├── supabase-server.ts  # Singleton Supabase clients
+│   │   │   │   ├── use-browse-filters.ts # URL-synced browse filter state hook
+│   │   │   │   ├── validations.ts      # Zod schemas for API inputs
 │   │   │   │   └── utils.ts           # formatFileSize, formatMonthYear, cn
 │   │   │   └── styles/globals.css      # Tailwind theme (gold/flame colors)
 │   │   ├── public/logo.png
@@ -468,9 +508,9 @@ d:/AIM Project/
 10. ✅ **Database + API** — full backend with Supabase (8 tables, 16 API routes)
 
 ### MVP Remaining
-- Deploy to Vercel
-- SEO basics (meta tags, sitemap)
-- Input validation (Zod)
+- Custom domain (aimarchive.aurosociety.org)
+- Performance audit (Lighthouse)
+- Accessibility check
 
 ### MVP Excludes (Phase 2+)
 - EPUB/MOBI auto-conversion
@@ -488,16 +528,21 @@ d:/AIM Project/
 
 ## 10. Development Phases
 
-### Phase 1: Foundation + MVP Web App ✅ ~95% COMPLETE
+### Phase 1: Foundation + MVP Web App ✅ COMPLETE (Vercel deployed)
 - ✅ Project scaffolding (monorepo, configs, tooling)
 - ✅ Supabase setup (database, storage, auth)
-- ✅ Core API routes (magazines, issues, search, upload)
+- ✅ Core API routes (magazines, issues, search, upload, topics, thumbnails)
 - ✅ Homepage, browse, issue detail, reader, search, bookmarks
-- ✅ Admin panel (CRUD + upload + search/filter/sort)
+- ✅ Browse redesign (side panel, list/grid views, pagination, URL state, share)
+- ✅ Admin panel (CRUD + upload + search/filter/sort + managed topics)
 - ✅ PDF OCR text extraction pipeline (Tesseract.js)
+- ✅ PDF cover thumbnail pipeline (pdfjs + node-canvas)
 - ✅ Full-text search with ranked results and snippets
 - ✅ Responsive design + animations
-- ⬜ SEO optimization, Zod validation, deploy to Vercel
+- ✅ SEO optimization
+- ✅ Zod validation on all API routes
+- ✅ Deployed to Vercel (`aim-archive.vercel.app`)
+- ⬜ Custom domain (`aimarchive.aurosociety.org`)
 
 ### Phase 2: Enhanced Web Features
 - EPUB/MOBI auto-conversion pipeline
@@ -581,7 +626,7 @@ d:/AIM Project/
 
 - [x] GitHub repository (`MugdhanilK/aim-archive`, private)
 - [x] Supabase project (free tier, Mumbai region)
-- [ ] Vercel account (free tier — https://vercel.com)
+- [x] Vercel account & deployed project (`aim-archive.vercel.app`)
 - [ ] Google Cloud Console project (for OAuth client ID — Phase 2)
 - [ ] Expo account (for mobile builds — https://expo.dev — Phase 3)
 - [ ] Domain DNS access (to configure aimarchive.aurosociety.org)
@@ -605,3 +650,45 @@ d:/AIM Project/
 - **pdfjs-dist version**: Must use v4.x (4.8.69). v5.x breaks compatibility with node-canvas for server-side rendering.
 - **Scroll performance**: Removed `backdrop-blur`, infinite CSS animations, and heavy radial gradients after observing scroll lag. Header uses `bg-white/95` instead of blur.
 - **Tesseract.js trained data**: `eng.traineddata` and `hin.traineddata` files are in `apps/web/` — these are auto-downloaded by Tesseract.js on first use.
+- **React types must be unified across the workspace**: `apps/mobile` declares `@types/react@~18.3.0` while `apps/web` uses `@types/react@^19.1.2`. Without intervention, TypeScript resolves both versions and JSX-element checks (most visibly `Suspense`) fail at build time. Root `package.json` uses `pnpm.overrides` to pin both `@types/react` and `@types/react-dom` to `^19.1.2` workspace-wide. **Do not remove these overrides** — Vercel build will break.
+- **`useSearchParams` requires Suspense in Next 15**: any client page that calls `useSearchParams()` (e.g. `/browse`) must be wrapped in a `<Suspense>` boundary or the production build fails with "useSearchParams should be wrapped in a suspense boundary". The pattern is: keep `app/<route>/page.tsx` as a **server component** that imports a `'use client'` inner component and wraps it in `<Suspense>`. See `apps/web/src/app/browse/page.tsx` (server) + `browse-client.tsx` ('use client').
+- **Topic mutations are cross-row**: `POST /api/admin/topics/rename` and `DELETE /api/admin/topics` iterate every issue containing the topic and rewrite its `topics` array. With the current 8 issues this completes in <100ms. If the archive grows past a few hundred issues, migrate to a Postgres function for atomicity.
+- **Storage bucket MIME types**: the `magazines` bucket must allow `image/jpeg` (and ideally `image/png`) in addition to `application/pdf`, otherwise `generateAndUploadThumbnail` fails on upload. Set via SQL: `UPDATE storage.buckets SET allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png'] WHERE id = 'magazines';`
+- **Browser extensions cause hydration warnings on `<body>`**: Grammarly and similar inject `data-*` attrs before React hydrates. `app/layout.tsx` has `suppressHydrationWarning` on `<body>` to swallow that one specific (and benign) mismatch.
+
+---
+
+## 16. Deployment Flow
+
+### Vercel
+- **Project name**: `aim-archive`
+- **Production URL**: https://aim-archive.vercel.app
+- **Project ID**: `prj_0AEgog6GF2u9YM0wpKDT8UDSeRsl` (in `.vercel/project.json`)
+- **Linked Git repo**: `MugdhanilK/aim-archive` on `main`
+- **Auto-deploy**: every push to `main` triggers a production deploy. PR pushes get preview deployments.
+- **Build command**: `next build` (run via `pnpm build` from `apps/web` per the project's Vercel root config)
+- **Environment variables**: managed in the Vercel dashboard; required ones:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `ADMIN_PASSWORD`
+  - `NEXT_PUBLIC_APP_URL` (used for OG/SEO tags)
+
+### Standard deploy flow
+1. Make changes locally.
+2. Run `pnpm build` from `apps/web` to verify the production build passes (catches issues `pnpm tsc` doesn't, like missing Suspense boundaries).
+3. Stage in atomic commits (one logical change per commit) following Conventional Commits.
+4. `git push origin main` → Vercel auto-deploys.
+5. Watch the build in the Vercel Deployments tab.
+
+### Manual / fallback deploy
+If the Git integration is disconnected, deploy from the project root via:
+```bash
+pnpm dlx vercel --prod
+```
+This uses the existing `.vercel/project.json` link.
+
+### Lessons from initial deploy (April 2026)
+- The Vercel project was previously linked but lost its Git connection at one point — **always verify Git is connected** in the Vercel project before assuming `git push` will deploy.
+- After reconnecting Git, Vercel does **not** automatically deploy the latest commit; trigger via dashboard "Redeploy" or push an empty commit (`git commit --allow-empty -m "chore: trigger deploy"`).
+- The first build after reconnect surfaced the React-types and `useSearchParams`/Suspense issues above; both are now permanently solved via pnpm overrides + the server-wrapper pattern.
