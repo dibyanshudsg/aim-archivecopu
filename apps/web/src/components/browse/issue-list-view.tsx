@@ -199,7 +199,7 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
           <ShareButton issue={issue} />
           <Link
             href={`/issue/${issue.id}`}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
             aria-label="Issue details"
             className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gold-50 hover:text-gold-700"
           >
