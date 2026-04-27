@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
+import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -60,6 +61,14 @@ export async function POST(request: NextRequest) {
 
   const { data: urlData } = supabase.storage.from('magazines').getPublicUrl(storagePath);
 
+  // Generate thumbnail from first page of PDF
+  let coverImageUrl: string | null = null;
+  try {
+    coverImageUrl = await generateAndUploadThumbnail(supabase, buffer, storagePath);
+  } catch (thumbErr) {
+    console.error('Thumbnail generation failed (non-blocking):', thumbErr);
+  }
+
   // Create issue record
   const { data: issue, error: insertErr } = await supabase
     .from('issues')
@@ -71,6 +80,7 @@ export async function POST(request: NextRequest) {
       description: description || null,
       topics,
       pdf_url: urlData.publicUrl,
+      cover_image_url: coverImageUrl,
       file_size_bytes: file.size,
       is_published: true,
     })
