@@ -37,7 +37,7 @@ export function IssueCard({ issue, index = 0 }: IssueCardProps) {
       />
 
       {/* Cover */}
-      <div className="relative aspect-[3/4] bg-gradient-to-br from-gold-100 to-gold-50">
+      <div className="pointer-events-none relative aspect-[3/4] bg-gradient-to-br from-gold-100 to-gold-50">
         {issue.coverImageUrl ? (
           <Image
             src={issue.coverImageUrl}
@@ -61,7 +61,7 @@ export function IssueCard({ issue, index = 0 }: IssueCardProps) {
         )}
 
         {/* Cover action buttons */}
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+        <div className="pointer-events-auto absolute top-3 right-3 z-10 flex items-center gap-1.5">
           <button
             onClick={async (e) => {
               e.preventDefault();

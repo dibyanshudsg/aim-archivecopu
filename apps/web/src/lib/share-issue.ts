@@ -65,6 +65,71 @@ function buildShareText(issue: IssueWithMagazine, monthYear: string, url: string
   return `${description} 🌻\n\n🌐 Link: ${url}`;
 }
 
+/**
+ * Share a deep link to a specific page within an issue.
+ *
+ * Pass `pageImageBlob` (rendered by the reader from the actual PDF page)
+ * so the OS share preview shows the page being shared, not just the issue
+ * cover. Falls back to the cover thumbnail and then to text-only share.
+ */
+export async function sharePage(
+  issue: IssueWithMagazine,
+  pageNumber: number,
+  pageImageBlob?: Blob | null,
+): Promise<ShareResult> {
+  if (typeof window === 'undefined') return 'failed';
+
+  const url = `${window.location.origin}/read/${issue.id}?page=${pageNumber}`;
+  const monthYear = `${MONTH_NAMES[issue.month as MonthIndex]} ${issue.year}`;
+  const title = `${issue.magazine.name} — ${monthYear} · Page ${pageNumber}`;
+  const text = `Page ${pageNumber} of the ${monthYear} issue of ${issue.magazine.name}, from the Sri Aurobindo Society's digital archive. 🌻\n\n🌐 Link: ${url}`;
+
+  // Pick the richest preview image we can: rendered page > issue cover.
+  const previewBlob: Blob | null =
+    pageImageBlob ??
+    (issue.coverImageUrl
+      ? await fetch(issue.coverImageUrl)
+          .then((r) => (r.ok ? r.blob() : null))
+          .catch(() => null)
+      : null);
+
+  // 1. Try to share with the page (or cover) image attached.
+  if (previewBlob && navigator.share && navigator.canShare) {
+    try {
+      const ext = previewBlob.type === 'image/png' ? 'png' : 'jpg';
+      const filename = `${slug(title)}.${ext}`;
+      const file = new File([previewBlob], filename, {
+        type: previewBlob.type || 'image/jpeg',
+      });
+      const dataWithFile = { title, text, url, files: [file] };
+      if (navigator.canShare(dataWithFile)) {
+        await navigator.share(dataWithFile);
+        return 'shared';
+      }
+    } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError') return 'failed';
+    }
+  }
+
+  // 2. Share with URL field but no file.
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+      return 'shared';
+    } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError') return 'failed';
+    }
+  }
+
+  // 3. Clipboard fallback.
+  try {
+    await navigator.clipboard.writeText(text);
+    return 'copied';
+  } catch {
+    return 'failed';
+  }
+}
+
 function joinWithAnd(items: string[]): string {
   if (items.length === 0) return '';
   if (items.length === 1) return items[0];
