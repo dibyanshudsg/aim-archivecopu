@@ -11,7 +11,9 @@ import {
   LogOut,
   Menu,
   X,
+  ExternalLink,
 } from 'lucide-react';
+import { UIProvider } from '@/components/ui/toast';
 
 const navItems = [
   { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
@@ -47,6 +49,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
   }
 
   return (
+    <UIProvider>
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar - Desktop */}
       <aside className="hidden w-64 flex-col border-r border-gray-200 bg-white lg:flex">
@@ -58,7 +61,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex flex-1 flex-col px-3 py-4">
           {navItems.map((item) => {
             const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
             return (
@@ -76,6 +79,18 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
               </Link>
             );
           })}
+
+          <div className="mt-auto border-t border-gray-100 pt-3">
+            <Link
+              href="/"
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+            >
+              <ExternalLink className="h-4 w-4" />
+              View Site
+            </Link>
+          </div>
         </nav>
 
         <div className="border-t border-gray-100 p-4">
@@ -141,6 +156,16 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
                     </Link>
                   );
                 })}
+                <Link
+                  href="/"
+                  target="_blank"
+                  rel="noopener"
+                  onClick={() => setSidebarOpen(false)}
+                  className="mt-2 flex items-center gap-3 rounded-xl border-t border-gray-100 px-4 pt-4 pb-2.5 text-sm font-medium text-gray-600"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View Site
+                </Link>
               </nav>
             </div>
           </div>
@@ -150,5 +175,6 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
         <main className="flex-1 p-6 lg:p-8">{children}</main>
       </div>
     </div>
+    </UIProvider>
   );
 }

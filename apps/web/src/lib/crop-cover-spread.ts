@@ -1,0 +1,72 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export type SpreadOrientation = 'front-right' | 'front-left';
+
+export interface CroppedCoverResult {
+  publicUrl: string;
+  /** Whether the input was detected as a spread and cropped (vs used as-is). */
+  cropped: boolean;
+  width: number;
+  height: number;
+}
+
+// Width:height ratio above which we treat the image as a back+front spread.
+// A typical magazine page is portrait (~0.65–0.75), so anything close to or
+// wider than 1.1 is almost certainly a two-page spread. Single front-cover
+// images stay below this threshold and pass through uncropped.
+const SPREAD_RATIO_THRESHOLD = 1.1;
+
+/**
+ * Take an image (typically a combined back+front cover spread), crop the
+ * front-cover half, and upload it to Supabase Storage as `<storagePath>-cover.jpg`.
+ *
+ * If the image is already a single portrait cover, it's uploaded unchanged.
+ */
+export async function cropAndUploadCover(
+  supabase: SupabaseClient,
+  imageBuffer: Buffer,
+  storagePath: string,
+  orientation: SpreadOrientation = 'front-right',
+): Promise<CroppedCoverResult> {
+  const { createCanvas, loadImage } = await import('canvas');
+
+  const img = await loadImage(imageBuffer);
+  const isSpread = img.width / img.height > SPREAD_RATIO_THRESHOLD;
+
+  let outWidth: number;
+  let outHeight: number;
+  let sx: number;
+
+  if (isSpread) {
+    outWidth = Math.floor(img.width / 2);
+    outHeight = img.height;
+    sx = orientation === 'front-right' ? img.width - outWidth : 0;
+  } else {
+    outWidth = img.width;
+    outHeight = img.height;
+    sx = 0;
+  }
+
+  const canvas = createCanvas(outWidth, outHeight);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, sx, 0, outWidth, outHeight, 0, 0, outWidth, outHeight);
+
+  const out = canvas.toBuffer('image/jpeg', { quality: 0.9 });
+
+  const coverPath = storagePath.replace(/\.pdf$/i, '-cover.jpg');
+
+  const { error } = await supabase.storage
+    .from('magazines')
+    .upload(coverPath, out, { contentType: 'image/jpeg', upsert: true });
+
+  if (error) throw new Error(`Cover upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from('magazines').getPublicUrl(coverPath);
+
+  return {
+    publicUrl: data.publicUrl,
+    cropped: isSpread,
+    width: outWidth,
+    height: outHeight,
+  };
+}

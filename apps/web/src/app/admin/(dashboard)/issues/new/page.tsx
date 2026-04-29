@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Upload, FileText, X, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, X, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
@@ -26,6 +26,12 @@ export default function UploadIssuePage() {
   const [progress, setProgress] = useState('');
   const [allTopics, setAllTopics] = useState<ManagedTopic[]>([]);
 
+  const coverRef = useRef<HTMLInputElement>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [coverDims, setCoverDims] = useState<{ w: number; h: number } | null>(null);
+  const [coverOrientation, setCoverOrientation] = useState<'front-right' | 'front-left'>('front-right');
+
   async function refetchTopics() {
     try {
       const res = await fetch('/api/admin/topics');
@@ -48,6 +54,24 @@ export default function UploadIssuePage() {
       .then((data) => {
         setMagazines(data);
         if (data.length > 0) setForm((f) => ({ ...f, magazine_id: data[0].id }));
+
+        // Pick up "Duplicate issue" prefill — magazine, topics, description.
+        try {
+          const raw = sessionStorage.getItem('aim-prefill-issue');
+          if (!raw) return;
+          sessionStorage.removeItem('aim-prefill-issue');
+          const pre = JSON.parse(raw) as {
+            magazine_id?: string;
+            topics?: string[];
+            description?: string;
+          };
+          setForm((f) => ({
+            ...f,
+            magazine_id: pre.magazine_id ?? f.magazine_id,
+            topics: pre.topics ?? f.topics,
+            description: pre.description ?? f.description,
+          }));
+        } catch {}
       });
   }, []);
 
@@ -61,7 +85,7 @@ export default function UploadIssuePage() {
     const mag = magazines.find((m) => m.id === form.magazine_id);
     if (mag) {
       const monthName = MONTH_NAMES[form.month as MonthIndex];
-      setForm((f) => ({ ...f, title: `${mag.name} ${monthName}-${form.year}` }));
+      setForm((f) => ({ ...f, title: `${mag.name} — ${monthName} ${form.year}` }));
     }
   }, [form.magazine_id, form.month, form.year, magazines]);
 
@@ -73,6 +97,80 @@ export default function UploadIssuePage() {
     } else {
       setError('Please select a PDF file');
     }
+  }
+
+  function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) {
+      setError('Cover must be an image file (JPG, PNG, WebP)');
+      return;
+    }
+    setError('');
+    setCoverFile(f);
+    if (coverPreviewUrl) URL.revokeObjectURL(coverPreviewUrl);
+    const url = URL.createObjectURL(f);
+    setCoverPreviewUrl(url);
+    const probe = new window.Image();
+    probe.onload = () => setCoverDims({ w: probe.naturalWidth, h: probe.naturalHeight });
+    probe.src = url;
+  }
+
+  function clearCover() {
+    if (coverPreviewUrl) URL.revokeObjectURL(coverPreviewUrl);
+    setCoverFile(null);
+    setCoverPreviewUrl(null);
+    setCoverDims(null);
+    if (coverRef.current) coverRef.current.value = '';
+  }
+
+  // Detect spread vs single cover for live preview overlay
+  const isSpread = coverDims ? coverDims.w / coverDims.h > 1.1 : false;
+
+  async function downloadCoverHalf(side: 'front' | 'back') {
+    if (!coverPreviewUrl || !coverFile) return;
+
+    // 1. Decode the image and crop the requested half via canvas.
+    const probe = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = coverPreviewUrl;
+    });
+
+    const halfW = Math.floor(probe.naturalWidth / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = halfW;
+    canvas.height = probe.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const frontIsOnRight = coverOrientation === 'front-right';
+    const sx =
+      (side === 'front' && frontIsOnRight) || (side === 'back' && !frontIsOnRight)
+        ? probe.naturalWidth - halfW
+        : 0;
+    ctx.drawImage(probe, sx, 0, halfW, probe.naturalHeight, 0, 0, halfW, probe.naturalHeight);
+
+    const jpegBlob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, 'image/jpeg', 0.95),
+    );
+    if (!jpegBlob) return;
+    const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+
+    // 2. Wrap the cropped JPEG in a single-page PDF sized to its pixels (1:1).
+    const { buildJpegPdf } = await import('@/lib/build-jpeg-pdf');
+    const pdfBytes = buildJpegPdf(jpegBytes, halfW, probe.naturalHeight);
+
+    // 3. Trigger download.
+    const baseName = coverFile.name.replace(/\.[^.]+$/, '');
+    const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${baseName}-${side}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -91,6 +189,10 @@ export default function UploadIssuePage() {
     formData.append('month', String(form.month));
     formData.append('description', form.description);
     formData.append('topics', form.topics.join(','));
+    if (coverFile) {
+      formData.append('cover', coverFile);
+      formData.append('cover_orientation', coverOrientation);
+    }
 
     try {
       const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
@@ -161,6 +263,132 @@ export default function UploadIssuePage() {
             type="file"
             accept=".pdf,application/pdf"
             onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+
+        {/* Cover Image (optional, with auto-crop preview) */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Cover Image <span className="text-xs font-normal text-gray-400">(optional — overrides PDF page 1)</span>
+          </label>
+
+          {!coverPreviewUrl ? (
+            <div
+              onClick={() => coverRef.current?.click()}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-6 transition-colors hover:border-gold-300 hover:bg-gray-50"
+            >
+              <Upload className="h-7 w-7 text-gray-400" />
+              <p className="mt-2 text-sm font-medium text-gray-600">Click to select cover image</p>
+              <p className="text-xs text-gray-400">JPG / PNG · combined front+back spread is fine</p>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-2xl border border-gold-200 bg-gold-50/30 p-4">
+              {/* Original spread with overlay highlighting kept half */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-gray-500">
+                  Source ({coverDims ? `${coverDims.w} × ${coverDims.h} px` : 'loading...'})
+                  {isSpread && (
+                    <span className="ml-2 rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold text-gold-700">
+                      Spread detected · cropping {coverOrientation === 'front-right' ? 'right' : 'left'} half
+                    </span>
+                  )}
+                  {coverDims && !isSpread && (
+                    <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                      Single cover · used as-is
+                    </span>
+                  )}
+                </p>
+                <div className="relative mx-auto max-w-md overflow-hidden rounded-lg bg-gray-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={coverPreviewUrl} alt="Cover preview" className="block w-full" />
+                  {isSpread && (
+                    <div
+                      className={`pointer-events-none absolute inset-y-0 bg-black/55 ${
+                        coverOrientation === 'front-right' ? 'left-0 right-1/2' : 'left-1/2 right-0'
+                      }`}
+                    />
+                  )}
+                  {isSpread && (
+                    <div
+                      className={`pointer-events-none absolute inset-y-0 ring-2 ring-inset ring-gold-400 ${
+                        coverOrientation === 'front-right' ? 'left-1/2 right-0' : 'left-0 right-1/2'
+                      }`}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {isSpread && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500">
+                      Front cover position in the spread:
+                    </p>
+                    <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setCoverOrientation('front-left')}
+                        className={`px-3 py-1.5 transition-colors ${
+                          coverOrientation === 'front-left' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Left
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCoverOrientation('front-right')}
+                        className={`px-3 py-1.5 transition-colors ${
+                          coverOrientation === 'front-right' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Right
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadCoverHalf('front')}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gold-300 bg-white px-3 py-1.5 text-xs font-medium text-gold-700 transition-colors hover:bg-gold-50"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Front cover PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadCoverHalf('back')}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Back cover PDF
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3 border-t border-gold-200/60 pt-3">
+                <p className="truncate text-xs text-gray-500">
+                  {coverFile?.name} · {coverFile ? formatFileSize(coverFile.size) : ''}
+                </p>
+                <button
+                  type="button"
+                  onClick={clearCover}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-white hover:text-red-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+
+          <input
+            ref={coverRef}
+            type="file"
+            accept="image/*"
+            onChange={handleCoverChange}
             className="hidden"
           />
         </div>

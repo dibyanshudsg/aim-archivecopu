@@ -4,6 +4,7 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
+import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -61,12 +62,30 @@ export async function POST(request: NextRequest) {
 
   const { data: urlData } = supabase.storage.from('magazines').getPublicUrl(storagePath);
 
-  // Generate thumbnail from first page of PDF
+  // Cover image: prefer an explicitly-uploaded spread/cover image (cropped to
+  // front), fall back to rendering page 1 of the PDF.
   let coverImageUrl: string | null = null;
-  try {
-    coverImageUrl = await generateAndUploadThumbnail(supabase, buffer, storagePath);
-  } catch (thumbErr) {
-    console.error('Thumbnail generation failed (non-blocking):', thumbErr);
+  const coverFile = formData.get('cover') as File | null;
+  const orientationRaw = formData.get('cover_orientation');
+  const orientation: SpreadOrientation =
+    orientationRaw === 'front-left' ? 'front-left' : 'front-right';
+
+  if (coverFile && coverFile.size > 0 && coverFile.type.startsWith('image/')) {
+    try {
+      const coverBuf = Buffer.from(await coverFile.arrayBuffer());
+      const result = await cropAndUploadCover(supabase, coverBuf, storagePath, orientation);
+      coverImageUrl = result.publicUrl;
+    } catch (coverErr) {
+      console.error('Cover crop/upload failed (falling back to PDF page 1):', coverErr);
+    }
+  }
+
+  if (!coverImageUrl) {
+    try {
+      coverImageUrl = await generateAndUploadThumbnail(supabase, buffer, storagePath);
+    } catch (thumbErr) {
+      console.error('Thumbnail generation failed (non-blocking):', thumbErr);
+    }
   }
 
   // Create issue record
