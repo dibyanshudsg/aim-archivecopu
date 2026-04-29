@@ -1,4 +1,4 @@
-import { MONTH_NAMES_SHORT } from '@aim-archive/shared';
+import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 
 export function formatFileSize(bytes: number): string {
@@ -8,7 +8,7 @@ export function formatFileSize(bytes: number): string {
 }
 
 export function formatMonthYear(month: number, year: number): string {
-  return `${MONTH_NAMES_SHORT[month as MonthIndex]} ${year}`;
+  return `${MONTH_NAMES[month as MonthIndex]} ${year}`;
 }
 
 export function cn(...classes: (string | false | null | undefined)[]): string {

@@ -600,6 +600,16 @@ d:/AIM Project/
 - Index frequently queried columns
 - Admin writes use service role key (bypasses RLS)
 
+### Content Conventions
+- **Issue title format**: `{Magazine Name} — {Full Month} {Year}` — e.g. `All India Magazine — February 2024`, `Agnisikha — April 2026`.
+  - Em dash (`—`, U+2014), **not** a hyphen-minus.
+  - **Full** month name only — never abbreviated (`February`, not `Feb`).
+  - Space between month and year (no hyphen).
+  - Used by the upload form's auto-generation and by `scripts/retitle-issues.mjs` (one-off migration).
+- **PDF source quality bar** (per the Feb 2024 reference issues from Hemlata Di):
+  - Vector text required — never Chrome "Print to PDF" (which rasterizes everything and forces OCR).
+  - Embedded images at ≥ 300 DPI (≈ 1500 px on the long side for a 5″-wide page).
+
 ---
 
 ## 12. Key Decisions Log

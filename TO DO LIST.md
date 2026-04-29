@@ -52,18 +52,20 @@
 - [x] Deploy to Vercel (`aim-archive.vercel.app`)
 
 ## Up Next — Admin Issues Page Enhancements
-- [ ] Bulk select & bulk actions (delete, publish/unpublish, edit topics in batch)
-- [ ] Manual cover image upload per issue (override auto-generated)
-- [ ] View/open link — quick link to public page or PDF
-- [ ] Download count column in table
-- [ ] Pagination for large issue lists (850+ issues)
-- [ ] Status filter (Published / Draft)
-- [ ] Topic filter dropdown
-- [ ] Export issue list as CSV
-- [ ] Bulk upload — multiple PDFs at once with auto-detected month/year from filename
-- [ ] Duplicate issue — clone metadata for quick uploads
-- [ ] Last modified date shown per row
-- [ ] Confirmation toast after successful edit/delete/upload (replace `window.alert` / `window.confirm`)
+- [x] Bulk select & bulk actions (delete, publish, unpublish) — checkbox column, master checkbox, action toolbar appears when rows selected
+- [ ] Bulk **edit topics** in batch (deferred — needs an "add / remove tag across selection" modal)
+- [x] Manual cover image upload per issue (replace-cover modal with auto-crop + orientation toggle)
+- [x] View/open link — opens public issue page in new tab
+- [x] Download PDF link — direct download from row action
+- [x] Download count column in table (sortable)
+- [x] Pagination for large issue lists (25/page, prev/next, "Showing X–Y of Z")
+- [x] Status filter (Published / Draft)
+- [x] Topic filter dropdown
+- [x] Export issue list as CSV (respects current filters)
+- [x] Bulk upload — multiple PDFs at once with auto-detected magazine/month/year from filename (`/admin/issues/bulk`)
+- [x] Duplicate issue — clones magazine + topics + description into upload form via sessionStorage
+- [x] Last modified date shown per row (sortable, relative format like "3d ago")
+- [x] Confirmation toast + custom confirm dialog (`components/ui/toast.tsx`, `UIProvider` wraps admin layout) — replaced `window.alert` / `window.confirm`
 
 ## Up Next — Phase 1.5: Polish & Deploy
 - [ ] Performance audit (Lighthouse score)
@@ -71,6 +73,65 @@
 - [ ] Connect domain (aimarchive.aurosociety.org)
 - [ ] Full-page search bar where the old horizontal filter row used to live (placeholder is in place)
 - [ ] Browse: remember user's last open/closed panel state per device (currently per-browser via localStorage; future: cross-device after auth lands)
+
+## Up Next — Migrate Storage to Cloudflare R2
+
+> **Why:** Supabase Storage charges egress (bandwidth) per GB. R2 charges **zero** egress, forever. With ~25 MB per issue and a public archive, this saves ₹2,000+/month at scale and removes "viral spike" billing risk. Free tier (10 GB / 1M reads/mo) covers the first ~400 issues.
+
+### A. Cloudflare account & bucket setup (manual, ~10 min)
+- [ ] Sign up / log in at https://dash.cloudflare.com
+- [ ] Add payment method (required for R2 even on free tier — won't be charged unless free tier is exceeded)
+- [ ] R2 → **Create bucket**
+  - Name: `aim-archive`
+  - Location: **Asia-Pacific (APAC)** for closest hop to Indian users
+  - Default Storage Class: Standard
+- [ ] Bucket → Settings → **Public access** → enable **r2.dev subdomain**
+  - Save the public URL (`https://pub-XXXXXXXX.r2.dev`)
+- [ ] R2 → **Manage R2 API Tokens** → **Create API Token**
+  - Name: `aim-archive-app`
+  - Permissions: **Object Read & Write**
+  - Specify bucket: `aim-archive` only (not all buckets)
+  - Save: **Access Key ID**, **Secret Access Key**, **Account ID** (from endpoint URL)
+
+### B. Code changes
+- [ ] Add deps: `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`
+- [ ] New file `apps/web/src/lib/r2-client.ts` — configured S3 client pointed at R2
+- [ ] Refactor `apps/web/src/lib/pdf-thumbnail.ts` to upload thumbnails to R2 (drop Supabase Storage dep)
+- [ ] Refactor `/api/admin/upload` to write source PDFs to R2
+- [ ] Refactor `/api/admin/issues/[id]` DELETE to clean up R2 instead of Supabase Storage
+- [ ] Update `apps/web/.env.local.example` with new vars:
+  - `R2_ACCOUNT_ID`
+  - `R2_ACCESS_KEY_ID`
+  - `R2_SECRET_ACCESS_KEY`
+  - `R2_BUCKET=aim-archive`
+  - `R2_PUBLIC_BASE_URL=https://pub-XXXXXXXX.r2.dev`
+
+### C. Migration script (one-shot for existing 8 issues)
+- [ ] New file `scripts/migrate-storage-to-r2.ts`
+  - List all objects in Supabase Storage `magazines` bucket
+  - Stream each to R2 via S3 SDK (`PutObjectCommand`)
+  - Update `issues.pdf_url` and `issues.cover_image_url` rows in DB to point at new R2 URLs
+- [ ] Run script locally with both Supabase + R2 creds in `.env.local`
+- [ ] Spot-check: open 2–3 issues in the reader, confirm PDF + thumbnail load from R2 URLs
+
+### D. Vercel + production
+- [ ] Add the same 5 env vars on Vercel: Settings → Environment Variables (all three environments: Production, Preview, Development)
+- [ ] Add `R2_*` and `R2_PUBLIC_BASE_URL` to `turbo.json` `globalEnv` and `build.env`
+- [ ] Push, redeploy, verify live site loads PDFs from R2
+
+### E. Cleanup (after ~7 days of stable verification)
+- [ ] Empty the Supabase Storage `magazines` bucket (keep DB rows; URLs already point at R2)
+- [ ] Optional: delete the bucket itself, or leave empty as cold backup
+
+### F. Documentation
+- [ ] Update CLAUDE.md §3 (Tech Stack — File Storage now Cloudflare R2)
+- [ ] Update CLAUDE.md §15 Known Issues with R2 setup gotchas if any surface
+- [ ] Update CLAUDE.md §16 Deployment Flow with R2 env vars
+
+### G. Future enhancements (separate work)
+- [ ] Move from `r2.dev` subdomain to a custom domain like `cdn.aimarchive.aurosociety.org` (requires DNS access)
+- [ ] Mirror PDFs to Internet Archive (archive.org) as a preservation backup + alternate access route
+- [ ] Add Cloudflare CDN cache rules for popular issues (further latency improvement)
 
 ## Future — Phase 2: Enhanced Web Features
 - [ ] PDF → EPUB/MOBI auto-conversion
