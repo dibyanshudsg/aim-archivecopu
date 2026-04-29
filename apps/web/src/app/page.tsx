@@ -6,6 +6,7 @@ import { BookOpen, Search, Download, Globe } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
+import { Flame } from '@/components/home/flame';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
@@ -58,11 +59,15 @@ export default function HomePage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-gradient-to-b from-gold-50 to-white px-6 py-24 sm:py-32 lg:px-8">
           <motion.div
-            className="relative mx-auto max-w-3xl text-center"
+            className="relative mx-auto max-w-5xl text-center"
             initial="hidden"
             animate="visible"
             variants={staggerContainer}
           >
+            <motion.div variants={fadeInUp} className="mb-4 flex justify-center">
+              <Flame />
+            </motion.div>
+
             <motion.div variants={fadeInUp} className="mb-8">
               <span className="inline-block rounded-full bg-gold-100 px-4 py-1.5 text-sm font-medium text-gold-700">
                 Sri Aurobindo Society
@@ -73,7 +78,7 @@ export default function HomePage() {
               variants={fadeInUp}
               className="font-heading text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl lg:text-7xl"
             >
-              The Living Archive
+              An Archive of Eternal Flame
             </motion.h1>
 
             <motion.p
