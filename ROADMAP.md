@@ -83,6 +83,51 @@
 - [ ] Deploy to Vercel
 - [ ] Connect domain (aimarchive.aurosociety.org)
 
+### 1.6 Public UI/UX Polish
+> Goal: Make the public archive feel calm, tactile, and easy to explore.
+
+#### Homepage Shelf
+- [x] Replace decorative bookshelf with live latest-issue data from Supabase
+- [x] Show real cover thumbnails and link every issue directly to `/read/[id]`
+- [x] Add hover/long-press book preview with actual PDF page snapshots
+- [x] Add automatic 3D page flip with stable page-content handoff
+- [x] Make hover switching immediate: old book closes while new book opens
+- [x] Remove bookmark close animation from homepage preview
+- [x] Add polished sorting pill: Recent, Issue Date, A-Z
+- [x] Add a subtle shelf status line, e.g. `Showing 8 latest issues`
+- [x] Add magazine filter chips: All, AIM, Agnisikha
+- [x] Add a tiny page indicator inside opened preview, e.g. `4-5 / 44`
+- [ ] Tune hover timing after real-user testing
+
+#### Browse Continuity
+- [x] Make Browse issue cards visually echo homepage book cards
+- [x] Add the same gradient spine, title/date typography, and cover treatment
+- [ ] Keep filter/sort controls dense and scan-friendly for repeated use
+
+#### Reader Flow
+- [x] Add contextual back link: back to shelf, browse, search, or bookmarks
+- [x] Preserve source context when opening `/read/[id]`
+- [x] Add a compact issue info drawer inside the reader
+
+#### Personalization
+- [x] Add `Continue reading` shelf from local reading history
+- [ ] Add `Recently viewed` or `Last opened` ordering where useful
+- [ ] Prepare interaction patterns for future synced account state
+
+#### Feedback
+- [x] Add footer feedback link for visitor concerns, requests, and advice
+- [x] Make feedback Google Form URLs manageable from the admin Settings page
+- [x] Store separate public form and admin edit/manage URLs
+
+#### Loading And Empty States
+- [x] Replace plain homepage loading text with skeleton book spines
+- [ ] Add refined empty states for Browse, Search, and Bookmarks
+
+#### Motion System
+- [ ] Consolidate shared open/close/sort motion timings
+- [ ] Keep animations tactile but restrained; avoid decorative motion that delays task flow
+- [ ] Respect reduced-motion preferences
+
 ---
 
 ## Phase 2: Enhanced Web Features

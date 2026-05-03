@@ -74,6 +74,20 @@
 - [ ] Full-page search bar where the old horizontal filter row used to live (placeholder is in place)
 - [ ] Browse: remember user's last open/closed panel state per device (currently per-browser via localStorage; future: cross-device after auth lands)
 
+## Up Next - System Improvements From Review
+- [x] Public issue API: prevent drafts from loading by direct ID (`/api/issues/[id]`, reader, issue page)
+- [ ] Admin auth hardening: signed session cookie, no default password fallback, login rate limiting
+- [ ] Browse scalability: move filtering, sorting, facets, and pagination server-side (current client data is capped)
+- [x] Footer magazine links: replace slug-like values (`aim`, `agnisikha`) with working IDs/slugs
+- [x] Download analytics: add a download route that increments `download_count` before serving/redirecting PDF
+- [x] Read analytics: use an atomic DB/RPC increment for `read_count`
+- [x] Search safety: sanitize highlighted snippets before rendering HTML
+- [x] Admin Issues UI: remove per-row "view public page" and "download PDF" actions to free table space
+- [ ] Mobile readiness: add missing Expo assets and fix mobile lint dependency/config
+- [ ] Test baseline: add focused tests for auth, draft visibility, browse filters, search, and counters
+- [ ] Tooling cleanup: migrate web lint script away from deprecated `next lint`
+- [ ] Optional resilience: self-host fonts / PDF worker to reduce external build/runtime dependency
+
 ## Up Next — Migrate Storage to Cloudflare R2
 
 > **Why:** Supabase Storage charges egress (bandwidth) per GB. R2 charges **zero** egress, forever. With ~25 MB per issue and a public archive, this saves ₹2,000+/month at scale and removes "viral spike" billing risk. Free tier (10 GB / 1M reads/mo) covers the first ~400 issues.
@@ -166,3 +180,18 @@ ________________________________
 - ✅ Browse pagination shipped (Apr 2026) — see `components/browse/pagination.tsx` and `lib/use-browse-filters.ts`
 - ✅ CLAUDE.md deployment flow updated (see §16 — production URL, env vars, atomic-commit flow, lessons from initial deploy)
 - ⚠ Vercel build is sensitive to `noImplicitAny` on JSX event handlers — `<Link onClick={(e: React.MouseEvent) => …}>` must have an explicit event type. Local `pnpm build` may pass while Vercel fails because of this divergence.
+
+
+_____________________
+
+Perfect. Next, see the Issues page in the Admin panel - how the control buttons are taking lots of spaces on the right side and making the left text details comapct, looking ugly. 
+
+Now, to be frank, among the buttons for each rows, - 
+
+1. We don't need view public page button against each rows. Remove it.
+
+2. And, no need to put Download pdf 
+
+3. No Toast message when adding a Bookmark. See others also regarding getting toast messages.
+
+

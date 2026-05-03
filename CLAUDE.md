@@ -387,11 +387,17 @@ d:/AIM Project/
 │   │   │   │   ├── page.tsx            # Homepage (hero, bookshelf, features)
 │   │   │   │   ├── icon.png            # Favicon
 │   │   │   │   ├── browse/
-│   │   │   │   │   ├── page.tsx        # Server wrapper (Suspense for useSearchParams)
-│   │   │   │   │   └── browse-client.tsx # Main browse logic — filters, grid/list, pagination
-│   │   │   │   ├── search/page.tsx     # Full-text search with snippets
-│   │   │   │   ├── bookmarks/page.tsx  # Bookmarked issues
-│   │   │   │   ├── issue/[id]/page.tsx # Issue detail
+│   │   │   │   │   ├── page.tsx        # Server component — fetches issues + magazines, ISR 60s
+│   │   │   │   │   └── browse-client.tsx # Filters, grid/list, pagination (seeded from server)
+│   │   │   │   ├── search/
+│   │   │   │   │   ├── page.tsx        # Server component — fetches magazines for filter dropdown, ISR 60s
+│   │   │   │   │   └── search-client.tsx # Search input + debounced fetch + results
+│   │   │   │   ├── bookmarks/
+│   │   │   │   │   ├── page.tsx        # Server component — fetches all issues, ISR 60s
+│   │   │   │   │   └── bookmarks-client.tsx # Filters by bookmarked IDs from localStorage
+│   │   │   │   ├── issue/[id]/
+│   │   │   │   │   ├── page.tsx        # Server component — fetches single issue, ISR 60s
+│   │   │   │   │   └── issue-detail-client.tsx # Bookmark button + animations + read-count ping
 │   │   │   │   ├── read/[id]/page.tsx  # PDF reader
 │   │   │   │   ├── admin/
 │   │   │   │   │   ├── login/page.tsx
@@ -420,7 +426,6 @@ d:/AIM Project/
 │   │   │   │   ├── api.ts              # Client-side API + types
 │   │   │   │   ├── admin-auth.ts       # Session verification
 │   │   │   │   ├── bookmarks-store.ts  # Zustand store
-│   │   │   │   ├── mock-data.ts        # Dev mock data (still used as fallback)
 │   │   │   │   ├── pdf-extract.ts      # OCR pipeline (Tesseract + pdfjs + canvas)
 │   │   │   │   ├── pdf-thumbnail.ts    # Cover thumbnail render + upload
 │   │   │   │   ├── search-indexer.ts   # Index pages into Supabase
@@ -665,6 +670,8 @@ d:/AIM Project/
 - **Topic mutations are cross-row**: `POST /api/admin/topics/rename` and `DELETE /api/admin/topics` iterate every issue containing the topic and rewrite its `topics` array. With the current 8 issues this completes in <100ms. If the archive grows past a few hundred issues, migrate to a Postgres function for atomicity.
 - **Storage bucket MIME types**: the `magazines` bucket must allow `image/jpeg` (and ideally `image/png`) in addition to `application/pdf`, otherwise `generateAndUploadThumbnail` fails on upload. Set via SQL: `UPDATE storage.buckets SET allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png'] WHERE id = 'magazines';`
 - **Browser extensions cause hydration warnings on `<body>`**: Grammarly and similar inject `data-*` attrs before React hydrates. `app/layout.tsx` has `suppressHydrationWarning` on `<body>` to swallow that one specific (and benign) mismatch.
+- **Public-page rendering pattern**: every public route (`/browse`, `/search`, `/bookmarks`, `/issue/[id]`) is a thin **server component** that fetches initial data via `createPublicClient()` and passes it as props to a colocated `*-client.tsx` (`'use client'`). The client never re-fetches just to populate first paint — it seeds state from the server props. Each route exports `revalidate = 60` for ISR. When adding a new public page that needs data, follow this pattern; do **not** introduce a `'use client'` page that fires a `fetch` in `useEffect` on mount.
+- **Public API routes are edge-cached**: `/api/magazines` (10 min + 1 h SWR), `/api/issues` and `/api/search` (60 s + 5 min SWR) set `Cache-Control: public, s-maxage=…, stale-while-revalidate=…` so Vercel's edge serves repeat traffic without hitting Supabase. `/api/issues/[id]` is **not** cached — its GET has the side effect of incrementing `read_count`.
 
 ---
 
