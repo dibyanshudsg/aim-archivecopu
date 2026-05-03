@@ -265,7 +265,7 @@ function IssueBook({
       }}
       onMouseEnter={() => onIntentOpen(issue.id)}
       onMouseLeave={() => onLeave(issue.id)}
-      onPointerDown={(event) => {
+      onPointerDown={(event: React.PointerEvent) => {
         if (event.pointerType === 'mouse') return;
         suppressClickRef.current = false;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -274,12 +274,12 @@ function IssueBook({
           onIntentOpen(issue.id, true);
         }, LONG_PRESS_MS);
       }}
-      onPointerUp={(event) => {
+      onPointerUp={(event: React.PointerEvent) => {
         if (event.pointerType === 'mouse') return;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         if (suppressClickRef.current) onLeave(issue.id);
       }}
-      onPointerCancel={(event) => {
+      onPointerCancel={(event: React.PointerEvent) => {
         if (event.pointerType === 'mouse') return;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         onLeave(issue.id);
