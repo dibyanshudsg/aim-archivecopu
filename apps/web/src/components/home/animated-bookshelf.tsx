@@ -255,7 +255,7 @@ function IssueBook({
   return (
     <motion.div
       layout
-      className={`group relative shrink-0 cursor-pointer ${expanded ? 'z-40 w-[300px] sm:w-[390px] lg:w-[460px]' : 'z-10 w-[118px] sm:w-[138px] lg:w-[150px]'}`}
+      className={`group relative shrink-0 cursor-pointer ${expanded ? 'z-40 w-[300px] sm:w-[390px] lg:w-[460px]' : 'z-10 w-[140px] sm:w-[165px] lg:w-[150px]'}`}
       initial={{ y: 44, opacity: 0 }}
       animate={{ y: expanded ? -22 : 0, opacity: 1 }}
       transition={{
@@ -334,7 +334,7 @@ function ClosedIssueCover({
 }) {
   return (
     <motion.div
-      className="relative mx-auto aspect-[3/4] w-[118px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-2xl sm:w-[138px] lg:w-[150px]"
+      className="relative mx-auto aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-2xl sm:w-[165px] lg:w-[150px]"
       initial={false}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -348,7 +348,7 @@ function ClosedIssueCover({
           alt={issue.title}
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-          sizes="(max-width: 640px) 118px, (max-width: 1024px) 138px, 150px"
+          sizes="(max-width: 640px) 140px, (max-width: 1024px) 165px, 150px"
         />
       ) : (
         <CoverFallback issue={issue} monthYear={monthYear} />
@@ -870,7 +870,7 @@ function IssueRow({ issues, offset = 0 }: { issues: ApiIssue[]; offset?: number 
 
   return (
     <>
-      <div className="flex min-h-[230px] items-end gap-3 overflow-x-auto px-1 pb-1 sm:min-h-[284px] sm:justify-center sm:gap-4 sm:overflow-visible lg:min-h-[334px]">
+      <div className="flex min-h-[230px] items-end justify-center gap-3 px-1 pb-1 sm:min-h-[284px] sm:gap-4 lg:min-h-[334px]">
         {issues.map((issue, index) => {
           const mode: BookMode =
             activeId === issue.id ? 'open' : closingId === issue.id ? 'closing' : 'closed';
@@ -903,7 +903,7 @@ function ShelfSkeleton() {
           {[0, 1, 2, 3].map((item) => (
             <div
               key={item}
-              className="relative aspect-[3/4] w-[118px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 sm:w-[138px] lg:w-[150px]"
+              className="relative aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 sm:w-[165px] lg:w-[150px]"
             >
               <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
               <div className="absolute inset-3 animate-pulse rounded-md bg-white/70" />
@@ -918,9 +918,28 @@ function ShelfSkeleton() {
   );
 }
 
+function useIssuesPerRow() {
+  const [perRow, setPerRow] = useState(4);
+
+  useEffect(() => {
+    const update = () => {
+      const width = window.innerWidth;
+      if (width >= 1024) setPerRow(4);
+      else if (width >= 640) setPerRow(3);
+      else setPerRow(2);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  return perRow;
+}
+
 export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
   const [sortMode, setSortMode] = useState<SortMode>('uploaded');
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
+  const issuesPerRow = useIssuesPerRow();
   const activeCopy = sortCopy[sortMode];
   const magazineOptions = useMemo(() => {
     const byId = new Map<string, string>();
@@ -951,8 +970,13 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
 
     return sorted.slice(0, 8);
   }, [filteredIssues, sortMode]);
-  const topRow = visibleIssues.slice(0, 4);
-  const bottomRow = visibleIssues.slice(4, 8);
+  const issueRows = useMemo(() => {
+    const chunks: ApiIssue[][] = [];
+    for (let i = 0; i < visibleIssues.length; i += issuesPerRow) {
+      chunks.push(visibleIssues.slice(i, i + issuesPerRow));
+    }
+    return chunks;
+  }, [visibleIssues, issuesPerRow]);
   const activeMagazineName =
     magazineFilter === 'all'
       ? 'all magazines'
@@ -1074,8 +1098,13 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
 
           {visibleIssues.length > 0 ? (
             <div className="space-y-5">
-              <IssueRow issues={topRow} />
-              <IssueRow issues={bottomRow} offset={topRow.length} />
+              {issueRows.map((rowIssues, rowIndex) => (
+                <IssueRow
+                  key={rowIndex}
+                  issues={rowIssues}
+                  offset={rowIndex * issuesPerRow}
+                />
+              ))}
             </div>
           ) : (
             <div className="text-center">
