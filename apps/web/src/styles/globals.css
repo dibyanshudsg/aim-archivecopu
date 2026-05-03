@@ -39,12 +39,36 @@ html {
 
 /* Selection color */
 ::selection {
-  background-color: var(--color-gold-200);
-  color: var(--color-gold-900);
+  background-color: var(--color-flame-100);
+  color: var(--color-flame-900);
 }
 
 /* Focus ring style */
 *:focus-visible {
-  outline: 2px solid var(--color-gold-500);
+  outline: 2px solid var(--color-flame-500);
   outline-offset: 2px;
+}
+
+/* Restore pointer cursor on interactive elements (Tailwind v4 preflight removes it). */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  summary,
+  label[for],
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='file']:not(:disabled),
+  input[type='range']:not(:disabled),
+  input[type='submit']:not(:disabled),
+  input[type='reset']:not(:disabled),
+  input[type='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role='button'][aria-disabled='true'],
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
