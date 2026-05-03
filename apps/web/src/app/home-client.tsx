@@ -199,13 +199,13 @@ export function HomeClient({ recentIssues }: HomeClientProps) {
             <motion.div variants={fadeInUp} className="mt-10 flex items-center justify-center gap-4">
               <Link
                 href="/browse"
-                className="rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-8 py-3.5 text-base font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)]"
+                className="whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)] sm:px-8 sm:py-3.5 sm:text-base"
               >
                 Browse Archive
               </Link>
               <Link
                 href="/search"
-                className="rounded-xl border border-gray-200 bg-white px-8 py-3.5 text-base font-semibold text-gray-700 shadow-sm transition-all hover:border-flame-300 hover:bg-flame-50"
+                className="whitespace-nowrap rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-flame-300 hover:bg-flame-50 sm:px-8 sm:py-3.5 sm:text-base"
               >
                 Search Issues
               </Link>
