@@ -107,7 +107,7 @@ function ContinueReadingShelf() {
               <Link
                 key={entry.issueId}
                 href={`/read/${entry.issueId}?page=${entry.page}&resume=1&from=shelf`}
-                className="group flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 bg-white p-3 text-left transition-all hover:border-flame-200 hover:bg-flame-50/40 hover:shadow-sm"
+                className="group flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 bg-white p-3 text-left transition-all hover:border-flame-200 hover:bg-flame-50/40 hover:shadow-sm active:border-flame-200 active:bg-flame-50/40 active:shadow-sm"
               >
                 <div className="relative h-20 w-[60px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-50 shadow-sm">
                   <div className="absolute inset-y-0 left-0 z-10 w-1 bg-gradient-to-b from-gold-500 to-flame-500" />
@@ -116,7 +116,7 @@ function ContinueReadingShelf() {
                     <img
                       src={entry.coverImageUrl}
                       alt=""
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 group-active:scale-105"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center px-2 text-center text-[10px] font-semibold text-flame-700">
@@ -126,7 +126,7 @@ function ContinueReadingShelf() {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-flame-800">
+                  <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-flame-800 group-active:text-flame-800">
                     {entry.title}
                   </p>
                   <p className="truncate text-xs text-gray-500">
