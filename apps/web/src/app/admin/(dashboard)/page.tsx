@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookCopy, FileText, Eye, Download, TrendingUp } from 'lucide-react';
+import { BookCopy, FileText, Eye, Download, TrendingUp, Settings } from 'lucide-react';
 
 interface Stats {
   totalMagazines: number;
@@ -44,7 +44,7 @@ export default function AdminDashboardPage() {
         <h1 className="font-heading text-2xl font-bold text-gray-900">Dashboard</h1>
         <Link
           href="/admin/issues/new"
-          className="rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gold-600"
+          className="rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
         >
           + Upload Issue
         </Link>
@@ -61,7 +61,7 @@ export default function AdminDashboardPage() {
       {/* Popular Issues */}
       <div className="rounded-2xl border border-gray-100 bg-white p-6">
         <div className="mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-gold-500" />
+          <TrendingUp className="h-5 w-5 text-flame-500" />
           <h2 className="text-lg font-semibold text-gray-900">Most Popular Issues</h2>
         </div>
 
@@ -69,7 +69,7 @@ export default function AdminDashboardPage() {
           <div className="divide-y divide-gray-50">
             {stats.popularIssues.map((issue, i) => (
               <div key={issue.id} className="flex items-center gap-4 py-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gold-50 text-xs font-bold text-gold-600">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-r from-gold-100 to-flame-100 text-xs font-bold text-flame-700">
                   {i + 1}
                 </span>
                 <div className="flex-1">
@@ -88,22 +88,30 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Quick Links */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Link
           href="/admin/magazines"
-          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-gold-200 hover:shadow-sm"
+          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-flame-200 hover:shadow-sm"
         >
-          <BookCopy className="h-8 w-8 text-gold-500" />
+          <BookCopy className="h-8 w-8 text-flame-500" />
           <h3 className="mt-3 font-semibold text-gray-900">Manage Magazines</h3>
           <p className="mt-1 text-sm text-gray-500">Add, edit, or remove magazine editions</p>
         </Link>
         <Link
           href="/admin/issues"
-          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-gold-200 hover:shadow-sm"
+          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-flame-200 hover:shadow-sm"
         >
-          <FileText className="h-8 w-8 text-gold-500" />
+          <FileText className="h-8 w-8 text-flame-500" />
           <h3 className="mt-3 font-semibold text-gray-900">Manage Issues</h3>
           <p className="mt-1 text-sm text-gray-500">Upload PDFs, edit metadata, manage issues</p>
+        </Link>
+        <Link
+          href="/admin/settings"
+          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-flame-200 hover:shadow-sm"
+        >
+          <Settings className="h-8 w-8 text-flame-500" />
+          <h3 className="mt-3 font-semibold text-gray-900">Site Settings</h3>
+          <p className="mt-1 text-sm text-gray-500">Manage footer feedback and public links</p>
         </Link>
       </div>
     </div>
@@ -122,8 +130,8 @@ function StatCard({
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold-50">
-          <Icon className="h-5 w-5 text-gold-600" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 to-flame-50">
+          <Icon className="h-5 w-5 text-flame-600" />
         </div>
         <span className="text-sm font-medium text-gray-500">{label}</span>
       </div>

@@ -10,6 +10,7 @@ import {
   FileText,
   LogOut,
   Menu,
+  Settings,
   X,
   ExternalLink,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/magazines', icon: BookCopy, label: 'Magazines' },
   { href: '/admin/issues', icon: FileText, label: 'Issues' },
+  { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function AdminDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -43,7 +45,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
   if (!admin) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold-200 border-t-gold-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
       </div>
     );
   }
@@ -70,7 +72,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
                 href={item.href}
                 className={`mb-1 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-gold-50 text-gold-700'
+                    ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
@@ -148,7 +150,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
                       href={item.href}
                       onClick={() => setSidebarOpen(false)}
                       className={`mb-1 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium ${
-                        active ? 'bg-gold-50 text-gold-700' : 'text-gray-600'
+                        active ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700' : 'text-gray-600'
                       }`}
                     >
                       <item.icon className="h-4 w-4" />

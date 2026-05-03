@@ -52,6 +52,26 @@ export const searchQuerySchema = z.object({
   year_to: z.coerce.number().int().min(1950).max(2100).optional(),
 });
 
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, 'Must be a valid http(s) URL');
+
+// Site settings
+export const siteSettingsSchema = z.object({
+  feedback_form_url: optionalUrl,
+  feedback_form_edit_url: optionalUrl,
+});
+
 /** Parse URL search params into an object for Zod */
 export function parseSearchParams(params: URLSearchParams): Record<string, string> {
   const obj: Record<string, string> = {};
