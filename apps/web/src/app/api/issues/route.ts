@@ -48,11 +48,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
   }
 
-  return NextResponse.json({
-    data,
-    total: count ?? 0,
-    page,
-    pageSize,
-    totalPages: Math.ceil((count ?? 0) / pageSize),
-  });
+  return NextResponse.json(
+    {
+      data,
+      total: count ?? 0,
+      page,
+      pageSize,
+      totalPages: Math.ceil((count ?? 0) / pageSize),
+    },
+    {
+      headers: {
+        // Edge-cache listings briefly; SWR absorbs the next request while a
+        // fresh copy is fetched. Admin publishes show up within ~1 minute.
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+      },
+    },
+  );
 }

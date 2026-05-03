@@ -13,5 +13,11 @@ export async function GET() {
     return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  // Magazines are very stable — admin edits are infrequent. Cache aggressively
+  // on the edge; SWR keeps responses warm during revalidation.
+  return NextResponse.json(data, {
+    headers: {
+      'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600',
+    },
+  });
 }

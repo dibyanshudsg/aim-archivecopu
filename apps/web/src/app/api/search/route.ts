@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   const parsed = searchQuerySchema.safeParse(raw);
 
   if (!parsed.success) {
-    return NextResponse.json({ data: [], total: 0, type: 'none' });
+    return NextResponse.json(
+      { data: [], total: 0, type: 'none' },
+      { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+    );
   }
 
   const { q: query, magazine_id: magazineId, year_from: yearFrom, year_to: yearTo } = parsed.data;
@@ -33,11 +36,18 @@ export async function GET(request: NextRequest) {
   });
 
   if (!ftsError && ftsResults && ftsResults.length > 0) {
-    return NextResponse.json({
-      data: ftsResults,
-      total: ftsResults.length,
-      type: 'fulltext',
-    });
+    return NextResponse.json(
+      {
+        data: ftsResults,
+        total: ftsResults.length,
+        type: 'fulltext',
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        },
+      },
+    );
   }
 
   // Fallback: search issue titles, descriptions, and topics
@@ -54,9 +64,16 @@ export async function GET(request: NextRequest) {
 
   const { data: fallbackResults } = await fallbackQuery;
 
-  return NextResponse.json({
-    data: fallbackResults || [],
-    total: fallbackResults?.length || 0,
-    type: 'fallback',
-  });
+  return NextResponse.json(
+    {
+      data: fallbackResults || [],
+      total: fallbackResults?.length || 0,
+      type: 'fallback',
+    },
+    {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+      },
+    },
+  );
 }
