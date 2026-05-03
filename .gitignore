@@ -45,6 +45,10 @@ content/**/*.epub
 content/**/*.mobi
 AIM 2026/
 Agnisikha 2026/
+AIM Issues/
+
+# Dev server / agent logs
+.codex-logs/
 
 # Misc
 *.tsbuildinfo
