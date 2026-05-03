@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -1120,7 +1120,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                     drag={isPhone && scale <= 1 ? 'x' : false}
                     dragConstraints={{ left: 0, right: 0 }}
                     dragElastic={0.4}
-                    onDragEnd={(_, info) => {
+                    onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
                       const OFFSET = 60;
                       const VELOCITY = 500;
                       const wantsNext =
