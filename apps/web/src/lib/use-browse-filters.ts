@@ -13,6 +13,7 @@ export interface BrowseFilters {
   magazines: string[];
   languages: string[];
   subjects: string[];
+  query: string;
   view: 'grid' | 'list';
   sort: SortColumn | null;
   dir: 'asc' | 'desc';
@@ -39,6 +40,7 @@ export function useBrowseFilters() {
       magazines: parseStrArr(searchParams.get('magazine')),
       languages: parseStrArr(searchParams.get('language')),
       subjects: parseStrArr(searchParams.get('subject')),
+      query: (searchParams.get('q') ?? '').trim(),
       view: searchParams.get('view') === 'list' ? 'list' : 'grid',
       sort: (searchParams.get('sort') as SortColumn | null) ?? null,
       dir: searchParams.get('dir') === 'asc' ? 'asc' : 'desc',
@@ -103,6 +105,18 @@ export function useBrowseFilters() {
     [filters.sort, filters.dir, searchParams, writeParams],
   );
 
+  const setQuery = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const trimmed = value.trim();
+      if (trimmed.length === 0) params.delete('q');
+      else params.set('q', trimmed);
+      params.delete('page');
+      writeParams(params);
+    },
+    [searchParams, writeParams],
+  );
+
   const setPage = useCallback(
     (page: number) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -128,13 +142,15 @@ export function useBrowseFilters() {
     filters.months.length +
     filters.magazines.length +
     filters.languages.length +
-    filters.subjects.length;
+    filters.subjects.length +
+    (filters.query.length > 0 ? 1 : 0);
 
   return {
     filters,
     toggleArray,
     setView,
     setSort,
+    setQuery,
     setPage,
     clearAll,
     activeFilterCount,
@@ -165,6 +181,7 @@ export function applyFilters(
   filters: BrowseFilters,
   exclude?: FilterDimension,
 ): ApiIssue[] {
+  const q = filters.query.toLowerCase();
   return issues.filter((issue) => {
     if (
       exclude !== 'years' &&
@@ -181,7 +198,7 @@ export function applyFilters(
     if (
       exclude !== 'magazines' &&
       filters.magazines.length > 0 &&
-      !filters.magazines.includes(issue.magazine_id)
+      !filters.magazines.some((value) => matchesMagazineFilter(issue, value))
     )
       return false;
     if (
@@ -196,6 +213,85 @@ export function applyFilters(
       !filters.subjects.some((s) => issue.topics.includes(s))
     )
       return false;
+    if (q.length > 0 && !matchesQuery(issue, q)) return false;
     return true;
   });
+}
+
+function matchesQuery(issue: ApiIssue, q: string): boolean {
+  if (issue.title.toLowerCase().includes(q)) return true;
+  if (issue.magazines.name.toLowerCase().includes(q)) return true;
+  if (issue.description && issue.description.toLowerCase().includes(q)) return true;
+  for (const t of issue.topics) if (t.toLowerCase().includes(q)) return true;
+  return false;
+}
+
+export function sortIssues(
+  issues: ApiIssue[],
+  sort: SortColumn | null,
+  dir: 'asc' | 'desc',
+): ApiIssue[] {
+  if (!sort) {
+    return [...issues].sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+  }
+  const mult = dir === 'asc' ? 1 : -1;
+  return [...issues].sort((a, b) => {
+    let av: string | number = '';
+    let bv: string | number = '';
+    switch (sort) {
+      case 'title':
+        av = a.title;
+        bv = b.title;
+        break;
+      case 'magazine':
+        av = a.magazines.name;
+        bv = b.magazines.name;
+        break;
+      case 'language':
+        av = a.magazines.language;
+        bv = b.magazines.language;
+        break;
+      case 'pages':
+        av = a.page_count ?? 0;
+        bv = b.page_count ?? 0;
+        break;
+      case 'size':
+        av = a.file_size_bytes;
+        bv = b.file_size_bytes;
+        break;
+      case 'reads':
+        av = a.read_count;
+        bv = b.read_count;
+        break;
+    }
+    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * mult;
+    return ((av as number) - (bv as number)) * mult;
+  });
+}
+
+function matchesMagazineFilter(issue: ApiIssue, value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    issue.magazine_id === value ||
+    slugify(issue.magazines.name) === normalized ||
+    acronym(issue.magazines.name) === normalized
+  );
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function acronym(value: string): string {
+  return value
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join('')
+    .toLowerCase();
 }

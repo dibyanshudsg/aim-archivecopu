@@ -1,74 +1,39 @@
-'use client';
+import { Suspense } from 'react';
+import { createPublicClient } from '@/lib/supabase-server';
+import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import { BookmarksClient } from './bookmarks-client';
 
-import { useMemo } from 'react';
-import { BookMarked } from 'lucide-react';
-import Link from 'next/link';
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/layout/footer';
-import { IssueCard } from '@/components/magazine/issue-card';
-import { useBookmarks } from '@/lib/bookmarks-store';
-import { getIssueById } from '@/lib/mock-data';
+// Bookmarks live in localStorage so the page is inherently client-stateful,
+// but the issue catalog can still be pre-rendered. We fetch every published
+// issue once on the server (small archive — full list is cheap) and let the
+// client filter it down to the user's bookmarked IDs.
+export const revalidate = 60;
 
-export default function BookmarksPage() {
-  const { bookmarkedIds, clear } = useBookmarks();
+async function fetchAllIssuesServer(): Promise<ApiIssue[]> {
+  const supabase = createPublicClient();
+  const { data } = await supabase
+    .from('issues')
+    .select('*, magazines!inner(id, name, language, description, cover_image_url)')
+    .eq('is_published', true)
+    .order('year', { ascending: false })
+    .order('month', { ascending: false });
+  return (data ?? []) as ApiIssue[];
+}
 
-  const bookmarkedIssues = useMemo(() => {
-    return bookmarkedIds
-      .map(getIssueById)
-      .filter(Boolean) as NonNullable<ReturnType<typeof getIssueById>>[];
-  }, [bookmarkedIds]);
+async function fetchAllMagazinesServer(): Promise<ApiMagazine[]> {
+  const supabase = createPublicClient();
+  const { data } = await supabase.from('magazines').select('*').order('name');
+  return (data ?? []) as ApiMagazine[];
+}
 
+export default async function BookmarksPage() {
+  const [allIssues, allMagazines] = await Promise.all([
+    fetchAllIssuesServer(),
+    fetchAllMagazinesServer(),
+  ]);
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header />
-      <main className="flex-1">
-        {/* Page Header */}
-        <section className="border-b border-gold-100 bg-gradient-to-b from-gold-50 to-white px-6 py-12 lg:px-8">
-          <div className="mx-auto flex max-w-7xl items-center justify-between">
-            <div>
-              <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">
-                My Bookmarks
-              </h1>
-              <p className="mt-2 text-lg text-gray-600">
-                {bookmarkedIssues.length} saved issue{bookmarkedIssues.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            {bookmarkedIssues.length > 0 && (
-              <button
-                onClick={clear}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </section>
-
-        <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-          {bookmarkedIssues.length > 0 ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {bookmarkedIssues.map((issue, i) => (
-                <IssueCard key={issue.id} issue={issue} index={i} />
-              ))}
-            </div>
-          ) : (
-            <div className="py-20 text-center">
-              <BookMarked className="mx-auto h-12 w-12 text-gray-300" />
-              <p className="mt-4 text-lg font-medium text-gray-400">No bookmarks yet</p>
-              <p className="mt-2 text-sm text-gray-400">
-                Tap the heart icon on any issue to save it here
-              </p>
-              <Link
-                href="/browse"
-                className="mt-6 inline-block rounded-xl bg-gold-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-gold-600"
-              >
-                Browse Archive
-              </Link>
-            </div>
-          )}
-        </div>
-      </main>
-      <Footer />
-    </div>
+    <Suspense fallback={null}>
+      <BookmarksClient allIssues={allIssues} allMagazines={allMagazines} />
+    </Suspense>
   );
 }

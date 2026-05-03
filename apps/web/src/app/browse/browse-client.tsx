@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Filter } from 'lucide-react';
+import { CheckSquare, Filter } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { IssueCard } from '@/components/magazine/issue-card';
@@ -11,33 +11,44 @@ import { ViewToggle } from '@/components/browse/view-toggle';
 import { ActiveFilterChips } from '@/components/browse/active-filter-chips';
 import { IssueListView } from '@/components/browse/issue-list-view';
 import { Pagination } from '@/components/browse/pagination';
+import { BulkActionBar } from '@/components/browse/bulk-action-bar';
+import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
 import { fetchIssues, fetchMagazines, normalizeIssue } from '@/lib/api';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import {
   applyFilters,
+  sortIssues,
   useBrowseFilters,
-  type SortColumn,
 } from '@/lib/use-browse-filters';
+import { useBulkSelection } from '@/lib/use-bulk-selection';
+import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
+import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
 
-export function BrowseClient() {
+interface BrowseClientProps {
+  initialIssues: ApiIssue[];
+  initialMagazines: ApiMagazine[];
+}
+
+export function BrowseClient(props: BrowseClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <BrowseContent />
+      <BrowseContent {...props} />
       <Footer />
     </div>
   );
 }
 
-function BrowseContent() {
+function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
   const {
     filters,
     toggleArray,
     setView,
     setSort,
+    setQuery,
     setPage,
     clearAll,
     activeFilterCount,
@@ -46,9 +57,10 @@ function BrowseContent() {
 
   const gridTopRef = useRef<HTMLDivElement>(null);
 
-  const [magazines, setMagazines] = useState<ApiMagazine[]>([]);
-  const [issues, setIssues] = useState<ApiIssue[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Seeded from the server render — first paint shows real cards, no skeleton.
+  const [magazines, setMagazines] = useState<ApiMagazine[]>(initialMagazines);
+  const [issues, setIssues] = useState<ApiIssue[]>(initialIssues);
+  const [loading, setLoading] = useState(false);
 
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -59,16 +71,16 @@ function BrowseContent() {
     if (typeof window !== 'undefined') localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
   }, [panelOpen]);
 
-  // Load full dataset once (small archive — facet counts done client-side).
+  // Background refresh: re-fetch after hydration so stale ISR snapshots are
+  // brought up to date without blocking first paint. Skip if there's no
+  // server-seeded data (shouldn't happen in practice).
   useEffect(() => {
-    fetchMagazines().then(setMagazines).catch(console.error);
-  }, []);
-  useEffect(() => {
-    setLoading(true);
-    fetchIssues({ pageSize: 100 })
-      .then((res) => setIssues(res.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    Promise.all([fetchMagazines(), fetchIssues({ pageSize: 100 })])
+      .then(([m, i]) => {
+        setMagazines(m);
+        setIssues(i.data);
+      })
+      .catch(console.error);
   }, []);
 
   const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
@@ -89,9 +101,74 @@ function BrowseContent() {
     }
   }
 
+  // Bulk selection / download state. Selection mode is reset whenever this
+  // page unmounts so navigating away always lands cleanly.
+  const selectionEnabled = useBulkSelection((s) => s.enabled);
+  const selectedIds = useBulkSelection((s) => s.selectedIds);
+  const enableSelection = useBulkSelection((s) => s.enable);
+  const disableSelection = useBulkSelection((s) => s.disable);
+  const selectAll = useBulkSelection((s) => s.selectAll);
+  useEffect(() => disableSelection, [disableSelection]);
+
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [progress, setProgress] = useState<ZipDownloadProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleSelectAllVisible = () => {
+    const visibleIds = sorted.map((i) => i.id);
+    const everySelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    if (everySelected) selectAll([]);
+    else selectAll(visibleIds);
+  };
+
+  const handleDownload = async () => {
+    const picked = sorted.filter((i) => selectedIds.has(i.id));
+    if (picked.length === 0) return;
+    abortRef.current = new AbortController();
+    setProgress({
+      phase: 'fetching',
+      fetched: 0,
+      total: picked.length,
+      zipPercent: 0,
+      skipped: [],
+    });
+    setDownloadOpen(true);
+    try {
+      await downloadAsZip({
+        files: picked.map((i) => ({ name: i.title, url: i.pdf_url })),
+        zipName: `AIM Archive — ${picked.length} issue${picked.length === 1 ? '' : 's'}`,
+        onProgress: setProgress,
+        signal: abortRef.current.signal,
+      });
+    } catch (err) {
+      setProgress({
+        phase: 'error',
+        fetched: 0,
+        total: picked.length,
+        zipPercent: 0,
+        skipped: [],
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const closeDownloadModal = () => {
+    setDownloadOpen(false);
+    setProgress(null);
+    // Drop the selection — typical flow is one batch and out.
+    disableSelection();
+  };
+
+  const cancelDownload = () => {
+    abortRef.current?.abort();
+  };
+
   return (
     <main className="relative flex-1">
-      <section className="border-b border-gold-100 bg-gradient-to-b from-gold-50 to-white px-6 py-12 lg:px-8">
+      <HeaderSearchDropdown />
+
+      <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">Browse Archive</h1>
           <p className="mt-2 text-lg text-gray-600">
@@ -100,11 +177,6 @@ function BrowseContent() {
           </p>
         </div>
       </section>
-
-      {/* Reserved space for the upcoming search bar */}
-      <div className="border-b border-gray-100 bg-white px-6 py-4 lg:px-8">
-        <div className="mx-auto h-10 max-w-7xl rounded-xl border border-dashed border-gray-200 bg-gray-50/50" />
-      </div>
 
       <div className="flex">
         {/* Desktop docked panel — always mounted, animates width so the
@@ -176,26 +248,39 @@ function BrowseContent() {
             {!panelOpen && (
               <button
                 onClick={() => setPanelOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-gold-200 bg-white px-3.5 py-2 text-sm font-medium text-gold-700 shadow-sm transition-colors hover:border-gold-300 hover:bg-gold-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
               >
                 <Filter className="h-4 w-4" />
                 Filters
                 {activeFilterCount > 0 && (
-                  <span className="rounded-full bg-gold-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  <span className="rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
                     {activeFilterCount}
                   </span>
                 )}
               </button>
             )}
 
-            <div className="ml-auto flex items-center gap-3">
-              <span className="text-sm text-gray-400">
+            <div className="ml-auto flex items-center gap-2 sm:gap-3">
+              <span className="hidden text-sm text-gray-400 sm:inline">
                 {sorted.length === 0
                   ? 'No issues'
                   : sorted.length <= PAGE_SIZE
                     ? `${sorted.length} issue${sorted.length !== 1 ? 's' : ''}`
                     : `${pageStart + 1}–${pageEnd} of ${sorted.length} issues`}
               </span>
+              <button
+                onClick={() => (selectionEnabled ? disableSelection() : enableSelection())}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                  selectionEnabled
+                    ? 'border-flame-300 bg-flame-50 text-flame-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-flame-200 hover:bg-flame-50/50 hover:text-flame-700'
+                }`}
+                aria-pressed={selectionEnabled}
+                title={selectionEnabled ? 'Exit selection mode' : 'Select multiple issues to download'}
+              >
+                <CheckSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">{selectionEnabled ? 'Done' : 'Select'}</span>
+              </button>
               <ViewToggle view={filters.view} onChange={setView} />
             </div>
           </div>
@@ -204,6 +289,7 @@ function BrowseContent() {
             filters={filters}
             magazines={magazines}
             onRemove={toggleArray}
+            onRemoveQuery={() => setQuery('')}
             onClearAll={clearAll}
           />
 
@@ -235,54 +321,20 @@ function BrowseContent() {
           )}
         </div>
       </div>
+
+      <BulkActionBar
+        issues={sorted}
+        onDownload={handleDownload}
+        onSelectAll={handleSelectAllVisible}
+      />
+      <BulkDownloadModal
+        open={downloadOpen}
+        progress={progress}
+        onCancel={cancelDownload}
+        onClose={closeDownloadModal}
+      />
     </main>
   );
-}
-
-function sortIssues(
-  issues: ApiIssue[],
-  sort: SortColumn | null,
-  dir: 'asc' | 'desc',
-): ApiIssue[] {
-  if (!sort) {
-    return [...issues].sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
-      return b.month - a.month;
-    });
-  }
-  const mult = dir === 'asc' ? 1 : -1;
-  return [...issues].sort((a, b) => {
-    let av: string | number = '';
-    let bv: string | number = '';
-    switch (sort) {
-      case 'title':
-        av = a.title;
-        bv = b.title;
-        break;
-      case 'magazine':
-        av = a.magazines.name;
-        bv = b.magazines.name;
-        break;
-      case 'language':
-        av = a.magazines.language;
-        bv = b.magazines.language;
-        break;
-      case 'pages':
-        av = a.page_count ?? 0;
-        bv = b.page_count ?? 0;
-        break;
-      case 'size':
-        av = a.file_size_bytes;
-        bv = b.file_size_bytes;
-        break;
-      case 'reads':
-        av = a.read_count;
-        bv = b.read_count;
-        break;
-    }
-    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * mult;
-    return ((av as number) - (bv as number)) * mult;
-  });
 }
 
 function LoadingState({ view }: { view: 'grid' | 'list' }) {
@@ -324,7 +376,7 @@ function EmptyState({
       {hasActiveFilters && (
         <button
           onClick={onClearAll}
-          className="mt-4 text-sm font-medium text-gold-600 hover:text-gold-700"
+          className="mt-4 bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-sm font-medium text-transparent"
         >
           Clear all filters
         </button>
@@ -332,4 +384,3 @@ function EmptyState({
     </div>
   );
 }
-

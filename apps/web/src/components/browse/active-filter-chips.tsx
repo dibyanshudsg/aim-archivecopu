@@ -9,36 +9,60 @@ interface Props {
   filters: BrowseFilters;
   magazines: ApiMagazine[];
   onRemove: (dimension: FilterDimension, value: string | number) => void;
+  onRemoveQuery?: () => void;
   onClearAll: () => void;
 }
 
 interface Chip {
-  dimension: FilterDimension;
-  value: string | number;
+  key: string;
   label: string;
+  onRemove: () => void;
 }
 
-export function ActiveFilterChips({ filters, magazines, onRemove, onClearAll }: Props) {
+export function ActiveFilterChips({
+  filters,
+  magazines,
+  onRemove,
+  onRemoveQuery,
+  onClearAll,
+}: Props) {
   const chips: Chip[] = [
-    ...filters.years.map<Chip>((y) => ({ dimension: 'years', value: y, label: `Year: ${y}` })),
+    ...(filters.query.length > 0 && onRemoveQuery
+      ? [
+          {
+            key: 'query',
+            label: `Search: "${filters.query}"`,
+            onRemove: onRemoveQuery,
+          },
+        ]
+      : []),
+    ...filters.years.map<Chip>((y) => ({
+      key: `years-${y}`,
+      label: `Year: ${y}`,
+      onRemove: () => onRemove('years', y),
+    })),
     ...filters.months.map<Chip>((m) => ({
-      dimension: 'months',
-      value: m,
+      key: `months-${m}`,
       label: `Month: ${MONTH_NAMES[m as MonthIndex]}`,
+      onRemove: () => onRemove('months', m),
     })),
     ...filters.magazines.map<Chip>((id) => {
-      const mag = magazines.find((m) => m.id === id);
-      return { dimension: 'magazines', value: id, label: `Magazine: ${mag?.name ?? id}` };
+      const mag = magazines.find((m) => matchesMagazineFilter(m, id));
+      return {
+        key: `magazines-${id}`,
+        label: `Magazine: ${mag?.name ?? id}`,
+        onRemove: () => onRemove('magazines', id),
+      };
     }),
     ...filters.languages.map<Chip>((l) => ({
-      dimension: 'languages',
-      value: l,
+      key: `languages-${l}`,
       label: `Language: ${LANGUAGE_NAMES[l as Language] ?? l}`,
+      onRemove: () => onRemove('languages', l),
     })),
     ...filters.subjects.map<Chip>((s) => ({
-      dimension: 'subjects',
-      value: s,
+      key: `subjects-${s}`,
       label: `Subject: ${s}`,
+      onRemove: () => onRemove('subjects', s),
     })),
   ];
 
@@ -48,12 +72,12 @@ export function ActiveFilterChips({ filters, magazines, onRemove, onClearAll }: 
     <div className="mb-4 flex flex-wrap items-center gap-2">
       {chips.map((c) => (
         <button
-          key={`${c.dimension}-${c.value}`}
-          onClick={() => onRemove(c.dimension, c.value)}
-          className="group inline-flex items-center gap-1.5 rounded-full border border-gold-200 bg-gold-50 px-3 py-1 text-xs font-medium text-gold-700 transition-colors hover:border-gold-300 hover:bg-gold-100"
+          key={c.key}
+          onClick={c.onRemove}
+          className="group inline-flex items-center gap-1.5 rounded-full border border-flame-200 bg-gradient-to-r from-gold-50 to-flame-50 px-3 py-1 text-xs font-medium text-flame-700 transition-colors hover:border-flame-300 hover:from-gold-100 hover:to-flame-100"
         >
           {c.label}
-          <X className="h-3 w-3 text-gold-500 transition-colors group-hover:text-gold-700" />
+          <X className="h-3 w-3 text-flame-500 transition-colors group-hover:text-flame-700" />
         </button>
       ))}
       <button
@@ -64,4 +88,28 @@ export function ActiveFilterChips({ filters, magazines, onRemove, onClearAll }: 
       </button>
     </div>
   );
+}
+
+function matchesMagazineFilter(magazine: ApiMagazine, value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    magazine.id === value ||
+    slugify(magazine.name) === normalized ||
+    acronym(magazine.name) === normalized
+  );
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function acronym(value: string): string {
+  return value
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join('')
+    .toLowerCase();
 }
