@@ -29,7 +29,9 @@
 
   /* Fonts */
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Playfair Display', ui-serif, Georgia, serif;
+  --font-heading: 'Noto Serif', ui-serif, Georgia, serif;
+  --font-display: 'Noto Serif', ui-serif, Georgia, serif;
+  --font-cursive: 'Tangerine', ui-serif, cursive;
 }
 
 /* Smooth scrolling */

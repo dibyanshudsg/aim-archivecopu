@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Playfair_Display } from 'next/font/google';
+import { Inter, Noto_Serif, Tangerine } from 'next/font/google';
 import '@/styles/globals.css';
 import { ContinueReadingFab } from '@/components/layout/continue-reading-fab';
 
@@ -9,9 +9,22 @@ const inter = Inter({
   display: 'swap',
 });
 
-const playfair = Playfair_Display({
+const notoSerifHeading = Noto_Serif({
   subsets: ['latin'],
   variable: '--font-heading',
+  display: 'swap',
+});
+
+const notoSerif = Noto_Serif({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+});
+
+const tangerine = Tangerine({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-cursive',
   display: 'swap',
 });
 
@@ -91,7 +104,7 @@ const jsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+    <html lang="en" className={`${inter.variable} ${notoSerifHeading.variable} ${notoSerif.variable} ${tangerine.variable}`}>
       <body className="bg-warm-white font-sans text-gray-900 antialiased" suppressHydrationWarning>
         <script
           type="application/ld+json"

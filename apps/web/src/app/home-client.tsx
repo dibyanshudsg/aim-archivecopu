@@ -172,17 +172,11 @@ export function HomeClient({ recentIssues }: HomeClientProps) {
               <Flame />
             </motion.div>
 
-            <motion.div variants={fadeInUp} className="mb-8">
-              <span className="inline-block rounded-full bg-gradient-to-r from-gold-100 to-flame-100 px-4 py-1.5 text-sm font-medium text-flame-800">
-                Sri Aurobindo Society
-              </span>
-            </motion.div>
-
             <motion.h1
               variants={fadeInUp}
-              className="font-heading text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl lg:text-7xl"
+              className="font-cursive text-6xl font-bold leading-snug sm:text-7xl sm:leading-relaxed lg:text-8xl bg-gradient-to-r from-gold-500 via-flame-500 to-flame-600 bg-clip-text text-transparent"
             >
-              An Archive of Eternal Flame
+              An Archive<br className="sm:hidden" /> of <br className="sm:hidden" /><span className="whitespace-nowrap">Eternal Flame</span>
             </motion.h1>
 
             <motion.p
