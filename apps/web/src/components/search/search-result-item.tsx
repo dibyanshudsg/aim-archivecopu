@@ -13,15 +13,17 @@ interface SearchResultItemProps {
 
 export function SearchResultItem({ result, index }: SearchResultItemProps) {
   const monthName = MONTH_NAMES[result.month as MonthIndex];
+  const snippetParts = result.snippet.split(/(<mark>|<\/mark>)/g);
+  let highlighted = false;
 
   return (
     <div
-      className="group rounded-2xl border border-gray-100 bg-white p-5 transition-all hover:border-gold-200 hover:shadow-sm"
+      className="group rounded-2xl border border-gray-100 bg-white p-5 transition-all hover:border-flame-200 hover:shadow-sm"
       style={{ animationDelay: `${index * 40}ms` }}
     >
       <div className="flex items-start gap-4">
         {/* Page indicator */}
-        <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-gold-50 text-gold-600">
+        <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600">
           <FileText className="h-4 w-4" />
           <span className="mt-0.5 text-[10px] font-bold">P.{result.page_number}</span>
         </div>
@@ -31,7 +33,7 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           <div className="flex items-center gap-2">
             <Link
               href={`/issue/${result.issue_id}`}
-              className="text-sm font-semibold text-gray-900 hover:text-gold-700"
+              className="text-sm font-semibold text-gray-900 hover:text-flame-700"
             >
               {result.issue_title}
             </Link>
@@ -45,16 +47,31 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           </p>
 
           {/* Snippet with highlighted matches */}
-          <p
-            className="mt-2 text-sm leading-relaxed text-gray-600 [&_mark]:rounded-sm [&_mark]:bg-gold-200 [&_mark]:px-0.5 [&_mark]:text-gold-900"
-            dangerouslySetInnerHTML={{ __html: result.snippet }}
-          />
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">
+            {snippetParts.map((part, partIndex) => {
+              if (part === '<mark>') {
+                highlighted = true;
+                return null;
+              }
+              if (part === '</mark>') {
+                highlighted = false;
+                return null;
+              }
+              return highlighted ? (
+                <mark key={partIndex} className="rounded-sm bg-gradient-to-r from-gold-100 to-flame-100 px-0.5 text-flame-900">
+                  {part}
+                </mark>
+              ) : (
+                <span key={partIndex}>{part}</span>
+              );
+            })}
+          </p>
         </div>
 
         {/* Read action */}
         <Link
-          href={`/read/${result.issue_id}?page=${result.page_number}`}
-          className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gold-50 px-3 text-xs font-medium text-gold-700 opacity-0 transition-opacity group-hover:opacity-100"
+          href={`/read/${result.issue_id}?page=${result.page_number}&from=search`}
+          className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
         >
           <BookOpen className="h-3.5 w-3.5" />
           Read

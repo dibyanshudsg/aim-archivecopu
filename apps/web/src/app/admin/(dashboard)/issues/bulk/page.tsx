@@ -196,7 +196,7 @@ export default function BulkUploadPage() {
           e.stopPropagation();
           addFiles(e.dataTransfer.files);
         }}
-        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-10 transition-colors hover:border-gold-300 hover:bg-gray-50"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-10 transition-colors hover:border-flame-300 hover:bg-flame-50/40"
       >
         <Upload className="h-8 w-8 text-gray-400" />
         <p className="mt-2 text-sm font-medium text-gray-700">
@@ -235,7 +235,7 @@ export default function BulkUploadPage() {
                   <tr key={item.id} className="align-top">
                     <td className="px-4 py-3">
                       <div className="flex items-start gap-2">
-                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-gold-500" />
+                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-flame-500" />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium text-gray-900">
                             {item.file.name}
@@ -331,7 +331,7 @@ export default function BulkUploadPage() {
               <button
                 onClick={uploadAll}
                 disabled={running || allDone}
-                className="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-gold-600 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
               >
                 <Upload className="h-4 w-4" />
                 {running ? 'Uploading...' : allDone ? 'All uploaded' : `Upload ${pendingCount}`}
@@ -348,8 +348,8 @@ function StatusBadge({ status, message }: { status: ItemStatus; message?: string
   if (status === 'pending') return <span className="text-gray-400">Pending</span>;
   if (status === 'uploading')
     return (
-      <span className="inline-flex items-center gap-1.5 text-gold-700">
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-gold-200 border-t-gold-500" />
+      <span className="inline-flex items-center gap-1.5 text-flame-700">
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
         Uploading…
       </span>
     );

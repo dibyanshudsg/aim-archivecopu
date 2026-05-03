@@ -173,7 +173,7 @@ function ConfirmDialog({
             className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors ${
               options.destructive
                 ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-gold-500 hover:bg-gold-600'
+                : 'bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_16px_rgba(190,140,46,0.22)] hover:from-gold-600 hover:to-flame-600'
             }`}
           >
             {confirmLabel}

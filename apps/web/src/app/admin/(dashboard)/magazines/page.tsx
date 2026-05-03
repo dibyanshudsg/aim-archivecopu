@@ -68,7 +68,7 @@ export default function AdminMagazinesPage() {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gold-600"
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
           >
             <Plus className="h-4 w-4" />
             Add Magazine
@@ -90,7 +90,7 @@ export default function AdminMagazinesPage() {
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
                 placeholder="e.g., All India Magazine"
               />
             </div>
@@ -99,7 +99,7 @@ export default function AdminMagazinesPage() {
               <select
                 value={form.language}
                 onChange={(e) => setForm({ ...form, language: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
               >
                 {Object.entries(LANGUAGE_NAMES).map(([key, name]) => (
                   <option key={key} value={key}>{name}</option>
@@ -112,7 +112,7 @@ export default function AdminMagazinesPage() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
-                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
                 placeholder="Brief description of this magazine..."
               />
             </div>
@@ -120,7 +120,7 @@ export default function AdminMagazinesPage() {
           <div className="mt-4 flex gap-2">
             <button
               type="submit"
-              className="flex items-center gap-2 rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gold-600"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
             >
               <Check className="h-4 w-4" />
               {editingId ? 'Update' : 'Create'}
@@ -164,7 +164,7 @@ export default function AdminMagazinesPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => startEdit(mag)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gold-600"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 hover:text-flame-600"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>

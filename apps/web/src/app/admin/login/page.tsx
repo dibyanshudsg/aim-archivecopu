@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gold-50 to-white px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Image
@@ -68,7 +68,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
                 placeholder="admin@aurosociety.org"
               />
             </div>
@@ -80,7 +80,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
                 placeholder="Enter admin password"
               />
             </div>
@@ -89,7 +89,7 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gold-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-gold-600 disabled:opacity-50"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 py-3 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
           >
             <Lock className="h-4 w-4" />
             {loading ? 'Signing in...' : 'Sign In'}

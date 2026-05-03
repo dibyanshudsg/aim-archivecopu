@@ -243,8 +243,8 @@ export function TagsInput({
         className={cn(
           'flex w-full cursor-pointer flex-wrap items-center gap-1.5 rounded-xl border bg-white px-2.5 py-2 text-left text-sm transition-colors',
           open
-            ? 'border-gold-300 ring-2 ring-gold-200'
-            : 'border-gray-200 hover:border-gold-300',
+            ? 'border-flame-300 ring-2 ring-flame-100'
+            : 'border-gray-200 hover:border-flame-300',
         )}
       >
         {sortedValue.length === 0 ? (
@@ -253,7 +253,7 @@ export function TagsInput({
           sortedValue.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-full bg-gold-50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-gold-700"
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-gold-50 to-flame-50 py-0.5 pl-2.5 pr-1 text-xs font-medium text-flame-700"
               onClick={(e) => e.stopPropagation()}
             >
               {tag}
@@ -264,7 +264,7 @@ export function TagsInput({
                   toggleTopic(tag);
                 }}
                 aria-label={`Remove ${tag}`}
-                className="flex h-4 w-4 items-center justify-center rounded-full text-gold-500 transition-colors hover:bg-gold-200 hover:text-gold-800"
+                className="flex h-4 w-4 items-center justify-center rounded-full text-flame-500 transition-colors hover:bg-flame-100 hover:text-flame-800"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -349,7 +349,7 @@ export function TagsInput({
                     'flex shrink-0 items-center gap-2 border-b px-4 py-2.5 text-left text-sm transition-colors',
                     alreadyExists
                       ? 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-400'
-                      : 'border-gold-100 bg-gold-50/50 text-gold-700 hover:bg-gold-50',
+                      : 'border-flame-100 bg-gradient-to-r from-gold-50/70 to-flame-50/70 text-flame-700 hover:from-gold-100/70 hover:to-flame-100/70',
                   )}
                 >
                   <Plus className="h-4 w-4" />
@@ -361,7 +361,7 @@ export function TagsInput({
                         : <>Add <span className="font-semibold">{`"${trimmed}"`}</span> as a new topic</>}
                   </span>
                   {!empty && !alreadyExists && (
-                    <span className="ml-auto text-[10px] uppercase tracking-wider text-gold-500">
+                    <span className="ml-auto text-[10px] uppercase tracking-wider text-flame-500">
                       Enter
                     </span>
                   )}
@@ -385,7 +385,7 @@ export function TagsInput({
                     key={topic.name}
                     className={cn(
                       'group relative flex items-center gap-2 px-2 py-1.5 transition-colors',
-                      selected && !isEditing && 'bg-gold-50/60',
+                      selected && !isEditing && 'bg-gradient-to-r from-gold-50/70 to-flame-50/70',
                       isPending && 'opacity-50',
                     )}
                   >
@@ -404,20 +404,20 @@ export function TagsInput({
                           }
                         }}
                         onBlur={() => commitRename(topic.name)}
-                        className="flex-1 rounded-md border border-gold-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gold-200"
+                        className="flex-1 rounded-md border border-flame-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-flame-100"
                       />
                     ) : (
                       <button
                         type="button"
                         onClick={() => toggleTopic(topic.name)}
                         disabled={isPending}
-                        className="flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-gold-50"
+                        className="flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-flame-50"
                       >
                         <span
                           className={cn(
                             'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
                             selected
-                              ? 'border-gold-500 bg-gold-500 text-white'
+                              ? 'border-flame-500 bg-gradient-to-r from-gold-500 to-flame-500 text-white'
                               : 'border-gray-300 bg-white',
                           )}
                           aria-hidden
@@ -449,7 +449,7 @@ export function TagsInput({
                           disabled={isPending}
                           aria-label={`Rename ${topic.name}`}
                           title="Rename across all issues"
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gold-50 hover:text-gold-700"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-flame-50 hover:text-flame-700"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>

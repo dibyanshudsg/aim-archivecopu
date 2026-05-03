@@ -55,7 +55,7 @@ export function FilterPanel({
     const counts = new Map<string, number>();
     for (const i of base) counts.set(i.magazine_id, (counts.get(i.magazine_id) || 0) + 1);
     return magazines
-      .map((m) => ({ value: m.id, label: m.name, count: counts.get(m.id) || 0 }))
+      .map((m) => ({ value: slugify(m.name), label: m.name, count: counts.get(m.id) || 0 }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [issues, magazines, filters]);
 
@@ -90,7 +90,7 @@ export function FilterPanel({
           {hasActiveFilters && (
             <button
               onClick={onClearAll}
-              className="rounded-md px-2 py-1 text-xs font-medium text-gold-600 transition-colors hover:bg-gold-50 hover:text-gold-700"
+              className="rounded-md px-2 py-1 bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-medium text-transparent transition-colors"
             >
               Clear all
             </button>
@@ -138,4 +138,11 @@ export function FilterPanel({
       </div>
     </div>
   );
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }

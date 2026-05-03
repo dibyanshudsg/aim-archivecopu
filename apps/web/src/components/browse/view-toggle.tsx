@@ -17,7 +17,7 @@ export function ViewToggle({ view, onChange }: Props) {
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
           view === 'list'
-            ? 'bg-gold-100 text-gold-700'
+            ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700',
         )}
       >
@@ -29,7 +29,7 @@ export function ViewToggle({ view, onChange }: Props) {
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
           view === 'grid'
-            ? 'bg-gold-100 text-gold-700'
+            ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700',
         )}
       >

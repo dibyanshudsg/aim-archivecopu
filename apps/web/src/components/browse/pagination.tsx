@@ -79,7 +79,7 @@ function PageButton({
         'flex h-9 w-9 items-center justify-center rounded-lg border text-gray-600 transition-colors',
         disabled
           ? 'cursor-not-allowed border-gray-100 bg-white text-gray-300'
-          : 'border-gray-200 bg-white hover:border-gold-300 hover:bg-gold-50 hover:text-gold-700',
+          : 'border-gray-200 bg-white hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
       )}
     >
       {children}
@@ -105,8 +105,8 @@ function PageNumber({
       className={cn(
         'relative flex h-9 min-w-9 items-center justify-center rounded-lg px-3 text-sm font-medium tabular-nums transition-colors',
         active
-          ? 'bg-gold-500 text-white shadow-sm shadow-gold-500/20'
-          : 'border border-gray-200 bg-white text-gray-700 hover:border-gold-300 hover:bg-gold-50 hover:text-gold-700',
+          ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)]'
+          : 'border border-gray-200 bg-white text-gray-700 hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
       )}
     >
       {page}

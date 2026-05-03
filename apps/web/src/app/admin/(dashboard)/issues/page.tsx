@@ -14,8 +14,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Download,
   Copy,
   Image as ImageIcon,
   FileSpreadsheet,
@@ -388,7 +386,7 @@ export default function AdminIssuesPage() {
           </Link>
           <Link
             href="/admin/issues/new"
-            className="flex items-center gap-2 rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gold-600"
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
           >
             <Plus className="h-4 w-4" />
             Upload Issue
@@ -405,7 +403,7 @@ export default function AdminIssuesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search issues..."
-            className="w-full rounded-xl border border-gray-200 py-2.5 pr-9 pl-10 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+            className="w-full rounded-xl border border-gray-200 py-2.5 pr-9 pl-10 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
           />
           {search && (
             <button
@@ -473,8 +471,8 @@ export default function AdminIssuesPage() {
 
       {/* Bulk actions toolbar */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-gold-200 bg-gold-50/40 px-4 py-2.5">
-          <span className="text-sm font-medium text-gold-800">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-flame-200 bg-gradient-to-r from-gold-50/60 to-flame-50/60 px-4 py-2.5">
+          <span className="text-sm font-medium text-flame-800">
             {selected.size} selected
           </span>
           <div className="flex flex-wrap items-center gap-2">
@@ -533,7 +531,7 @@ export default function AdminIssuesPage() {
                         if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected;
                       }}
                       onChange={toggleSelectAllOnPage}
-                      className="h-4 w-4 cursor-pointer accent-gold-500"
+                      className="h-4 w-4 cursor-pointer accent-flame-500"
                       aria-label="Select all on page"
                     />
                   </th>
@@ -560,7 +558,7 @@ export default function AdminIssuesPage() {
                               type="text"
                               value={editForm.title}
                               onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-gold-300 focus:outline-none"
+                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-flame-300 focus:outline-none"
                             />
                             <TagsInput
                               value={editForm.topics}
@@ -574,7 +572,7 @@ export default function AdminIssuesPage() {
                               value={editForm.description}
                               onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                               placeholder="Description"
-                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-gold-300 focus:outline-none"
+                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-flame-300 focus:outline-none"
                             />
                             <div className="flex gap-2">
                               <select
@@ -626,7 +624,7 @@ export default function AdminIssuesPage() {
                             type="checkbox"
                             checked={selected.has(issue.id)}
                             onChange={() => toggleSelectOne(issue.id)}
-                            className="h-4 w-4 cursor-pointer accent-gold-500"
+                            className="h-4 w-4 cursor-pointer accent-flame-500"
                             aria-label={`Select ${issue.title}`}
                           />
                         </td>
@@ -644,7 +642,7 @@ export default function AdminIssuesPage() {
                         <td className="hidden px-5 py-4 md:table-cell">
                           <div className="flex flex-wrap gap-1">
                             {issue.topics.slice(0, 2).map((t) => (
-                              <span key={t} className="rounded-full bg-gold-50 px-2 py-0.5 text-[11px] text-gold-700">
+                              <span key={t} className="rounded-full bg-gradient-to-r from-gold-50 to-flame-50 px-2 py-0.5 text-[11px] text-flame-700">
                                 {t}
                               </span>
                             ))}
@@ -666,23 +664,6 @@ export default function AdminIssuesPage() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex gap-0.5">
-                            <Link
-                              href={`/issue/${issue.id}`}
-                              target="_blank"
-                              rel="noopener"
-                              title="View public page"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Link>
-                            <a
-                              href={issue.pdf_url}
-                              download
-                              title="Download PDF"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                            >
-                              <Download className="h-4 w-4" />
-                            </a>
                             <button
                               onClick={() => setCoverModalIssue(issue)}
                               title="Replace cover image"
@@ -700,7 +681,7 @@ export default function AdminIssuesPage() {
                             <button
                               onClick={() => startEdit(issue)}
                               title="Edit"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gold-50 hover:text-gold-600"
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-flame-50 hover:text-flame-600"
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -799,7 +780,7 @@ function SortHeader({
       <span className="flex items-center gap-1">
         {label}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${active ? 'text-gold-600' : 'text-gray-300'} ${active && dir === 'asc' ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 transition-transform ${active ? 'text-flame-600' : 'text-gray-300'} ${active && dir === 'asc' ? 'rotate-180' : ''}`}
         />
       </span>
     </th>
@@ -891,7 +872,7 @@ function ReplaceCoverModal({
         {!previewUrl ? (
           <div
             onClick={() => fileRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-8 transition-colors hover:border-gold-300 hover:bg-gray-50"
+            className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-8 transition-colors hover:border-flame-300 hover:bg-flame-50/40"
           >
             <ImageIcon className="h-7 w-7 text-gray-400" />
             <p className="mt-2 text-sm font-medium text-gray-600">Click to select cover image</p>
@@ -910,7 +891,7 @@ function ReplaceCoverModal({
                     }`}
                   />
                   <div
-                    className={`pointer-events-none absolute inset-y-0 ring-2 ring-inset ring-gold-400 ${
+                    className={`pointer-events-none absolute inset-y-0 ring-2 ring-inset ring-flame-400 ${
                       orientation === 'front-right' ? 'left-1/2 right-0' : 'left-0 right-1/2'
                     }`}
                   />
@@ -924,7 +905,7 @@ function ReplaceCoverModal({
                   <button
                     onClick={() => setOrientation('front-left')}
                     className={`px-3 py-1.5 transition-colors ${
-                      orientation === 'front-left' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                      orientation === 'front-left' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
                     Left
@@ -932,7 +913,7 @@ function ReplaceCoverModal({
                   <button
                     onClick={() => setOrientation('front-right')}
                     className={`px-3 py-1.5 transition-colors ${
-                      orientation === 'front-right' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                      orientation === 'front-right' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
                     Right
@@ -961,7 +942,7 @@ function ReplaceCoverModal({
           <button
             onClick={submit}
             disabled={!file || submitting}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-600 disabled:opacity-50"
+            className="rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
           >
             {submitting ? 'Uploading...' : 'Replace cover'}
           </button>

@@ -37,12 +37,12 @@ export function FilterSection<T extends string | number>({
     <div className="border-b border-gray-100">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors hover:bg-gold-50/50"
+        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors hover:bg-flame-50/60"
       >
         <span className="flex items-center gap-2">
           {title}
           {activeCount > 0 && (
-            <span className="rounded-full bg-gold-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <span className="rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
               {activeCount}
             </span>
           )}
@@ -68,13 +68,13 @@ export function FilterSection<T extends string | number>({
                 const checked = selected.includes(opt.value);
                 return (
                   <li key={String(opt.value)}>
-                    <label className="mx-2 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-gold-50">
+                    <label className="mx-2 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-flame-50">
                       <span className="flex min-w-0 items-center gap-2.5">
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => onToggle(opt.value)}
-                          className="h-4 w-4 shrink-0 rounded border-gray-300 text-gold-500 focus:ring-1 focus:ring-gold-400"
+                          className="h-4 w-4 shrink-0 rounded border-gray-300 text-flame-500 focus:ring-1 focus:ring-flame-300"
                         />
                         <span
                           className={`truncate ${
@@ -99,7 +99,7 @@ export function FilterSection<T extends string | number>({
                 <li className="px-4 pt-1">
                   <button
                     onClick={() => setShowAll((s) => !s)}
-                    className="text-xs font-medium text-gold-600 hover:text-gold-700"
+                    className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-medium text-transparent"
                   >
                     {showAll ? 'Show less' : `Show ${options.length - initialLimit} more`}
                   </button>

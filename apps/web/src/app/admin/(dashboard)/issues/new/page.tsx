@@ -232,12 +232,12 @@ export default function UploadIssuePage() {
           <div
             onClick={() => fileRef.current?.click()}
             className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors ${
-              file ? 'border-gold-300 bg-gold-50/50' : 'border-gray-200 hover:border-gold-300 hover:bg-gray-50'
+              file ? 'border-flame-300 bg-gradient-to-r from-gold-50/60 to-flame-50/60' : 'border-gray-200 hover:border-flame-300 hover:bg-flame-50/40'
             }`}
           >
             {file ? (
               <div className="flex items-center gap-3">
-                <FileText className="h-8 w-8 text-gold-500" />
+                <FileText className="h-8 w-8 text-flame-500" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">{file.name}</p>
                   <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
@@ -276,20 +276,20 @@ export default function UploadIssuePage() {
           {!coverPreviewUrl ? (
             <div
               onClick={() => coverRef.current?.click()}
-              className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-6 transition-colors hover:border-gold-300 hover:bg-gray-50"
+              className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-6 transition-colors hover:border-flame-300 hover:bg-flame-50/40"
             >
               <Upload className="h-7 w-7 text-gray-400" />
               <p className="mt-2 text-sm font-medium text-gray-600">Click to select cover image</p>
               <p className="text-xs text-gray-400">JPG / PNG · combined front+back spread is fine</p>
             </div>
           ) : (
-            <div className="space-y-3 rounded-2xl border border-gold-200 bg-gold-50/30 p-4">
+            <div className="space-y-3 rounded-2xl border border-flame-200 bg-gradient-to-br from-gold-50/50 to-flame-50/50 p-4">
               {/* Original spread with overlay highlighting kept half */}
               <div>
                 <p className="mb-1.5 text-xs font-medium text-gray-500">
                   Source ({coverDims ? `${coverDims.w} × ${coverDims.h} px` : 'loading...'})
                   {isSpread && (
-                    <span className="ml-2 rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold text-gold-700">
+                    <span className="ml-2 rounded-full bg-gradient-to-r from-gold-100 to-flame-100 px-2 py-0.5 text-[10px] font-semibold text-flame-700">
                       Spread detected · cropping {coverOrientation === 'front-right' ? 'right' : 'left'} half
                     </span>
                   )}
@@ -311,7 +311,7 @@ export default function UploadIssuePage() {
                   )}
                   {isSpread && (
                     <div
-                      className={`pointer-events-none absolute inset-y-0 ring-2 ring-inset ring-gold-400 ${
+                      className={`pointer-events-none absolute inset-y-0 ring-2 ring-inset ring-flame-400 ${
                         coverOrientation === 'front-right' ? 'left-1/2 right-0' : 'left-0 right-1/2'
                       }`}
                     />
@@ -330,7 +330,7 @@ export default function UploadIssuePage() {
                         type="button"
                         onClick={() => setCoverOrientation('front-left')}
                         className={`px-3 py-1.5 transition-colors ${
-                          coverOrientation === 'front-left' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                          coverOrientation === 'front-left' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         Left
@@ -339,7 +339,7 @@ export default function UploadIssuePage() {
                         type="button"
                         onClick={() => setCoverOrientation('front-right')}
                         className={`px-3 py-1.5 transition-colors ${
-                          coverOrientation === 'front-right' ? 'bg-gold-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                          coverOrientation === 'front-right' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         Right
@@ -351,7 +351,7 @@ export default function UploadIssuePage() {
                     <button
                       type="button"
                       onClick={() => downloadCoverHalf('front')}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gold-300 bg-white px-3 py-1.5 text-xs font-medium text-gold-700 transition-colors hover:bg-gold-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-flame-300 bg-white px-3 py-1.5 text-xs font-medium text-flame-700 transition-colors hover:bg-flame-50"
                     >
                       <Download className="h-3.5 w-3.5" />
                       Front cover PDF
@@ -368,7 +368,7 @@ export default function UploadIssuePage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-3 border-t border-gold-200/60 pt-3">
+              <div className="flex items-center justify-between gap-3 border-t border-flame-200/60 pt-3">
                 <p className="truncate text-xs text-gray-500">
                   {coverFile?.name} · {coverFile ? formatFileSize(coverFile.size) : ''}
                 </p>
@@ -401,7 +401,7 @@ export default function UploadIssuePage() {
               value={form.magazine_id}
               onChange={(e) => setForm({ ...form, magazine_id: e.target.value })}
               required
-              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
             >
               {magazines.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
@@ -413,7 +413,7 @@ export default function UploadIssuePage() {
             <select
               value={form.month}
               onChange={(e) => setForm({ ...form, month: parseInt(e.target.value) })}
-              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
             >
               {Object.entries(MONTH_NAMES).map(([num, name]) => (
                 <option key={num} value={num}>{name}</option>
@@ -427,7 +427,7 @@ export default function UploadIssuePage() {
               value={form.year}
               onChange={(e) => setForm({ ...form, year: parseInt(e.target.value) })}
               required
-              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
             />
           </div>
         </div>
@@ -440,7 +440,7 @@ export default function UploadIssuePage() {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             required
-            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
           />
         </div>
 
@@ -464,7 +464,7 @@ export default function UploadIssuePage() {
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={3}
             placeholder="Brief description of this issue..."
-            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-gold-300 focus:outline-none focus:ring-2 focus:ring-gold-200"
+            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
           />
         </div>
 
@@ -472,7 +472,7 @@ export default function UploadIssuePage() {
         <button
           type="submit"
           disabled={uploading || !file}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gold-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-gold-600 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 py-3 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />
           {uploading ? progress : 'Upload Issue'}

@@ -88,7 +88,7 @@ export function ContinueReadingFab() {
         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         aria-label="Continue reading"
         title="Continue reading"
-        className="fixed right-6 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gold-500 text-white shadow-lg shadow-gold-500/30 ring-1 ring-gold-600/20 hover:bg-gold-600"
+        className="fixed right-6 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_12px_30px_rgba(190,140,46,0.28)] ring-1 ring-flame-600/20 hover:from-gold-600 hover:to-flame-600"
       >
         <BookMarked className="h-6 w-6" />
         {count > 0 && (
@@ -176,10 +176,10 @@ function ContinueReadingCard({
         onClick={onOpen}
         whileHover={{ x: 2 }}
         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-        className="flex w-full items-stretch gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-gold-50"
+        className="flex w-full items-stretch gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-flame-50"
       >
         {/* Cover */}
-        <div className="relative h-20 w-[60px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-gold-50 shadow-sm ring-1 ring-transparent transition-all duration-200 group-hover:shadow-md group-hover:ring-gold-300">
+        <div className="relative h-20 w-[60px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-50 shadow-sm ring-1 ring-transparent transition-all duration-200 group-hover:shadow-md group-hover:ring-flame-300">
           {entry.coverImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -188,7 +188,7 @@ function ContinueReadingCard({
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-[10px] font-medium tracking-wider text-gold-700">
+            <div className="flex h-full items-center justify-center text-[10px] font-medium tracking-wider text-flame-700">
               {entry.magazineName.slice(0, 4).toUpperCase()}
             </div>
           )}
@@ -196,7 +196,7 @@ function ContinueReadingCard({
 
         {/* Meta */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-gold-800">
+          <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-flame-800">
             {entry.title}
           </p>
           <p className="truncate text-xs text-gray-500">
