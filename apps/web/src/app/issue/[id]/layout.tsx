@@ -20,6 +20,7 @@ export async function generateMetadata({
     .from('issues')
     .select('title, description, year, month, magazines!inner(name)')
     .eq('id', id)
+    .eq('is_published', true)
     .single();
 
   if (!issue) {
