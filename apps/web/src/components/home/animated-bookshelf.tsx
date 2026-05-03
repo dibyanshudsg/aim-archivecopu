@@ -291,7 +291,7 @@ function IssueBook({
         }
         navigateToReader();
       }}
-      onKeyDown={(event) => {
+      onKeyDown={(event: React.KeyboardEvent) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           navigateToReader();
