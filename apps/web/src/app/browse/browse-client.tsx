@@ -305,7 +305,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
               onSort={setSort}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
               {normalized.map((issue, i) => (
                 <IssueCard key={issue.id} issue={issue} index={i} />
               ))}
@@ -348,8 +348,8 @@ function LoadingState({ view }: { view: 'grid' | 'list' }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-      {Array.from({ length: 12 }).map((_, i) => (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
+      {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="animate-pulse rounded-2xl border border-gray-100 bg-white">
           <div className="aspect-[3/4] rounded-t-2xl bg-gray-100" />
           <div className="space-y-2 p-3.5">

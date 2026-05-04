@@ -7,6 +7,7 @@ import { BookMarked, BookOpen, Search, Download, Globe } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
+import { ThisMonthFeatured } from '@/components/home/this-month-featured';
 import { Flame } from '@/components/home/flame';
 import type { ApiIssue } from '@/lib/api';
 import {
@@ -60,6 +61,7 @@ const features = [
 
 interface HomeClientProps {
   recentIssues: ApiIssue[];
+  featuredIssues: ApiIssue[];
 }
 
 function ContinueReadingShelf() {
@@ -129,6 +131,14 @@ function ContinueReadingShelf() {
                   <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-flame-800 group-active:text-flame-800">
                     {entry.title}
                   </p>
+                  {entry.theme && (
+                    <div className="mt-0.5 flex items-start gap-1.5">
+                      <span aria-hidden className="mt-1.5 h-2.5 w-[2px] shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
+                      <p className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[12px] font-bold leading-normal text-transparent">
+                        {entry.theme}
+                      </p>
+                    </div>
+                  )}
                   <p className="truncate text-xs text-gray-500">
                     {formatMonthYear(entry.month, entry.year)}
                   </p>
@@ -154,7 +164,7 @@ function ContinueReadingShelf() {
   );
 }
 
-export function HomeClient({ recentIssues }: HomeClientProps) {
+export function HomeClient({ recentIssues, featuredIssues }: HomeClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -186,7 +196,7 @@ export function HomeClient({ recentIssues }: HomeClientProps) {
               Decades of spiritual wisdom from{' '}
               <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">Sri Aurobindo</span> and{' '}
               <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">The Mother</span>, preserved and
-              accessible to all. Explore the complete archive of All India Magazine, Agnisikha, and
+              accessible to all. Explore the complete archive of All India Magazine, Agnishikha, and
               more.
             </motion.p>
 
@@ -205,6 +215,9 @@ export function HomeClient({ recentIssues }: HomeClientProps) {
               </Link>
             </motion.div>
           </motion.div>
+
+          {/* This Month's Editions — featured per-magazine cards */}
+          <ThisMonthFeatured featured={featuredIssues} />
 
           {/* Dynamic Bookshelf */}
           <motion.div
