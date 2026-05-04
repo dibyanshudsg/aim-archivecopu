@@ -76,7 +76,7 @@ export function SearchClient({ initialMagazines }: SearchClientProps) {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by title, topic, or any word in any issue..."
+                placeholder="Search by title, theme, topic, or any word in any issue..."
                 className="w-full rounded-2xl border border-gray-200 bg-white py-4 pr-12 pl-12 text-base text-gray-900 shadow-sm transition-colors placeholder:text-gray-400 focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
                 autoFocus
               />

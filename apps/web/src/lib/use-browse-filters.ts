@@ -220,6 +220,7 @@ export function applyFilters(
 
 function matchesQuery(issue: ApiIssue, q: string): boolean {
   if (issue.title.toLowerCase().includes(q)) return true;
+  if (issue.theme && issue.theme.toLowerCase().includes(q)) return true;
   if (issue.magazines.name.toLowerCase().includes(q)) return true;
   if (issue.description && issue.description.toLowerCase().includes(q)) return true;
   for (const t of issue.topics) if (t.toLowerCase().includes(q)) return true;
@@ -274,11 +275,18 @@ export function sortIssues(
 
 function matchesMagazineFilter(issue: ApiIssue, value: string): boolean {
   const normalized = value.toLowerCase();
-  return (
-    issue.magazine_id === value ||
-    slugify(issue.magazines.name) === normalized ||
-    acronym(issue.magazines.name) === normalized
-  );
+  if (issue.magazine_id === value) return true;
+
+  const slug = slugify(issue.magazines.name);
+  if (slug === normalized) return true;
+
+  // Legacy alias — pre-rename slug "agnisikha" still matches the renamed
+  // "Agnishikha" magazine. Lets old shared `?magazine=agnisikha` links keep
+  // working through the spelling transition.
+  if (normalized === 'agnisikha' && slug === 'agnishikha') return true;
+
+  if (acronym(issue.magazines.name) === normalized) return true;
+  return false;
 }
 
 function slugify(value: string): string {

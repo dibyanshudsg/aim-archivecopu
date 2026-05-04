@@ -146,6 +146,14 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 transition-colors group-hover:text-flame-800">
             {issue.title}
           </h3>
+          {issue.theme && (
+            <div className="mt-1 flex items-start gap-1.5">
+              <span aria-hidden className="mt-2 h-3 w-[2px] shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
+              <p className="font-heading line-clamp-2 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[13px] font-bold leading-normal text-transparent">
+                {issue.theme}
+              </p>
+            </div>
+          )}
           <p className="mt-1 text-[11px] font-medium text-gray-500">
             {formatMonthYear(issue.month, issue.year)}
           </p>

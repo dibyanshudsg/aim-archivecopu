@@ -31,7 +31,7 @@ export function IssueListView({ issues, sort, dir, onSort }: Props) {
             <tr>
               <SortHeader col="title" label="Title" current={sort} dir={dir} onSort={onSort} />
               <SortHeader col="language" label="Language" current={sort} dir={dir} onSort={onSort} />
-              <th className="px-4 py-3 text-left">Topics</th>
+              <th className="px-4 py-3 text-left">Topic Tags</th>
               <SortHeader col="pages" label="Pages" current={sort} dir={dir} onSort={onSort} align="right" />
               <SortHeader col="size" label="Size" current={sort} dir={dir} onSort={onSort} align="right" />
               <SortHeader col="reads" label="Reads" current={sort} dir={dir} onSort={onSort} align="right" />
@@ -177,6 +177,11 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
           </div>
           <div className="min-w-0">
             <div className="truncate font-medium text-gray-900">{issue.title}</div>
+            {issue.theme && (
+              <div className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[13px] font-bold leading-normal text-transparent">
+                {issue.theme}
+              </div>
+            )}
             <div className="text-xs text-gray-500">{formatMonthYear(issue.month, issue.year)}</div>
           </div>
         </div>
@@ -292,6 +297,11 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-gray-900">{issue.title}</div>
+          {issue.theme && (
+            <div className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[12px] font-bold leading-normal text-transparent">
+              {issue.theme}
+            </div>
+          )}
           <div className="text-xs text-gray-500">
             {issue.magazine.name} · {LANGUAGE_NAMES[issue.magazine.language]}
           </div>

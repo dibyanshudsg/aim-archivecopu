@@ -628,6 +628,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         // entries instantly without a network roundtrip.
         issueId: issue.id,
         title: issue.title,
+        theme: issue.theme ?? null,
         coverImageUrl: issue.coverImageUrl ?? null,
         magazineName: issue.magazine?.name ?? '',
         month: issue.month,
@@ -1476,6 +1477,14 @@ function IssueInfoDrawer({
                   <h3 className="line-clamp-4 text-base font-semibold leading-snug text-gray-900">
                     {issue.title}
                   </h3>
+                  {issue.theme && (
+                    <div className="mt-1.5 flex items-start gap-1.5">
+                      <span aria-hidden className="mt-2 h-3.5 w-[2px] shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
+                      <p className="font-heading line-clamp-2 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-sm font-bold leading-normal text-transparent">
+                        {issue.theme}
+                      </p>
+                    </div>
+                  )}
                   <p className="mt-2 text-sm text-gray-500">
                     {formatMonthYear(issue.month, issue.year)}
                   </p>

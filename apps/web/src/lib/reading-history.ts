@@ -19,6 +19,7 @@ export interface ReadingHistoryEntry {
   updatedAt: number;
   // Metadata snapshot
   title: string;
+  theme: string | null;
   coverImageUrl: string | null;
   magazineName: string;
   month: number;
@@ -56,6 +57,7 @@ export function getReadingHistory(): ReadingHistoryEntry[] {
         pagesPerView: (parsed.pagesPerView as 1 | 2) ?? 1,
         updatedAt: parsed.updatedAt ?? 0,
         title: parsed.title,
+        theme: parsed.theme ?? null,
         coverImageUrl: parsed.coverImageUrl ?? null,
         magazineName: parsed.magazineName,
         month: parsed.month ?? 1,

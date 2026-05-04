@@ -104,6 +104,15 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
                 {issue.title}
               </h1>
 
+              {issue.theme && (
+                <div className="mt-3 flex items-start gap-2.5">
+                  <span aria-hidden className="mt-1.5 h-7 w-1 shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
+                  <p className="font-heading bg-gradient-to-r from-gold-600 to-flame-600 bg-clip-text pr-1 text-xl font-semibold leading-tight text-transparent sm:text-2xl">
+                    {issue.theme}
+                  </p>
+                </div>
+              )}
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {[...issue.topics]
                   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
