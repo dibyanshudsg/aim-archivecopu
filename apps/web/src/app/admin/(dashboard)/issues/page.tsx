@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import Link from 'next/link';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Plus,
   Trash2,
@@ -10,7 +13,6 @@ import {
   Pencil,
   Search,
   X,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -19,14 +21,16 @@ import {
   FileSpreadsheet,
   Upload,
 } from 'lucide-react';
-import { formatFileSize, formatMonthYear } from '@/lib/utils';
+import { cn, formatFileSize, formatMonthYear } from '@/lib/utils';
 import { MONTH_NAMES } from '@aim-archive/shared';
+import type { MonthIndex } from '@aim-archive/shared';
 import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 import { useUI } from '@/components/ui/toast';
 
 interface Issue {
   id: string;
   title: string;
+  theme: string | null;
   year: number;
   month: number;
   description: string | null;
@@ -77,15 +81,8 @@ export default function AdminIssuesPage() {
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Inline editing
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    title: '',
-    description: '',
-    topics: [] as string[],
-    year: 0,
-    month: 1,
-  });
+  // Edit modal state
+  const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
 
   // Replace-cover modal state
   const [coverModalIssue, setCoverModalIssue] = useState<Issue | null>(null);
@@ -126,6 +123,7 @@ export default function AdminIssuesPage() {
       result = result.filter(
         (i) =>
           i.title.toLowerCase().includes(q) ||
+          (i.theme && i.theme.toLowerCase().includes(q)) ||
           i.topics.some((t) => t.toLowerCase().includes(q)),
       );
     }
@@ -180,39 +178,6 @@ export default function AdminIssuesPage() {
     else {
       setSortField(field);
       setSortDir('desc');
-    }
-  }
-
-  function startEdit(issue: Issue) {
-    setEditingId(issue.id);
-    setEditForm({
-      title: issue.title,
-      description: issue.description || '',
-      topics: [...issue.topics],
-      year: issue.year,
-      month: issue.month,
-    });
-  }
-
-  async function saveEdit(issue: Issue) {
-    const res = await fetch(`/api/admin/issues/${issue.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...issue,
-        title: editForm.title,
-        description: editForm.description,
-        topics: editForm.topics,
-        year: editForm.year,
-        month: editForm.month,
-      }),
-    });
-    if (res.ok) {
-      toast.success('Issue updated');
-      setEditingId(null);
-      loadData();
-    } else {
-      toast.error('Failed to update issue');
     }
   }
 
@@ -535,90 +500,36 @@ export default function AdminIssuesPage() {
                       aria-label="Select all on page"
                     />
                   </th>
-                  <SortHeader label="Title" field="title" current={sortField} dir={sortDir} onSort={toggleSort} />
-                  <th className="hidden px-5 py-3 font-medium text-gray-500 sm:table-cell">Magazine</th>
-                  <th className="hidden px-5 py-3 font-medium text-gray-500 md:table-cell">Topics</th>
-                  <SortHeader label="Date" field="year" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden lg:table-cell" />
-                  <SortHeader label="Reads" field="read_count" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden lg:table-cell" />
-                  <SortHeader label="Downloads" field="download_count" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden xl:table-cell" />
-                  <SortHeader label="Size" field="file_size_bytes" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden xl:table-cell" />
-                  <SortHeader label="Modified" field="updated_at" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden xl:table-cell" />
-                  <th className="px-5 py-3 font-medium text-gray-500">Actions</th>
+                  <th className="w-12 px-2 py-3" aria-label="Cover" />
+                  <SortHeader label="Magazine Title" field="title" current={sortField} dir={sortDir} onSort={toggleSort} />
+                  <th className="hidden px-4 py-3 font-medium text-gray-500 lg:table-cell">Theme Title</th>
+                  <th className="hidden px-4 py-3 font-medium text-gray-500 2xl:table-cell">Magazine</th>
+                  <th className="hidden px-4 py-3 font-medium text-gray-500 md:table-cell">Topic Tags</th>
+                  <SortHeader label="Reads" field="read_count" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden px-3 lg:table-cell" />
+                  <SortHeader label="Downloads" field="download_count" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden px-3 xl:table-cell" />
+                  <SortHeader label="Size" field="file_size_bytes" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden px-3 xl:table-cell" />
+                  <SortHeader label="Modified" field="updated_at" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden px-3 xl:table-cell" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
                 {pageIssues.map((issue) => (
-                  <tr key={issue.id} className="transition-colors hover:bg-gray-50/50">
-                    {editingId === issue.id ? (
-                      <>
-                        <td className="px-3 py-3" />
-                        <td className="px-5 py-3" colSpan={3}>
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={editForm.title}
-                              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-flame-300 focus:outline-none"
-                            />
-                            <TagsInput
-                              value={editForm.topics}
-                              onChange={(topics) => setEditForm({ ...editForm, topics })}
-                              allTopics={allTopics}
-                              onTopicsRefetch={loadData}
-                              placeholder="Click to manage topics"
-                            />
-                            <input
-                              type="text"
-                              value={editForm.description}
-                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                              placeholder="Description"
-                              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-flame-300 focus:outline-none"
-                            />
-                            <div className="flex gap-2">
-                              <select
-                                value={editForm.month}
-                                onChange={(e) => setEditForm({ ...editForm, month: Number(e.target.value) })}
-                                className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
-                              >
-                                {Object.entries(MONTH_NAMES).map(([n, name]) => (
-                                  <option key={n} value={n}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </select>
-                              <input
-                                type="number"
-                                value={editForm.year}
-                                onChange={(e) => setEditForm({ ...editForm, year: Number(e.target.value) })}
-                                className="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="hidden lg:table-cell" />
-                        <td className="hidden lg:table-cell" />
-                        <td className="hidden xl:table-cell" />
-                        <td className="hidden xl:table-cell" />
-                        <td className="hidden xl:table-cell" />
-                        <td className="px-5 py-3">
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => saveEdit(issue)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-green-600 hover:bg-green-50"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
+                  <tbody
+                    key={issue.id}
+                    className={cn(
+                      'group origin-center transition-all duration-200 ease-out last:border-b-0',
+                      'border-b border-gray-100',
+                      'hover:relative hover:z-10 hover:scale-[1.006] hover:shadow-[0_14px_36px_rgba(190,140,46,0.14)]',
+                      editingIssue?.id === issue.id &&
+                        'relative z-10 shadow-[0_14px_36px_rgba(229,86,31,0.12)]',
+                    )}
+                  >
+                  <tr
+                    className={cn(
+                      'transition-colors',
+                      editingIssue?.id === issue.id
+                        ? 'bg-gradient-to-r from-gold-50/60 to-flame-50/60'
+                        : 'group-hover:bg-gray-50/40',
+                    )}
+                  >
                         <td className="px-3 py-4">
                           <input
                             type="checkbox"
@@ -628,18 +539,37 @@ export default function AdminIssuesPage() {
                             aria-label={`Select ${issue.title}`}
                           />
                         </td>
+                        <td className="px-2 py-3">
+                          <CoverThumbnail issue={issue} />
+                        </td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-start gap-2">
                             {!issue.is_published && (
-                              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                              <span className="mt-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
                                 DRAFT
                               </span>
                             )}
-                            <span className="font-medium text-gray-900">{issue.title}</span>
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900">{issue.title}</div>
+                              {issue.theme && (
+                                <div className="font-heading mt-0.5 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 text-[12px] font-semibold text-transparent lg:hidden">
+                                  {issue.theme}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td className="hidden px-5 py-4 text-gray-500 sm:table-cell">{issue.magazines?.name}</td>
-                        <td className="hidden px-5 py-4 md:table-cell">
+                        <td className="hidden px-4 py-4 lg:table-cell">
+                          {issue.theme ? (
+                            <span className="font-heading bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 text-sm font-semibold text-transparent">
+                              {issue.theme}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="hidden px-4 py-4 text-gray-500 2xl:table-cell">{issue.magazines?.name}</td>
+                        <td className="hidden px-4 py-4 md:table-cell">
                           <div className="flex flex-wrap gap-1">
                             {issue.topics.slice(0, 2).map((t) => (
                               <span key={t} className="rounded-full bg-gradient-to-r from-gold-50 to-flame-50 px-2 py-0.5 text-[11px] text-flame-700">
@@ -651,61 +581,130 @@ export default function AdminIssuesPage() {
                             )}
                           </div>
                         </td>
-                        <td className="hidden px-5 py-4 text-gray-500 lg:table-cell">
-                          {formatMonthYear(issue.month, issue.year)}
-                        </td>
-                        <td className="hidden px-5 py-4 text-gray-500 lg:table-cell">{issue.read_count}</td>
-                        <td className="hidden px-5 py-4 text-gray-500 xl:table-cell">{issue.download_count}</td>
-                        <td className="hidden px-5 py-4 text-gray-500 xl:table-cell">
+                        <td className="hidden px-3 py-4 text-gray-500 lg:table-cell">{issue.read_count}</td>
+                        <td className="hidden px-3 py-4 text-gray-500 xl:table-cell">{issue.download_count}</td>
+                        <td className="hidden px-3 py-4 text-gray-500 xl:table-cell">
                           {formatFileSize(issue.file_size_bytes)}
                         </td>
-                        <td className="hidden px-5 py-4 text-gray-500 xl:table-cell">
+                        <td className="hidden px-3 py-4 text-gray-500 xl:table-cell">
                           {issue.updated_at ? formatRelative(issue.updated_at) : '—'}
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex gap-0.5">
-                            <button
-                              onClick={() => setCoverModalIssue(issue)}
-                              title="Replace cover image"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                            >
-                              <ImageIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => duplicate(issue)}
-                              title="Duplicate metadata for new upload"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => startEdit(issue)}
-                              title="Edit"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-flame-50 hover:text-flame-600"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => togglePublish(issue)}
-                              title={issue.is_published ? 'Unpublish' : 'Publish'}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            >
-                              {issue.is_published ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(issue)}
-                              title="Delete"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    )}
                   </tr>
+                  {/* Actions row — visually paired with the main row above */}
+                  <tr
+                    className={cn(
+                      '![&]:border-t-0',
+                      editingIssue?.id === issue.id
+                        ? 'bg-gradient-to-r from-gold-50/50 to-flame-50/50'
+                        : 'bg-gradient-to-b from-gray-50/30 to-gray-50/70',
+                    )}
+                    style={{ borderTopWidth: 0 }}
+                  >
+                    <td colSpan={10} className="px-3 pt-1 pb-2.5 sm:px-5">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {/* Secondary actions — grouped toolbar */}
+                        <div className="inline-flex items-center gap-0.5 rounded-lg border border-gray-200/80 bg-white p-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                          <button
+                            onClick={() => setCoverModalIssue(issue)}
+                            title="Replace cover image"
+                            className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Cover</span>
+                          </button>
+                          <div className="h-4 w-px bg-gray-200" />
+                          <button
+                            onClick={() => duplicate(issue)}
+                            title="Duplicate metadata for new upload"
+                            className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Duplicate</span>
+                          </button>
+                          <div className="h-4 w-px bg-gray-200" />
+                          <button
+                            onClick={() => togglePublish(issue)}
+                            title={issue.is_published ? 'Click to unpublish' : 'Click to publish'}
+                            className={cn(
+                              'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors',
+                              issue.is_published
+                                ? 'text-emerald-700 hover:bg-emerald-50'
+                                : 'text-amber-700 hover:bg-amber-50',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'h-1.5 w-1.5 rounded-full',
+                                issue.is_published ? 'bg-emerald-500' : 'bg-amber-500',
+                              )}
+                            />
+                            <span className="hidden sm:inline">
+                              {issue.is_published ? 'Published' : 'Draft'}
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Primary action: Edit */}
+                        <button
+                          onClick={() => setEditingIssue(issue)}
+                          title="Edit issue"
+                          className="flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 px-3.5 text-xs font-semibold text-white shadow-[0_4px_14px_rgba(190,140,46,0.25)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_6px_18px_rgba(229,86,31,0.28)]"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+
+                        {/* Destructive action: Delete */}
+                        <button
+                          onClick={() => handleDelete(issue)}
+                          title="Delete issue"
+                          className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-500 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <AnimatePresence initial={false}>
+                    {editingIssue?.id === issue.id && (
+                      <motion.tr
+                        key={`edit-${issue.id}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                      >
+                        <td colSpan={10} className="p-0">
+                          <motion.div
+                            initial={{ height: 0, overflow: 'hidden' }}
+                            animate={{
+                              height: 'auto',
+                              transitionEnd: { overflow: 'visible' },
+                            }}
+                            exit={{ height: 0, overflow: 'hidden' }}
+                            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                            onClick={() => setEditingIssue(null)}
+                            className="cursor-pointer border-y border-flame-200/60 bg-gradient-to-br from-gold-50/40 to-flame-50/40"
+                          >
+                            <EditRowForm
+                              issue={issue}
+                              magazines={magazines}
+                              allTopics={allTopics}
+                              onCancel={() => setEditingIssue(null)}
+                              onSaved={() => {
+                                setEditingIssue(null);
+                                loadData();
+                              }}
+                              onTopicsRefetch={loadData}
+                            />
+                          </motion.div>
+                        </td>
+                      </motion.tr>
+                    )}
+                  </AnimatePresence>
+                  </tbody>
                 ))}
-              </tbody>
             </table>
           </div>
 
@@ -752,6 +751,7 @@ export default function AdminIssuesPage() {
           }}
         />
       )}
+
     </div>
   );
 }
@@ -949,5 +949,340 @@ function ReplaceCoverModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------- Cover thumbnail with hover preview (portal-rendered to escape table overflow) ----------
+const PREVIEW_W = 240;
+const PREVIEW_H = 320;
+const PREVIEW_GAP = 12;
+const VIEWPORT_PAD = 12;
+
+function CoverThumbnail({ issue }: { issue: Issue }) {
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
+  const thumbRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function updatePosition() {
+    if (!thumbRef.current) return;
+    const rect = thumbRef.current.getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2;
+    // Clamp vertically so the preview never goes off-viewport
+    const minY = PREVIEW_H / 2 + VIEWPORT_PAD;
+    const maxY = window.innerHeight - PREVIEW_H / 2 - VIEWPORT_PAD;
+    const clampedY = Math.max(minY, Math.min(maxY, centerY));
+    setPos({ x: rect.right + PREVIEW_GAP, y: clampedY });
+  }
+
+  function handleEnter() {
+    if (!issue.cover_image_url) return;
+    updatePosition();
+    setShow(true);
+  }
+
+  function handleLeave() {
+    setShow(false);
+  }
+
+  return (
+    <>
+      <div
+        ref={thumbRef}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+        className="relative inline-block"
+      >
+        <div className="relative h-12 w-9 overflow-hidden rounded bg-gradient-to-br from-gold-100 to-flame-100 shadow-sm ring-1 ring-flame-200/40">
+          <div className="absolute inset-y-0 left-0 z-10 w-[3px] bg-gradient-to-b from-gold-500 to-flame-500" />
+          {issue.cover_image_url ? (
+            <Image
+              src={issue.cover_image_url}
+              alt=""
+              fill
+              className="object-cover"
+              sizes="36px"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[8px] font-medium text-flame-700/60">
+              no
+              <br />
+              cover
+            </div>
+          )}
+        </div>
+      </div>
+
+      {mounted &&
+        issue.cover_image_url &&
+        createPortal(
+          <AnimatePresence>
+            {show && (
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="pointer-events-none fixed z-[1000]"
+                style={{
+                  left: pos.x,
+                  top: pos.y - PREVIEW_H / 2,
+                  width: PREVIEW_W,
+                }}
+              >
+                <div
+                  className="relative overflow-hidden rounded-xl border-2 border-flame-300 bg-white shadow-2xl"
+                  style={{ height: PREVIEW_H }}
+                >
+                  <div className="absolute inset-y-0 left-0 z-10 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
+                  <Image
+                    src={issue.cover_image_url}
+                    alt={issue.title}
+                    fill
+                    className="object-cover"
+                    sizes="240px"
+                  />
+                </div>
+                <div className="mt-1 truncate rounded-md bg-white/95 px-2 py-1 text-center text-[11px] font-medium text-gray-700 shadow-sm">
+                  {issue.title}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+// ---------- Inline edit row form (slides in below the row) ----------
+function EditRowForm({
+  issue,
+  magazines,
+  allTopics,
+  onCancel,
+  onSaved,
+  onTopicsRefetch,
+}: {
+  issue: Issue;
+  magazines: Magazine[];
+  allTopics: ManagedTopic[];
+  onCancel: () => void;
+  onSaved: () => void;
+  onTopicsRefetch: () => void;
+}) {
+  const { toast } = useUI();
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    magazine_id: issue.magazine_id,
+    title: issue.title,
+    theme: issue.theme || '',
+    year: issue.year,
+    month: issue.month,
+    description: issue.description || '',
+    topics: [...issue.topics],
+  });
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  // Auto-regenerate Magazine Title when magazine/month/year change.
+  // Skip on initial mount so we don't clobber a customized stored title.
+  const skipFirstAutoTitle = useRef(true);
+  useEffect(() => {
+    if (skipFirstAutoTitle.current) {
+      skipFirstAutoTitle.current = false;
+      return;
+    }
+    const mag = magazines.find((m) => m.id === form.magazine_id);
+    if (!mag) return;
+    const monthName = MONTH_NAMES[form.month as MonthIndex];
+    setForm((f) => ({ ...f, title: `${mag.name} — ${monthName} ${f.year}` }));
+  }, [form.magazine_id, form.month, form.year, magazines]);
+
+  // Track whether the form has been modified vs the saved issue.
+  const isDirty = useMemo(() => {
+    if (form.magazine_id !== issue.magazine_id) return true;
+    if (form.title !== issue.title) return true;
+    if (form.theme !== (issue.theme || '')) return true;
+    if (form.year !== issue.year) return true;
+    if (form.month !== issue.month) return true;
+    if (form.description !== (issue.description || '')) return true;
+    const a = [...form.topics].sort();
+    const b = [...issue.topics].sort();
+    if (a.length !== b.length) return true;
+    return a.some((t, i) => t !== b[i]);
+  }, [form, issue]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const res = await fetch(`/api/admin/issues/${issue.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...issue,
+        magazine_id: form.magazine_id,
+        title: form.title,
+        theme: form.theme.trim() || null,
+        description: form.description,
+        topics: form.topics,
+        year: form.year,
+        month: form.month,
+      }),
+    });
+    setSubmitting(false);
+    if (res.ok) {
+      toast.success('Issue updated');
+      onSaved();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || 'Failed to update issue');
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      onClick={(e) => e.stopPropagation()}
+      className="mx-auto my-5 max-w-2xl cursor-default space-y-5 rounded-2xl border-2 border-flame-300 bg-white px-6 py-6 shadow-[0_10px_30px_rgba(190,140,46,0.12)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-heading text-base font-bold text-gray-900">Edit Issue</h3>
+          <p className="mt-0.5 truncate text-xs text-gray-500">{issue.title}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 text-flame-500 transition-colors hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" strokeWidth={2.5} />
+        </button>
+      </div>
+
+      {/* Magazine & Date */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Magazine</label>
+          <select
+            value={form.magazine_id}
+            onChange={(e) => setForm({ ...form, magazine_id: e.target.value })}
+            required
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+          >
+            {magazines.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Month</label>
+          <select
+            value={form.month}
+            onChange={(e) => setForm({ ...form, month: Number(e.target.value) })}
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+          >
+            {Object.entries(MONTH_NAMES).map(([n, name]) => (
+              <option key={n} value={n}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Year</label>
+          <input
+            type="number"
+            value={form.year}
+            onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
+            required
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+          />
+        </div>
+      </div>
+
+      {/* Magazine Title */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Magazine Title</label>
+        <input
+          type="text"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          required
+          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+        />
+      </div>
+
+      {/* Theme Title */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">
+          Theme Title <span className="text-xs font-normal text-gray-400">(the overarching theme of this issue)</span>
+        </label>
+        <input
+          type="text"
+          value={form.theme}
+          onChange={(e) => setForm({ ...form, theme: e.target.value })}
+          placeholder="e.g. The Psychic Being, Surrender, On Education"
+          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+        />
+      </div>
+
+      {/* Topic Tags */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Topic Tags</label>
+        <TagsInput
+          value={form.topics}
+          onChange={(topics) => setForm({ ...form, topics })}
+          allTopics={allTopics}
+          onTopicsRefetch={onTopicsRefetch}
+          placeholder="Click to manage topic tags"
+        />
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          rows={3}
+          placeholder="Brief description of this issue..."
+          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+        />
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex justify-end gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={submitting || !isDirty}
+          title={!isDirty ? 'No changes to save' : undefined}
+          className="rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+        >
+          {submitting ? 'Saving...' : 'Save changes'}
+        </button>
+      </div>
+    </form>
   );
 }

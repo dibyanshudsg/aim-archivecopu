@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
   const parsed = issueUploadSchema.safeParse({
     magazine_id: formData.get('magazine_id'),
     title: formData.get('title'),
+    theme: formData.get('theme'),
     year: formData.get('year'),
     month: formData.get('month'),
     description: formData.get('description'),
@@ -39,8 +40,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }
 
-  const { magazine_id: magazineId, title, year, month, description, topics: topicsStr } = parsed.data;
+  const { magazine_id: magazineId, title, theme, year, month, description, topics: topicsStr } = parsed.data;
   const topics = topicsStr ? topicsStr.split(',').map((t) => t.trim()).filter(Boolean) : [];
+  const themeTrimmed = theme.trim();
 
   const supabase = getClient();
 
@@ -94,6 +96,7 @@ export async function POST(request: NextRequest) {
     .insert({
       magazine_id: magazineId,
       title,
+      theme: themeTrimmed || null,
       year,
       month,
       description: description || null,

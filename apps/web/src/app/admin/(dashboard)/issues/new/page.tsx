@@ -42,6 +42,7 @@ export default function UploadIssuePage() {
   const [form, setForm] = useState({
     magazine_id: '',
     title: '',
+    theme: '',
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
     description: '',
@@ -185,6 +186,7 @@ export default function UploadIssuePage() {
     formData.append('pdf', file);
     formData.append('magazine_id', form.magazine_id);
     formData.append('title', form.title);
+    formData.append('theme', form.theme);
     formData.append('year', String(form.year));
     formData.append('month', String(form.month));
     formData.append('description', form.description);
@@ -432,9 +434,11 @@ export default function UploadIssuePage() {
           </div>
         </div>
 
-        {/* Title */}
+        {/* Magazine Title (auto-generated) */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Title</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Magazine Title <span className="text-xs font-normal text-gray-400">(auto-generated)</span>
+          </label>
           <input
             type="text"
             value={form.title}
@@ -444,15 +448,29 @@ export default function UploadIssuePage() {
           />
         </div>
 
-        {/* Topics */}
+        {/* Theme Title (the issue's overarching theme — printed on the cover) */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Topics</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Theme Title <span className="text-xs font-normal text-gray-400">(the overarching theme of this issue)</span>
+          </label>
+          <input
+            type="text"
+            value={form.theme}
+            onChange={(e) => setForm({ ...form, theme: e.target.value })}
+            placeholder="e.g. The Psychic Being, Surrender, On Education"
+            className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+          />
+        </div>
+
+        {/* Topic Tags */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Topic Tags</label>
           <TagsInput
             value={form.topics}
             onChange={(topics) => setForm({ ...form, topics })}
             allTopics={allTopics}
             onTopicsRefetch={refetchTopics}
-            placeholder="Click to manage topics"
+            placeholder="Click to manage topic tags"
           />
         </div>
 
