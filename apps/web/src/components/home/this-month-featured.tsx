@@ -177,7 +177,7 @@ function FeaturedCard({ issue, index }: { issue: ApiIssue; index: number }) {
           <div className="mt-auto flex items-center gap-2 pt-5">
             <Link
               href={`/read/${issue.id}?from=home`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
               className="relative z-20 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.24)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_12px_28px_rgba(229,86,31,0.28)]"
             >
               <BookOpen className="h-4 w-4" />
