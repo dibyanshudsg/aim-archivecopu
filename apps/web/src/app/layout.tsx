@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Noto_Serif, Tangerine } from 'next/font/google';
+import { Inter, Aboreto, Tiro_Devanagari_Hindi, Tangerine } from 'next/font/google';
 import '@/styles/globals.css';
 import { ContinueReadingFab } from '@/components/layout/continue-reading-fab';
 
@@ -9,15 +9,31 @@ const inter = Inter({
   display: 'swap',
 });
 
-const notoSerifHeading = Noto_Serif({
+// Aboreto: elegant display serif used for all headings (sections, issue titles,
+// theme titles, etc.). Single-weight 400 — `font-synthesis: none` in globals.css
+// prevents browsers from faux-bolding it on `font-bold` utilities.
+const aboretoHeading = Aboreto({
   subsets: ['latin'],
+  weight: ['400'],
   variable: '--font-heading',
   display: 'swap',
 });
 
-const notoSerif = Noto_Serif({
+const aboretoDisplay = Aboreto({
   subsets: ['latin'],
+  weight: ['400'],
   variable: '--font-display',
+  display: 'swap',
+});
+
+// Devanagari fallback — Tiro Devanagari Hindi is John Hudson's purpose-designed
+// devanagari typeface, calibrated to pair gracefully with Latin display fonts
+// like Aboreto. Single weight 400, with proper Devanagari glyph proportions
+// so Hindi headings sit visually balanced alongside English ones.
+const tiroDevanagari = Tiro_Devanagari_Hindi({
+  subsets: ['devanagari'],
+  weight: ['400'],
+  variable: '--font-heading-deva',
   display: 'swap',
 });
 
@@ -34,12 +50,12 @@ export const metadata: Metadata = {
     template: '%s | AIM Archive',
   },
   description:
-    'Explore decades of spiritual wisdom from All India Magazine, Agnisikha, and other publications by Sri Aurobindo Society. Free digital archive of writings by Sri Aurobindo and The Mother.',
+    'Explore decades of spiritual wisdom from All India Magazine, Agnishikha, and other publications by Sri Aurobindo Society. Free digital archive of writings by Sri Aurobindo and The Mother.',
   keywords: [
     'Sri Aurobindo',
     'The Mother',
     'All India Magazine',
-    'Agnisikha',
+    'Agnishikha',
     'Sri Aurobindo Society',
     'spiritual magazine',
     'magazine archive',
@@ -81,7 +97,7 @@ const jsonLd = {
   '@type': 'WebSite',
   name: 'AIM Archive',
   description:
-    'Digital archive of All India Magazine, Agnisikha, and other Sri Aurobindo Society publications.',
+    'Digital archive of All India Magazine, Agnishikha, and other Sri Aurobindo Society publications.',
   url: process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org',
   publisher: {
     '@type': 'Organization',
@@ -104,7 +120,7 @@ const jsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${notoSerifHeading.variable} ${notoSerif.variable} ${tangerine.variable}`}>
+    <html lang="en" className={`${inter.variable} ${aboretoHeading.variable} ${aboretoDisplay.variable} ${tiroDevanagari.variable} ${tangerine.variable}`}>
       <body className="bg-warm-white font-sans text-gray-900 antialiased" suppressHydrationWarning>
         <script
           type="application/ld+json"

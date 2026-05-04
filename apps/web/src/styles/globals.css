@@ -29,9 +29,18 @@
 
   /* Fonts */
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Noto Serif', ui-serif, Georgia, serif;
-  --font-display: 'Noto Serif', ui-serif, Georgia, serif;
+  /* Aboreto for Latin glyphs; Tiro Devanagari Hindi for Hindi/Sanskrit; serif fallback. */
+  --font-heading: 'Aboreto', 'Tiro Devanagari Hindi', ui-serif, Georgia, serif;
+  --font-display: 'Aboreto', 'Tiro Devanagari Hindi', ui-serif, Georgia, serif;
   --font-cursive: 'Tangerine', ui-serif, cursive;
+}
+
+/* Aboreto only ships weight 400. Allow weight synthesis (so `font-medium` /
+   `font-semibold` give a subtle faux-bold heft) but block italic synthesis
+   (which would skew Devanagari and clip the gradient — see CLAUDE.md §15). */
+.font-heading,
+.font-display {
+  font-synthesis: weight;
 }
 
 /* Smooth scrolling */
