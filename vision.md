@@ -6,7 +6,7 @@
 
 ## 1. Why namahjournal.com Matters to Us
 
-NAMAH ("The Journal of Integral Health") and AIM (All India Magazine + Agnisikha) **share the same parent organization**: the Sri Aurobindo Society in Pondicherry. NAMAH is published by the Society's *Sri Aurobindo International Institute for Integral Health and Research*. So this isn't merely "a website we admire" — it's a **sibling publication** within the same institutional family. The boss surfacing it tells us:
+NAMAH ("The Journal of Integral Health") and AIM (All India Magazine + Agnishikha) **share the same parent organization**: the Sri Aurobindo Society in Pondicherry. NAMAH is published by the Society's *Sri Aurobindo International Institute for Integral Health and Research*. So this isn't merely "a website we admire" — it's a **sibling publication** within the same institutional family. The boss surfacing it tells us:
 
 - The Society values NAMAH's editorial and digital approach.
 - Our archive should feel like a **family member** of the NAMAH site (shared lineage, shared parent links in the footer, harmonious visual language) — but **clearly distinct** in purpose and superior in execution.

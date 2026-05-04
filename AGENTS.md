@@ -27,7 +27,7 @@ The web app is Next.js 15.5.15, React 19, TypeScript, Tailwind CSS 4, Framer Mot
 
 The mobile app is an Expo skeleton with four tabs: Home, Browse, Search, Library. It is not feature-complete.
 
-Local source PDFs exist in `AIM 2026/` and `Agnisikha 2026/` with 8 real PDFs total.
+Local source PDFs exist in `AIM 2026/` and `Agnishikha 2026/` with 8 real PDFs total.
 
 ## Run Locally
 

@@ -17,7 +17,7 @@ A modern, beautiful digital archive platform to preserve and provide free public
 - **Admin Team**: Multiple admins (no role hierarchy — all admins have equal access)
 
 ### Why
-The magazines — especially **All India Magazine** (English) and **Agnisikha** (Hindi) — contain excerpts from the writings of Sri Aurobindo and The Mother on spirituality, philosophy, and self-improvement. Archives go back to ~1990. This platform preserves them digitally and makes them universally accessible with modern search, browse, and reading experiences.
+The magazines — especially **All India Magazine** (English) and **Agnishikha** (Hindi) — contain excerpts from the writings of Sri Aurobindo and The Mother on spirituality, philosophy, and self-improvement. Archives go back to ~1990. This platform preserves them digitally and makes them universally accessible with modern search, browse, and reading experiences.
 
 ### Platforms
 - **Web App** (primary) — responsive for desktop, tablet, mobile browsers
@@ -32,7 +32,7 @@ The magazines — especially **All India Magazine** (English) and **Agnisikha** 
 | Magazine Name | Language | Status |
 |---|---|---|
 | All India Magazine (AIM) | English | Primary |
-| Agnisikha | Hindi | Active |
+| Agnishikha | Hindi | Active |
 | (TBD) | Tamil | Active |
 | (TBD) | Marathi | Active |
 | (TBD) | Bengali | Active |
@@ -113,55 +113,72 @@ Magazine
 ### 4.1 What's Built and Working
 
 #### Public Web Pages (All Live)
-- **Homepage** — hero section, animated bookshelf, features grid, archive stats, CTA
-- **Browse page** — collapsible side filter panel (5 multi-select sections: Year, Month, Magazine, Language, Subjects with live facet counts), grid/list view toggle (sortable list table on md+), URL-synced filter state (`?year=…&subject=…&view=list&page=2`), pagination with smooth scroll, active filter chips, animated row stagger, `localStorage`-remembered panel state, drawer overlay on mobile
-- **Issue detail page** — cover thumbnail, metadata, topics (alphabetically sorted, link to `?subject=`), download/read/bookmark buttons
-- **In-app PDF reader** — page navigation, zoom, fullscreen, page scrubber, bookmark
-- **Search page** — full-text search with highlighted snippets, page numbers, advanced filters
-- **Bookmarks page** — saved issues list with clear all (persisted via Zustand + localStorage)
+- **Homepage** — hero section, animated bookshelf, **Continue Reading shelf** (with theme), features grid, archive stats, CTA
+- **Browse page** — collapsible side filter panel (5 multi-select sections: Year, Month, Magazine, Language, Subjects with live facet counts), grid/list view toggle (sortable list table on md+), URL-synced filter state (`?year=…&subject=…&view=list&page=2`), pagination with smooth scroll, active filter chips, animated row stagger, `localStorage`-remembered panel state, drawer overlay on mobile. **Grid is responsive 2/3/3/4/4/5 across breakpoints up to 2xl. Theme Title displayed below Magazine Title in both card and list view (gold-flame gradient with vertical accent bar).**
+- **Issue detail page** — cover thumbnail, **Theme Title prominently below the Magazine Title with accent bar**, metadata, topics (alphabetically sorted, link to `?subject=`), download/read/bookmark buttons
+- **In-app PDF reader** — page navigation, zoom, fullscreen, page scrubber, bookmark, contextual back-link, **info drawer (shows theme + cover + progress + topics)**
+- **Search page** — full-text OCR search **plus theme/title/topic metadata search merged into one ranked list**, highlighted snippets, page numbers, advanced filters
+- **Bookmarks page** — saved issues list with clear all (persisted via Zustand + localStorage). Same grid breakpoints as Browse (2/3/3/4/4/5).
 - **Header** — responsive nav, mobile hamburger menu, search/bookmark icons (bookmark icon shows live count badge)
 - **Footer** — links, branding, discreet admin link
-- **Issue card** (used on browse + bookmarks): whole-card click navigates to reader, hover lift via Framer, native Web Share button (with cover thumbnail attached as a `File` via `navigator.share({files})`, clipboard fallback with green ✓ feedback)
+- **Issue card** (used on browse + bookmarks): whole-card click navigates to reader, hover lift via Framer, **Theme Title shown below Magazine Title (gold-flame gradient + accent bar)**, native Web Share button (with cover thumbnail attached as a `File` via `navigator.share({files})`, clipboard fallback with green ✓ feedback)
 
 #### Admin Panel (All Live)
 - **Login** (`/admin/login`) — email + password authentication, session cookies
+- **Sidebar** — collapsible (icons-only rail at 64px when collapsed) and resizable (drag right edge, 200–360px range). Both states persisted to `localStorage` under `aim-admin-sidebar`. Toggle is a flame-bordered chevron button at the top of the sidebar header. Mobile keeps the existing hamburger drawer untouched. See `apps/web/src/app/admin/(dashboard)/layout.tsx`.
 - **Dashboard** (`/admin`) — stat cards (magazines, issues, reads, downloads), popular issues, quick links
 - **Magazine management** (`/admin/magazines`) — add/edit/delete with language selector
-- **Issue management** (`/admin/issues`) — table with search, filters (magazine, year), sortable columns (title, date, reads, size), inline row editing (title, topics, description, month, year), publish/unpublish toggle, delete
-- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, auto-generated title, topics, description, uploads to Supabase Storage + OCR indexing + auto-generated cover thumbnail
+- **Issue management** (`/admin/issues`) — Each issue is rendered as **a 2-row card unit** (one `<tbody>` per issue) with:
+  - **Cover thumbnail in the leftmost column** (36×48 px) with a portal-rendered hover preview (240×320 px) that escapes the table's `overflow-x-auto` clipping via `react-dom`'s `createPortal` — see `CoverThumbnail` in `issues/page.tsx`. Position auto-clamps to the viewport.
+  - **Main row** with checkbox, cover, Magazine Title, Theme Title (gold-flame gradient column at lg+), Magazine (2xl+ only), Topic Tags, Reads/Downloads/Size/Modified (numeric columns hidden at smaller breakpoints).
+  - **Actions row** beneath each main row — Cover · Duplicate · Status (publish toggle with emerald/amber dot) grouped in a soft-bordered toolbar; **Edit** as a primary flame-gradient button; **Delete** kept separate with red-tinted hover.
+  - **Hover effect**: each issue card scales by 1.006, lifts with a soft gold-flame shadow, and z-raises so the lift doesn't get clipped. Smooth 200ms ease-out.
+  - **Edit panel** slides down inline below the issue (no modal): same single-column layout as the upload form (Magazine / Month / Year, Magazine Title, Theme Title, Topic Tags, Description). Save button stays disabled until the form is dirty (`isDirty` memo). Auto-regenerates Magazine Title when magazine/month/year change (skips the first render so a customised title isn't clobbered on open). Click outside the form (on the tinted band) or press Esc to close. Topic Tags dropdown uses `transitionEnd` to flip `overflow: visible` after the slide-in completes so it doesn't clip the dropdown. See `EditRowForm` in `issues/page.tsx`.
+  - Bulk select, status filter, topic filter, CSV export, bulk upload, duplicate-issue prefill, last-modified column, sortable columns (Magazine Title, Reads, Downloads, Size, Modified).
+- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, optional Cover Image override (auto-detects spread vs single, lets admin download front/back halves as PDFs), Magazine / Month / Year, **Magazine Title** (auto-generated), **Theme Title** (the issue's overarching theme — e.g. "Sunlit Path", "सूर्यलोकित पथ"), **Topic Tags**, Description. Uploads to Supabase Storage + OCR indexing + auto-generated cover thumbnail.
 - **Topics** — managed dropdown (component: `components/admin/tags-input.tsx`) used in upload + inline edit. Pill-style with click-to-toggle, add new (Enter or +Add button), inline rename via pencil icon (renames across every issue), delete via trash icon (removes from every issue with usage-count confirmation). All topic mutations sort alphabetically and dedupe.
 
-#### API Routes (19 endpoints)
+#### API Routes (22 endpoints)
 | Route | Methods | Purpose |
 |---|---|---|
 | `/api/magazines` | GET | List all magazines |
 | `/api/issues` | GET | List issues with filters (magazine, year, **month**, language, topic) + pagination |
 | `/api/issues/[id]` | GET | Single issue detail + increment read count |
-| `/api/search` | GET | Full-text search (RPC) with ILIKE fallback |
+| `/api/issues/[id]/download` | GET | Increment download count, redirect to PDF URL |
+| `/api/search` | GET | OCR full-text search (RPC) **merged in parallel with metadata search across title / theme / topics / description**. FTS results take priority for any issue; metadata-only matches are appended with `page_number: 1` and a synthesized snippet (e.g. `Theme: <highlighted>`). Returns unified `FullTextSearchResult` shape. |
 | `/api/pdf/[...path]` | GET | Serve local PDFs during development |
+| `/api/site-settings` | GET | Public-facing settings (feedback form URL, etc.) |
 | `/api/admin/auth` | POST, DELETE | Admin login/logout |
 | `/api/admin/auth/check` | GET | Verify admin session |
 | `/api/admin/stats` | GET | Dashboard statistics |
 | `/api/admin/magazines` | GET, POST | List/create magazines |
 | `/api/admin/magazines/[id]` | PUT, DELETE | Update/delete magazine |
 | `/api/admin/issues` | GET | List all issues (admin view) |
-| `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue |
+| `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue (PUT now accepts `theme`) |
+| `/api/admin/issues/[id]/cover` | POST | Replace cover image for a single issue |
 | `/api/admin/issues/[id]/reindex` | POST | Re-run OCR + regenerate thumbnail on single issue |
-| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index + thumbnail |
+| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index + thumbnail. Now accepts `theme` field. |
 | `/api/admin/reindex` | POST | Batch reindex (one issue per call) |
 | `/api/admin/thumbnails` | POST | Backfill cover thumbnails for issues missing one (one per call) |
 | `/api/admin/topics` | GET, DELETE | List all topics with usage counts / delete a topic from every issue |
 | `/api/admin/topics/rename` | POST | Rename a topic across every issue (`{from, to}`) |
+| `/api/admin/site-settings` | GET, PUT | Manage public site settings (feedback form URL, etc.) |
 
-#### Database (8 tables, Supabase PostgreSQL)
-- `magazines` — 2 records (All India Magazine, Agnisikha)
-- `issues` — 8 records (Jan–Apr 2026 × 2 magazines)
+#### Database (8 tables + `site_settings`, Supabase PostgreSQL)
+- `magazines` — 2 records (All India Magazine, Agnishikha)
+- `issues` — 8+ records (Jan–Apr 2026 × 2 magazines, Feb 2024 reference set, etc.). Now includes a nullable `theme TEXT` column for the issue's cover-printed theme.
 - `issue_search_index` — 384 pages of OCR-extracted text indexed
 - `admins` — 1 admin (admin@aurosociety.org)
 - `users` — empty (for future Google OAuth sync)
 - `user_bookmarks` — empty (for future sync)
 - `user_reading_history` — empty (for future sync)
 - `analytics_visibility` — 5 metric configs seeded
+- `site_settings` — feedback-form URLs and other public knobs
+
+**Search is theme-aware everywhere:**
+- Browse / Bookmarks page filter (`matchesQuery` in `apps/web/src/lib/use-browse-filters.ts`) checks title + **theme** + magazine name + description + topics.
+- Admin Issues page search box checks title + **theme** + topics.
+- `/api/search` (global Search page + Header search) merges OCR full-text results with metadata results that include `theme.ilike.%q%`.
 
 #### Cover Thumbnail Pipeline
 - New uploads automatically render the first page of the PDF to a 600px JPEG (~85% quality) via `pdfjs-dist` v4 + `node-canvas`, upload alongside the source PDF in the `magazines` bucket as `<slug>-thumb.jpg`, and persist the public URL on `issues.cover_image_url`.
@@ -298,7 +315,8 @@ magazines
 issues
   - id UUID PK DEFAULT uuid_generate_v4()
   - magazine_id UUID FK → magazines(id) ON DELETE CASCADE
-  - title TEXT NOT NULL
+  - title TEXT NOT NULL                   -- "Magazine Title", e.g. "Agnishikha — April 2026"
+  - theme TEXT (nullable)                 -- "Theme Title" — overarching theme printed on the cover (e.g. "Sunlit Path", "सूर्यलोकित पथ")
   - year INT NOT NULL
   - month INT NOT NULL CHECK (1-12)
   - description TEXT
@@ -374,7 +392,7 @@ d:/AIM Project/
 │   ├── All India Magazine Feb-2026.pdf
 │   ├── All India Magazine Mar-2026.pdf
 │   └── All India Magazine Apr-2026.pdf
-├── Agnisikha 2026/              # Source PDFs (not in git)
+├── Agnishikha 2026/              # Source PDFs (not in git)
 │   ├── Agnishikha Jan-2026.pdf
 │   ├── Agnishikha Feb-2026.pdf
 │   ├── Agnishikha Mar-2026.pdf
@@ -547,7 +565,12 @@ d:/AIM Project/
 - ✅ SEO optimization
 - ✅ Zod validation on all API routes
 - ✅ Deployed to Vercel (`aim-archive.vercel.app`)
-- ⬜ Custom domain (`aimarchive.aurosociety.org`)
+- ✅ **Theme Title** column on issues + display across browse, list view, detail page, reader info drawer, continue-reading shelf
+- ✅ **Admin sidebar** collapsible (icons-only rail) + drag-resizable + persisted to localStorage
+- ✅ **Admin issue table redesign** — cover thumbnails with portal-rendered hover preview; 2-row card unit per issue (main row + actions row) with hover scale/lift; inline slide-down edit form
+- ✅ **Theme-aware search** across Browse filter, Bookmarks filter, admin Issues filter, and `/api/search` (FTS + metadata in parallel)
+- ⬜ Custom domain (`aimarchive.aurosociety.org`) — DNS via Dibyanshu, planned
+- ⬜ Cloudflare R2 storage migration — approved by Kaushal Ji, account setup pending Society ownership
 
 ### Phase 2: Enhanced Web Features
 - EPUB/MOBI auto-conversion pipeline
@@ -606,14 +629,17 @@ d:/AIM Project/
 - Admin writes use service role key (bypasses RLS)
 
 ### Content Conventions
-- **Issue title format**: `{Magazine Name} — {Full Month} {Year}` — e.g. `All India Magazine — February 2024`, `Agnisikha — April 2026`.
+- **Magazine Title format** (the `title` column): `{Magazine Name} — {Full Month} {Year}` — e.g. `All India Magazine — February 2024`, `Agnishikha — April 2026`.
   - Em dash (`—`, U+2014), **not** a hyphen-minus.
   - **Full** month name only — never abbreviated (`February`, not `Feb`).
   - Space between month and year (no hyphen).
-  - Used by the upload form's auto-generation and by `scripts/retitle-issues.mjs` (one-off migration).
+  - Auto-generated by the upload form and by the inline edit form (skipping first render so a customised title isn't clobbered on open). Also used by `scripts/retitle-issues.mjs` (one-off migration).
+- **Theme Title** (the `theme` column, optional): the issue's overarching theme as printed on the cover — e.g. "Sunlit Path", "सूर्यलोकित पथ", "On Education", "Surrender". Displayed in gold-flame gradient with a small vertical accent bar across all surfaces (browse cards, list view, issue detail, reader info drawer, continue-reading shelf, admin table). Nullable — older issues without a printed theme leave this blank.
+- **No italic on theme display** — Devanagari (and other non-Latin scripts) lack a real italic font, so `font-style: italic` is faked via CSS skew. Combined with `bg-clip-text`, the skew bleeds past the original layout box and clips the rightmost glyph's gradient. Mitigation: never use `italic` on `bg-clip-text` content; pad with `pr-1` for safety. See §15 Known Issues.
 - **PDF source quality bar** (per the Feb 2024 reference issues from Hemlata Di):
   - Vector text required — never Chrome "Print to PDF" (which rasterizes everything and forces OCR).
   - Embedded images at ≥ 300 DPI (≈ 1500 px on the long side for a 5″-wide page).
+- **Cover image format**: front + back covers as separate files preferred. Combined front-back spread is also accepted — the upload form auto-detects spreads (aspect ratio > 1.1) and lets the admin pick which half is the front, then crops automatically.
 
 ---
 
@@ -651,7 +677,7 @@ d:/AIM Project/
 ## 14. Reference Files
 
 - **Logo**: `images/AIM_logo.png` — Golden flame with luminous figure
-- **Source PDFs**: `AIM 2026/` and `Agnisikha 2026/` folders (not in git)
+- **Source PDFs**: `AIM 2026/` and `Agnishikha 2026/` folders (not in git)
 - **TODO**: `TO DO LIST.md` — task tracking
 - **Roadmap**: `ROADMAP.md` — phased development plan
 - **Env example**: `apps/web/.env.local.example` — environment variable template
@@ -672,6 +698,10 @@ d:/AIM Project/
 - **Browser extensions cause hydration warnings on `<body>`**: Grammarly and similar inject `data-*` attrs before React hydrates. `app/layout.tsx` has `suppressHydrationWarning` on `<body>` to swallow that one specific (and benign) mismatch.
 - **Public-page rendering pattern**: every public route (`/browse`, `/search`, `/bookmarks`, `/issue/[id]`) is a thin **server component** that fetches initial data via `createPublicClient()` and passes it as props to a colocated `*-client.tsx` (`'use client'`). The client never re-fetches just to populate first paint — it seeds state from the server props. Each route exports `revalidate = 60` for ISR. When adding a new public page that needs data, follow this pattern; do **not** introduce a `'use client'` page that fires a `fetch` in `useEffect` on mount.
 - **Public API routes are edge-cached**: `/api/magazines` (10 min + 1 h SWR), `/api/issues` and `/api/search` (60 s + 5 min SWR) set `Cache-Control: public, s-maxage=…, stale-while-revalidate=…` so Vercel's edge serves repeat traffic without hitting Supabase. `/api/issues/[id]` is **not** cached — its GET has the side effect of incrementing `read_count`.
+- **Devanagari + `bg-clip-text` + `italic` clips the rightmost glyph**: non-Latin scripts (Hindi, Bengali, Tamil, Marathi) usually have no real italic font, so `font-style: italic` is faked by the browser as a CSS skew transform. `bg-clip-text` clips the gradient to the text's *original* layout box, not the skewed one — so the rightmost character's tail loses its gradient and visually appears cut off. **Mitigation**: never use `italic` on `bg-clip-text` content. Pad with `pr-1` as belt-and-braces. The Theme Title display follows this rule everywhere (browse cards, list view, issue detail, reader info drawer, continue-reading shelf, admin table).
+- **Animating `<tr>` and `<tbody>` heights**: Framer Motion's `height: auto` animation works on table elements when wrapped in `motion.tr`/`motion.div` with `overflow: hidden` during animation. The admin Issues edit panel uses `transitionEnd: { overflow: 'visible' }` on the `animate` prop so dropdowns inside the panel (e.g. Topic Tags) aren't clipped after the slide-in completes. See `EditRowForm` in `apps/web/src/app/admin/(dashboard)/issues/page.tsx`.
+- **`overflow-x-auto` implicitly clips overflow-y**: per CSS spec, setting `overflow-x` to anything other than `visible` makes `overflow-y` compute to `auto` rather than visible. The admin Issues table wrapper has `overflow-x-auto` for narrow viewports, which means hover previews positioned absolutely inside table rows get vertically clipped at the wrapper's edges. **Mitigation**: render hover previews via `react-dom`'s `createPortal` to `document.body` and position them with `position: fixed` based on `getBoundingClientRect()`. Auto-clamp vertically against the viewport so the preview stays fully on-screen for top/bottom rows. See `CoverThumbnail` in the admin Issues page.
+- **Card-style hover on table rows**: each issue is wrapped in its own `<tbody>` (HTML5 allows multiple tbodies per table) so a `transform: scale()` and `box-shadow` on hover applies as a unit to both the main row and the actions row. `relative` + `z-10` on hover prevents the elevated card from being clipped by adjacent rows. Border separation between issues comes from `border-b border-gray-100` on each tbody (with `last:border-b-0` to keep the bottom of the table clean).
 
 ---
 

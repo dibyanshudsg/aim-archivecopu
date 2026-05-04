@@ -75,13 +75,37 @@
 - [ ] Last modified date per row
 - [ ] Confirmation toast after edit/delete/upload
 
-### 1.5 Polish & Deploy ⬜ UP NEXT
-- [ ] SEO optimization (meta tags, sitemap, structured data)
+### 1.5 Polish & Deploy ✅ MOSTLY COMPLETE
+- [x] SEO optimization (meta tags, sitemap, structured data)
 - [ ] Performance audit (Lighthouse score)
 - [ ] Accessibility check
-- [ ] Input validation with Zod on all API routes
-- [ ] Deploy to Vercel
-- [ ] Connect domain (aimarchive.aurosociety.org)
+- [x] Input validation with Zod on all API routes
+- [x] Deploy to Vercel (`aim-archive.vercel.app`)
+- [ ] Connect domain (aimarchive.aurosociety.org) — DNS via Dibyanshu, planned
+
+### 1.7 Theme Title + Admin Redesign ✅ COMPLETE (May 2026)
+> Goal: First-class support for each issue's overarching theme + admin polish.
+
+- [x] `theme TEXT` column on issues (migration `00005_add_theme_column.sql`)
+- [x] `Theme Title` field added to admin upload form + edit panel
+- [x] Renamed Title → Magazine Title, Topics → Topic Tags across all admin and public surfaces
+- [x] Theme display across browse cards, browse list view, issue detail page, reader info drawer, continue-reading shelf, admin issues table — gold-flame gradient with vertical accent bar; no italic (Devanagari clipping fix)
+- [x] Theme-aware search across Browse filter, Bookmarks filter, admin Issues filter, and `/api/search` (FTS + metadata in parallel)
+- [x] Admin sidebar: collapsible (icons-only rail) + drag-resizable + persisted to localStorage
+- [x] Admin issues table redesign: cover thumbnails with portal-rendered hover preview; 2-row card unit per issue (main row + actions row); hover scale + lift; inline slide-down edit form (centered card with flame border); Save button gated by isDirty memo; auto-regenerate Magazine Title on dropdown change
+- [x] Browse + Bookmarks grid breakpoints unified (2/3/3/4/4/5 across responsive tiers)
+
+### 1.8 Cloudflare R2 Storage Migration ⬜ UP NEXT
+> Goal: Replace Supabase Storage with Cloudflare R2 for zero egress fees + better India delivery. Approved by Kaushal Ji (May 2026).
+
+- [ ] Society-owned Cloudflare account + R2 bucket creation (coordinated with Dibyanshu)
+- [ ] Code refactor: `r2-client.ts`, refactored upload/delete/thumbnail flows
+- [ ] Migration script to copy existing PDFs/thumbnails from Supabase Storage to R2 + rewrite DB URLs
+- [ ] Vercel env vars + production deploy
+- [ ] Empty Supabase Storage bucket post-verification
+- [ ] (Optional) custom domain `cdn.aimarchive.aurosociety.org`
+
+See `TO DO LIST.md` § "Up Next — Migrate Storage to Cloudflare R2" for detailed checklist.
 
 ### 1.6 Public UI/UX Polish
 > Goal: Make the public archive feel calm, tactile, and easy to explore.
@@ -95,7 +119,7 @@
 - [x] Remove bookmark close animation from homepage preview
 - [x] Add polished sorting pill: Recent, Issue Date, A-Z
 - [x] Add a subtle shelf status line, e.g. `Showing 8 latest issues`
-- [x] Add magazine filter chips: All, AIM, Agnisikha
+- [x] Add magazine filter chips: All, AIM, Agnishikha
 - [x] Add a tiny page indicator inside opened preview, e.g. `4-5 / 44`
 - [ ] Tune hover timing after real-user testing
 

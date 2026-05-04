@@ -53,7 +53,6 @@
 
 ## Up Next — Admin Issues Page Enhancements
 - [x] Bulk select & bulk actions (delete, publish, unpublish) — checkbox column, master checkbox, action toolbar appears when rows selected
-- [ ] Bulk **edit topics** in batch (deferred — needs an "add / remove tag across selection" modal)
 - [x] Manual cover image upload per issue (replace-cover modal with auto-crop + orientation toggle)
 - [x] View/open link — opens public issue page in new tab
 - [x] Download PDF link — direct download from row action
@@ -193,5 +192,70 @@ Now, to be frank, among the buttons for each rows, -
 2. And, no need to put Download pdf 
 
 3. No Toast message when adding a Bookmark. See others also regarding getting toast messages.
+
+
+_____________________
+
+## Immediate Plan — Post-Kaushal-Approval (2026-05-04)
+
+> Kaushal Ji has approved: (1) Cloudflare R2 storage, (2) current Topic Tags + popular-topics structure as the categorisation layer, (3) the present upload flow, (4) `aimarchive.aurosociety.org` as the new subdomain, and (5) the long-term north star of replacing `aim.aurosociety.org` with this archive once enough issues are uploaded — with the current month's issue prominently featured on the homepage. All technical operations route through **Dibyanshu**.
+
+### Coordination — kickoff with Dibyanshu (this week)
+
+1. [ ] Reach out to Dibyanshu — single message covering R2 account, asset pipeline, and DNS (draft separately so all topics are on the table at once).
+2. [ ] Settle Cloudflare account ownership — Society-owned account (Society email + Society payment method on file); generate R2 API tokens for the app and share securely.
+3. [ ] Settle asset pipeline with Hemlata Di (via Dibyanshu) — confirm format and quality bar: vector PDFs (no Chrome Print-to-PDF), embedded images ≥300 DPI, front + back covers as separate files, language-wise file naming, agreed batch cadence.
+
+### R2 Migration — blocked on item 2
+
+4. [ ] Execute steps A–F in the **"Up Next — Migrate Storage to Cloudflare R2"** section above (already detailed: code refactor, env vars, migration script, Vercel env, Supabase cleanup, CLAUDE.md updates).
+5. [ ] Spot-check live site after migration: reader, browse, search, admin upload — confirm all PDFs and covers load from R2 URLs.
+
+### Custom Domain — parallel; blocked on Dibyanshu DNS access
+
+6. [ ] Provide Dibyanshu the exact CNAME record (`aimarchive` → `cname.vercel-dns.com` on `aurosociety.org` zone).
+7. [ ] In Vercel: Project → Settings → Domains → add `aimarchive.aurosociety.org` and verify.
+8. [ ] Wait for SSL provisioning, confirm site loads on the new domain.
+9. [ ] Update `NEXT_PUBLIC_APP_URL` env var in Vercel to `https://aimarchive.aurosociety.org` so OG/SEO tags reflect the production URL.
+10. [ ] Update `apps/web/src/app/sitemap.ts` and `robots.ts` if they reference the Vercel URL anywhere.
+
+### Admin handoff — after R2 + domain are both live
+
+11. [ ] Share admin credentials with Kaushal Ji, Hemlata Di, and Dibyanshu (separate channel — not in any reply thread).
+12. [ ] Brief written walkthrough: upload form (Magazine Title auto-generation, Theme Title, Topic Tags), edit panel (slide-down inline editor), Topics master-list management.
+
+### Homepage — "current month" prominence (sets up future legacy-site replacement)
+
+13. [ ] Design and ship a featured "current month" hero — large cover, Magazine Title + Theme Title, tagline pulled from description, prominent Read button.
+14. [ ] Position it above the existing animated bookshelf so it owns the first impression while preserving the archive's discovery layer.
+15. [ ] Build with the future state in mind — this homepage should feel comfortable as the main AIM site so the eventual cutover from `aim.aurosociety.org` is design-ready, not a redesign.
+
+### Documentation — bring CLAUDE.md and ROADMAP.md current
+
+16. [ ] Update CLAUDE.md:
+    - §3 Tech Stack — File Storage now Cloudflare R2 (post-migration)
+    - §4.1 — admin actions-row design (secondary toolbar / Edit primary / Delete destructive), edit-row-form slide-down pattern, collapsible+resizable sidebar, cover hover preview via React portal
+    - §6 Database Schema — add `theme TEXT` column to `issues`
+    - §10 Phase 1.5 — mark complete items shipped this session
+    - §15 Known Issues — Devanagari italic + `bg-clip-text` gotcha; document the no-italic + `pr-1` mitigation
+    - §15 — search now theme-aware everywhere (Browse `matchesQuery`, admin Issues filter, `/api/search` parallel metadata + FTS)
+    - §16 Deployment Flow — R2 env vars on Vercel
+17. [ ] Update ROADMAP.md — mark Phase 1.5 polish items complete, add R2 migration as a tracked item.
+
+### Ongoing — build up the archive
+
+18. [ ] Receive issue files from Hemlata Di / Dibyanshu in batches (English, Hindi, and whichever languages they have ready).
+19. [ ] For each issue: upload PDF, set Theme Title (the cover theme), manage Topic Tags, verify cover renders correctly.
+20. [ ] Periodically backfill any issues missing theme titles from older uploads.
+
+### Long-term parking — legacy site replacement (after sufficient archive size)
+
+21. [ ] When the archive is sufficiently populated, coordinate with Kaushal Ji + Dibyanshu on the cutover: change DNS so `aim.aurosociety.org` points to this archive (or 301-redirect at the parent level).
+22. [ ] Decide fate of the legacy site — sunset, archive, or redirect.
+
+### Side items surfaced earlier (low priority, separate)
+
+23. [ ] Remove the bookmark toast (per prior feedback — bookmark add/remove should not produce a toast).
+24. [ ] Audit other toasts and silence the noisy ones; keep toasts for outcomes the user can't otherwise see (uploads, deletes, batch actions).
 
 
