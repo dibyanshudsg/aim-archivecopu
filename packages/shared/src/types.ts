@@ -1,7 +1,7 @@
 /** Supported languages for magazine editions */
 export type Language = 'english' | 'hindi' | 'tamil' | 'marathi' | 'bengali' | 'other';
 
-/** Magazine edition (e.g., All India Magazine, Agnisikha) */
+/** Magazine edition (e.g., All India Magazine, Agnishikha) */
 export interface Magazine {
   id: string;
   name: string;
@@ -17,6 +17,7 @@ export interface Issue {
   id: string;
   magazineId: string;
   title: string;
+  theme: string | null;
   year: number;
   month: number;
   description: string | null;

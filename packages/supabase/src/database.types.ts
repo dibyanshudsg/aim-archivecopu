@@ -40,6 +40,7 @@ export interface Database {
           id: string;
           magazine_id: string;
           title: string;
+          theme: string | null;
           year: number;
           month: number;
           description: string | null;
@@ -60,6 +61,7 @@ export interface Database {
           id?: string;
           magazine_id: string;
           title: string;
+          theme?: string | null;
           year: number;
           month: number;
           description?: string | null;
@@ -79,6 +81,7 @@ export interface Database {
         Update: {
           magazine_id?: string;
           title?: string;
+          theme?: string | null;
           year?: number;
           month?: number;
           description?: string | null;

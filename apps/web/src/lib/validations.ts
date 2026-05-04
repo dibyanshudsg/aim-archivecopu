@@ -16,6 +16,7 @@ export const magazineSchema = z.object({
 // Issue update
 export const issueUpdateSchema = z.object({
   title: z.string().min(1, 'Title is required').max(300),
+  theme: z.string().max(300).nullable().optional(),
   description: z.string().max(5000).nullable().optional(),
   topics: z.array(z.string().max(100)).max(20).default([]),
   year: z.number().int().min(1950).max(2100),
@@ -27,6 +28,7 @@ export const issueUpdateSchema = z.object({
 export const issueUploadSchema = z.object({
   magazine_id: z.string().uuid('Invalid magazine ID'),
   title: z.string().min(1, 'Title is required').max(300),
+  theme: z.string().max(300).default(''),
   year: z.coerce.number().int().min(1950).max(2100),
   month: z.coerce.number().int().min(1).max(12),
   description: z.string().max(5000).default(''),

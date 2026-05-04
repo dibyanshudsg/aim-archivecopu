@@ -5,6 +5,7 @@ export interface ApiIssue {
   id: string;
   magazine_id: string;
   title: string;
+  theme: string | null;
   year: number;
   month: number;
   description: string | null;
@@ -125,6 +126,7 @@ export function normalizeIssue(issue: ApiIssue) {
     id: issue.id,
     magazineId: issue.magazine_id,
     title: issue.title,
+    theme: issue.theme ?? null,
     year: issue.year,
     month: issue.month,
     description: issue.description,
