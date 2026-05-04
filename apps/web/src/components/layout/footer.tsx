@@ -70,10 +70,10 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/browse?magazine=agnisikha"
+                  href="/browse?magazine=agnishikha"
                   className="text-sm text-gray-500 hover:text-flame-700"
                 >
-                  Agnisikha
+                  Agnishikha
                 </Link>
               </li>
             </ul>

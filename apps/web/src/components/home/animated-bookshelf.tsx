@@ -50,7 +50,7 @@ const sortCopy = {
 function magazineShortName(name: string) {
   const normalized = name.toLowerCase();
   if (normalized.includes('all india')) return 'AIM';
-  if (normalized.includes('agnisikha')) return 'Agnisikha';
+  if (normalized.includes('agnishikha') || normalized.includes('agnisikha')) return 'Agnishikha';
   return name;
 }
 
