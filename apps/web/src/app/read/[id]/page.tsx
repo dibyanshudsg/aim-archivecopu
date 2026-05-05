@@ -856,7 +856,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const bookmarked = isBookmarked(issue.id);
   const backTargets: Record<ReaderSource, { href: string; label: string; aria: string }> = {
     issue: { href: `/issue/${issue.id}`, label: 'Issue', aria: 'Back to issue details' },
-    shelf: { href: '/', label: 'Shelf', aria: 'Back to homepage shelf' },
+    shelf: { href: '/', label: 'Home', aria: 'Back to home' },
     browse: { href: '/browse', label: 'Browse', aria: 'Back to browse' },
     search: { href: '/search', label: 'Search', aria: 'Back to search' },
     bookmarks: { href: '/bookmarks', label: 'Saved', aria: 'Back to bookmarks' },
