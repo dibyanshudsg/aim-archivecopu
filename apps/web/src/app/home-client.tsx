@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { BookMarked, BookOpen, Search, Download, Globe } from 'lucide-react';
+import { BookMarked, BookOpen, LibraryBig, Search, Download, Globe } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
 import { ThisMonthFeatured } from '@/components/home/this-month-featured';
 import { Flame } from '@/components/home/flame';
-import type { ApiIssue } from '@/lib/api';
+import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import {
   formatRelativeTime,
   getRecentReads,
@@ -61,7 +61,8 @@ const features = [
 
 interface HomeClientProps {
   recentIssues: ApiIssue[];
-  featuredIssues: ApiIssue[];
+  carouselMagazines: ApiMagazine[];
+  carouselIssues: ApiIssue[];
 }
 
 function ContinueReadingShelf() {
@@ -164,7 +165,11 @@ function ContinueReadingShelf() {
   );
 }
 
-export function HomeClient({ recentIssues, featuredIssues }: HomeClientProps) {
+export function HomeClient({
+  recentIssues,
+  carouselMagazines,
+  carouselIssues,
+}: HomeClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -203,21 +208,23 @@ export function HomeClient({ recentIssues, featuredIssues }: HomeClientProps) {
             <motion.div variants={fadeInUp} className="mt-10 flex items-center justify-center gap-4">
               <Link
                 href="/browse"
-                className="whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)] sm:px-8 sm:py-3.5 sm:text-base"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)] sm:px-8 sm:py-3.5 sm:text-base"
               >
+                <LibraryBig className="h-4 w-4 sm:h-5 sm:w-5" />
                 Browse Archive
               </Link>
               <Link
                 href="/search"
-                className="whitespace-nowrap rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-flame-300 hover:bg-flame-50 sm:px-8 sm:py-3.5 sm:text-base"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-flame-300 hover:bg-flame-50 sm:px-8 sm:py-3.5 sm:text-base"
               >
+                <Search className="h-4 w-4 sm:h-5 sm:w-5" />
                 Search Issues
               </Link>
             </motion.div>
           </motion.div>
 
-          {/* This Month's Editions — featured per-magazine cards */}
-          <ThisMonthFeatured featured={featuredIssues} />
+          {/* This Month's Editions — focused slideshow with magazine + month filters */}
+          <ThisMonthFeatured magazines={carouselMagazines} issues={carouselIssues} />
 
           {/* Dynamic Bookshelf */}
           <motion.div
