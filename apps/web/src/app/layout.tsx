@@ -2,45 +2,39 @@ import type { Metadata } from 'next';
 import { Inter, Aboreto, Tiro_Devanagari_Hindi, Tangerine } from 'next/font/google';
 import '@/styles/globals.css';
 import { ContinueReadingFab } from '@/components/layout/continue-reading-fab';
+import { PageTransition } from '@/components/layout/page-transition';
 
+// Each next/font is given a UNIQUE CSS variable name. The composed
+// `--font-heading` / `--font-sans` / etc. tokens in `globals.css` then
+// reference these variables so the actual loaded font-family strings
+// (which next/font obfuscates, like `__Aboreto_abc123`) get substituted
+// into the cascade at render time. Without this composition, only the
+// primary font of each token would actually load — fallback fonts
+// (e.g. Tiro Devanagari Hindi for Hindi glyphs) would silently miss.
 const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-sans',
+  variable: '--font-inter',
   display: 'swap',
 });
 
-// Aboreto: elegant display serif used for all headings (sections, issue titles,
-// theme titles, etc.). Single-weight 400 — `font-synthesis: none` in globals.css
-// prevents browsers from faux-bolding it on `font-bold` utilities.
-const aboretoHeading = Aboreto({
+const aboreto = Aboreto({
   subsets: ['latin'],
   weight: ['400'],
-  variable: '--font-heading',
+  variable: '--font-aboreto',
   display: 'swap',
 });
 
-const aboretoDisplay = Aboreto({
-  subsets: ['latin'],
-  weight: ['400'],
-  variable: '--font-display',
-  display: 'swap',
-});
-
-// Devanagari fallback — Tiro Devanagari Hindi is John Hudson's purpose-designed
-// devanagari typeface, calibrated to pair gracefully with Latin display fonts
-// like Aboreto. Single weight 400, with proper Devanagari glyph proportions
-// so Hindi headings sit visually balanced alongside English ones.
 const tiroDevanagari = Tiro_Devanagari_Hindi({
   subsets: ['devanagari'],
   weight: ['400'],
-  variable: '--font-heading-deva',
+  variable: '--font-tiro-deva',
   display: 'swap',
 });
 
 const tangerine = Tangerine({
   subsets: ['latin'],
   weight: ['400', '700'],
-  variable: '--font-cursive',
+  variable: '--font-tangerine',
   display: 'swap',
 });
 
@@ -120,13 +114,17 @@ const jsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${aboretoHeading.variable} ${aboretoDisplay.variable} ${tiroDevanagari.variable} ${tangerine.variable}`}>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${inter.variable} ${aboreto.variable} ${tiroDevanagari.variable} ${tangerine.variable}`}
+    >
       <body className="bg-warm-white font-sans text-gray-900 antialiased" suppressHydrationWarning>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        {children}
+        <PageTransition>{children}</PageTransition>
         <ContinueReadingFab />
       </body>
     </html>

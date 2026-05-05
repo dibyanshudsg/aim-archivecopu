@@ -27,12 +27,15 @@
   --color-cream: #fffcf5;
   --color-warm-white: #fefefe;
 
-  /* Fonts */
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  /* Aboreto for Latin glyphs; Tiro Devanagari Hindi for Hindi/Sanskrit; serif fallback. */
-  --font-heading: 'Aboreto', 'Tiro Devanagari Hindi', ui-serif, Georgia, serif;
-  --font-display: 'Aboreto', 'Tiro Devanagari Hindi', ui-serif, Georgia, serif;
-  --font-cursive: 'Tangerine', ui-serif, cursive;
+  /* Fonts — each design-system token composes the next/font-loaded font
+     variables so Latin and Devanagari glyphs both render in their proper
+     typefaces. Without var() composition, only the first font in the chain
+     would actually load (next/font generates obfuscated font-family names
+     that don't match the literal 'Aboreto' / 'Tiro Devanagari Hindi'). */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-aboreto), var(--font-tiro-deva), ui-serif, Georgia, serif;
+  --font-display: var(--font-aboreto), var(--font-tiro-deva), ui-serif, Georgia, serif;
+  --font-cursive: var(--font-tangerine), ui-serif, cursive;
 }
 
 /* Aboreto only ships weight 400. Allow weight synthesis (so `font-medium` /
