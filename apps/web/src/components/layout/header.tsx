@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Search, BookMarked } from 'lucide-react';
+import { Search, BookMarked } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { useSearchDropdown } from '@/lib/use-search-dropdown';
+import { cn } from '@/lib/utils';
 
 const SEARCH_DROPDOWN_ROUTES = new Set(['/browse', '/bookmarks']);
 
 const navLinks = [
+  { href: '/', label: 'Home' },
   { href: '/browse', label: 'Browse' },
   { href: '/search', label: 'Search' },
   { href: '/bookmarks', label: 'Bookmarks' },
@@ -24,9 +26,54 @@ export function Header() {
   const dropdownIsOpen = useSearchDropdown((s) => s.isOpen);
   const toggleDropdown = useSearchDropdown((s) => s.toggle);
   const showDropdownTrigger = SEARCH_DROPDOWN_ROUTES.has(pathname ?? '');
+  const headerRef = useRef<HTMLElement>(null);
+
+  /* Click-outside + Escape — closes the mobile menu when the user taps any
+     content below the header or hits Esc on a hardware keyboard. The header
+     itself is excluded so taps on the hamburger toggle still work. */
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    function handlePointer(e: MouseEvent | TouchEvent) {
+      const target = e.target as Node | null;
+      if (!target || !headerRef.current) return;
+      if (!headerRef.current.contains(target)) setMobileMenuOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointer);
+    document.addEventListener('touchstart', handlePointer);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('touchstart', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [mobileMenuOpen]);
+
+  /* Auto-close the mobile menu whenever the route changes — covers the case
+     where a user taps a link and the new page mounts without us also having
+     to reach into each <Link>'s onClick. */
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  /** Active state — matches exact path or any sub-route (e.g. /browse/[id]
+   *  highlights the Browse link too). The home link ("/") is exact-match
+   *  only — otherwise it would match every route. */
+  function isLinkActive(href: string): boolean {
+    if (!pathname) return false;
+    if (href === '/') return pathname === '/';
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-flame-100 bg-white/95">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-50 border-b border-flame-100 bg-white/95"
+    >
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3">
@@ -39,15 +86,24 @@ export function Header() {
 
         {/* Desktop Nav */}
         <div className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-flame-50 hover:text-flame-700"
-            >
-              {link.label}
-            </Link>
-          ))}
+          {navLinks.map((link) => {
+            const active = isLinkActive(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                  active
+                    ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
+                    : 'text-gray-600 hover:bg-flame-50 hover:text-flame-700',
+                )}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Actions cluster — search icon shows on every viewport (when on a
@@ -71,7 +127,13 @@ export function Header() {
           )}
           <Link
             href="/bookmarks"
-            className="relative hidden h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-flame-50 hover:text-flame-700 md:flex"
+            aria-current={isLinkActive('/bookmarks') ? 'page' : undefined}
+            className={cn(
+              'relative hidden h-10 w-10 items-center justify-center rounded-lg transition-colors md:flex',
+              isLinkActive('/bookmarks')
+                ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
+                : 'text-gray-500 hover:bg-flame-50 hover:text-flame-700',
+            )}
             aria-label={`Bookmarks${bookmarkCount > 0 ? ` (${bookmarkCount})` : ''}`}
           >
             <BookMarked className="h-5 w-5" />
@@ -92,35 +154,87 @@ export function Header() {
           </Link>
           <button
             type="button"
-            className="rounded-lg p-2 text-gray-600 md:hidden"
+            className="relative h-10 w-10 rounded-lg text-gray-600 md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
           >
-            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            {/* Three-line hamburger that morphs into an X. The top + bottom
+                bars rotate ±45° while sliding to the vertical centre; the
+                middle bar fades out. The mirrored animation runs in reverse
+                when toggling closed. Width 22px / gap 6px gives a balanced
+                icon at 40×40 button size. */}
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="relative h-[18px] w-[22px]">
+                <motion.span
+                  className="absolute left-0 right-0 h-[2px] origin-center rounded-full bg-current"
+                  initial={false}
+                  animate={
+                    mobileMenuOpen
+                      ? { top: '50%', y: '-50%', rotate: 45 }
+                      : { top: 0, y: 0, rotate: 0 }
+                  }
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                />
+                <motion.span
+                  className="absolute top-1/2 left-0 right-0 h-[2px] -translate-y-1/2 rounded-full bg-current"
+                  initial={false}
+                  animate={{ opacity: mobileMenuOpen ? 0 : 1, scaleX: mobileMenuOpen ? 0.4 : 1 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                />
+                <motion.span
+                  className="absolute left-0 right-0 h-[2px] origin-center rounded-full bg-current"
+                  initial={false}
+                  animate={
+                    mobileMenuOpen
+                      ? { bottom: '50%', y: '50%', rotate: -45 }
+                      : { bottom: 0, y: 0, rotate: 0 }
+                  }
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                />
+              </span>
+            </span>
           </button>
         </div>
       </nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu — absolute-positioned overlay below the header so we can
+          animate with GPU-only transforms (translateY + opacity). Animating
+          `height: auto` triggers a layout recalc every frame and is visibly
+          janky on mid-range Android phones; transforms run on the compositor
+          thread and stay buttery. The trade-off is the menu now overlays
+          page content instead of pushing it down — which is the standard
+          pattern for native-app-style mobile menus anyway. */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden border-t border-flame-100 bg-white md:hidden"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            style={{ willChange: 'transform, opacity' }}
+            className="absolute left-0 right-0 top-full origin-top border-t border-flame-100 bg-white shadow-lg md:hidden"
           >
             <div className="space-y-1 px-6 py-4">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 transition-colors hover:bg-flame-50 hover:text-flame-700"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                const active = isLinkActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'block rounded-lg px-4 py-3 text-base font-medium transition-colors',
+                      active
+                        ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
+                        : 'text-gray-700 hover:bg-flame-50 hover:text-flame-700',
+                    )}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
             </div>
           </motion.div>
         )}
