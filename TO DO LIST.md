@@ -202,8 +202,15 @@ _____________________
 
 ### Coordination — kickoff with Dibyanshu (this week)
 
-1. [ ] Reach out to Dibyanshu — single message covering R2 account, asset pipeline, and DNS (draft separately so all topics are on the table at once).
-2. [ ] Settle Cloudflare account ownership — Society-owned account (Society email + Society payment method on file); generate R2 API tokens for the app and share securely.
+1. [x] Reach out to Dibyanshu — single message covering R2 account, asset pipeline, and DNS (sent 2026-05-04).
+2. [~] Settle Cloudflare account ownership — Society-owned account (Society email + Society payment method on file); generate R2 API tokens for the app and share securely. **In progress (2026-05-05)** — Dibyanshu is securing the Cloudflare R2 account on Society infrastructure and will share credentials when ready. **Expected handover (5 values):**
+    - `R2_ACCOUNT_ID` (32-char hex, visible in Cloudflare dashboard sidebar or in the API token modal)
+    - `R2_ACCESS_KEY_ID`
+    - `R2_SECRET_ACCESS_KEY`
+    - `R2_BUCKET` — should be `aim-archive`, located in **Asia-Pacific (APAC)**, default storage class **Standard**
+    - `R2_PUBLIC_BASE_URL` — the public r2.dev URL after enabling public access (looks like `https://pub-XXXXXXXX.r2.dev`)
+    - **Permissions:** the API token must have **Object Read & Write** scoped to the `aim-archive` bucket only (not all-buckets)
+    - **Channel:** any private channel — Signal, encrypted email, or even split across two messages — never in a public thread or commit.
 3. [ ] Settle asset pipeline with Hemlata Di (via Dibyanshu) — confirm format and quality bar: vector PDFs (no Chrome Print-to-PDF), embedded images ≥300 DPI, front + back covers as separate files, language-wise file naming, agreed batch cadence.
 
 ### R2 Migration — blocked on item 2
@@ -226,9 +233,9 @@ _____________________
 
 ### Homepage — "current month" prominence (sets up future legacy-site replacement)
 
-13. [ ] Design and ship a featured "current month" hero — large cover, Magazine Title + Theme Title, tagline pulled from description, prominent Read button.
-14. [ ] Position it above the existing animated bookshelf so it owns the first impression while preserving the archive's discovery layer.
-15. [ ] Build with the future state in mind — this homepage should feel comfortable as the main AIM site so the eventual cutover from `aim.aurosociety.org` is design-ready, not a redesign.
+13. [x] Ship a featured "This Month's Editions" section — side-by-side cards with cover, Magazine Title + Theme Title, description, Read button (deployed 2026-05-04, `0e8a2a9`).
+14. [x] Position it above the animated bookshelf so it owns the first impression while preserving the archive's discovery layer.
+15. [~] Evolve the featured section into a **slideshow/carousel per Kaushal Ji's 2026-05-05 suggestion** — one issue per slide for maximum readability, two filter strips side by side (magazine + month) for free toggling, gentle 8s auto-rotation paused on hover, replaces the current side-by-side cards. Build with the future state in mind so the homepage can step in as the main AIM site when the legacy cutover happens.
 
 ### Documentation — bring CLAUDE.md and ROADMAP.md current
 
@@ -257,5 +264,18 @@ _____________________
 
 23. [ ] Remove the bookmark toast (per prior feedback — bookmark add/remove should not produce a toast).
 24. [ ] Audit other toasts and silence the noisy ones; keep toasts for outcomes the user can't otherwise see (uploads, deletes, batch actions).
+
+### Multi-language fonts — when Tamil / Bengali / Marathi editions arrive
+
+> The font cascade currently uses `Aboreto` (Latin display) + `Tiro Devanagari Hindi` (Devanagari) for headings, composed via per-font CSS variables in `apps/web/src/styles/globals.css` (`--font-heading: var(--font-aboreto), var(--font-tiro-deva), …`). When additional Indic-language editions are uploaded, drop their script-specific font into the same chain.
+
+25. [ ] **Tamil** — load `Tiro Tamil` from `next/font/google` in `apps/web/src/app/layout.tsx` with a unique variable like `--font-tiro-tamil`, add to the html className, then extend `--font-heading` and `--font-display` in `globals.css`:
+    ```css
+    --font-heading: var(--font-aboreto), var(--font-tiro-deva), var(--font-tiro-tamil), ui-serif, Georgia, serif;
+    ```
+26. [ ] **Bengali** — load `Tiro Bangla` (or `Noto Serif Bengali` if Tiro Bangla isn't available) with `--font-tiro-bangla`, append to the chain.
+27. [ ] **Marathi** — Marathi uses Devanagari script, so `Tiro Devanagari Hindi` already covers it. No font work needed; the magazine row + uploads are enough.
+28. [ ] **Why the composition matters** — `next/font/google` generates obfuscated font-family names (e.g. `__Tiro_Tamil_abc123`), so `font-family: 'Tiro Tamil'` as a literal in CSS won't match anything. Each font must reference its own variable, and the design-system token (`--font-heading`) composes them all in one cascade so the browser picks the right font per-character.
+29. [ ] Verify on each magazine's detail page after upload — Tamil / Bengali / Marathi theme titles should render with correct script-specific glyphs, not system fallbacks.
 
 
