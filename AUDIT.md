@@ -18,10 +18,13 @@
 
 | Date | Build | Route | Device | Perf | A11y | Best | SEO | Notes |
 |---|---|---|---|---|---|---|---|---|
-| _pending_ | — | `/` | Mobile | — | — | — | — | First baseline run |
-| _pending_ | — | `/browse` | Mobile | — | — | — | — | |
-| _pending_ | — | `/read/[id]` | Mobile | — | — | — | — | |
-| _pending_ | — | `/` | Desktop | — | — | — | — | |
+| 2026-05-09 | a68f4a7 | `/` | Mobile | 70 | 100 | 100 | 100 | Baseline. Top opportunity: unused JS (~600ms — react-pdf eager-loaded for carousel). |
+| 2026-05-09 | a68f4a7 | `/browse` | Mobile | 62 | 98 | 100 | 100 | Baseline. LCP + render-blocking are the levers. |
+| 2026-05-09 | a68f4a7 | `/search` | Mobile | 74 | 98 | 100 | 100 | Baseline. |
+| 2026-05-09 | a68f4a7 | `/issue/[id]` | Mobile | 81 | 94 | 100 | 92 | Baseline. |
+| 2026-05-09 | a68f4a7 | `/read/[id]` | Mobile | 50 | 88 | 100 | 92 | Baseline — worst route. Perf hit by react-pdf bundle + LCP delay; a11y hit by color-contrast, unlabeled controls, missing `<main>` landmark. |
+| 2026-05-09 | a68f4a7 | `/admin/login` | Mobile | 97 | 98 | 100 | 61 | Baseline. SEO 61 is **by design** — admin login carries `robots: noindex` and no canonical (intentional). |
+| 2026-05-09 | a68f4a7 | `/` | Desktop | 78 | 100 | 100 | 100 | Baseline. |
 
 ---
 
@@ -35,6 +38,14 @@
 | Low | Continue-reading shelf uses `<img alt="">` (intentional — title text provides context). Verify SR users get sufficient context from sibling text. | [home-client.tsx:123-127](apps/web/src/app/home-client.tsx#L123-L127) | Open |
 | Low | Admin login email/password inputs have `<label htmlFor>` ✓ but lack `autocomplete="email"` / `autocomplete="current-password"`. Helps password managers. | [admin/login/page.tsx:65-85](apps/web/src/app/admin/login/page.tsx#L65-L85) | Open |
 | Low | Carousel keyboard ←/→ only works when focus is inside the section. Discoverable enough but consider auto-focusing the carousel region after first tab. | [this-month-featured.tsx:167-181](apps/web/src/components/home/this-month-featured.tsx#L167-L181) | Open |
+
+### From Lighthouse baseline (2026-05-09)
+
+| Severity | Issue | Route | Status |
+|---|---|---|---|
+| High | `/read/[id]` color-contrast failure — Lighthouse flags one or more text/background pairs below WCAG AA. Likely the page-scrubber or zoom controls on the dark reader chrome. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
+| High | `/read/[id]` form element(s) missing associated `<label>` — likely the page-number input or zoom select in the reader header. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
+| High | `/read/[id]` document missing `<main>` landmark — the reader page wraps everything in `<div>` instead of `<main>`. SR users have no skip target. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
 
 ---
 
@@ -56,6 +67,20 @@
 | Medium | Inline style override on search input (`outline: none`, `boxShadow: none`) — fragile pattern for replacing the global focus ring. Move to a Tailwind class with explicit replacement focus styling. | [header-search-dropdown.tsx:65-67](apps/web/src/components/browse/header-search-dropdown.tsx#L65-L67) | **Fixed** 2026-05-08 — same change as Accessibility/High above. |
 | Low | Continue-reading shelf uses bare `<img>` instead of `next/image`. Tiny thumbnails, low impact, but inconsistent with rest of codebase. | [home-client.tsx:123-127](apps/web/src/app/home-client.tsx#L123-L127) | Open |
 | Low | Issue card share/bookmark closures capture `issue` + `copied` state. Negligible memory at current scale; refactor only if hot-path. | [issue-card.tsx:109-140](apps/web/src/components/magazine/issue-card.tsx#L109-L140) | Open |
+
+---
+
+## Performance (Lighthouse baseline, 2026-05-09)
+
+> Recurring opportunities across multiple routes. Tackle by impact (largest savings × routes affected) rather than per-route.
+
+| Severity | Issue | Routes affected | Notes |
+|---|---|---|---|
+| High | `unused-javascript` — react-pdf + pdfjs worker shipped on first load even when the carousel isn't visible. ~600 ms savings on `/`, ~300 ms on `/read/[id]`, smaller on others. | `/`, `/read/[id]`, `/browse`, `/search` | Dynamic-import the carousel reader (`next/dynamic` with `ssr: false`) so it loads only when the section enters the viewport. |
+| High | LCP delayed across `/`, `/browse`, `/read/[id]` — Lighthouse scores 0 on LCP for all three. Likely cover thumbnails fetched without `priority` and with poor `sizes` hint. | `/`, `/browse`, `/read/[id]` | Audit `<Image>` usage on hero/cover positions; add `priority` to above-the-fold covers and right-size `sizes`. |
+| Medium | Render-blocking requests — common across all routes; likely Google Fonts CSS not subset/preloaded optimally. | All | Verify `next/font/google` config for Inter + Playfair Display includes `display: 'swap'` and only used weights. |
+| Medium | `legacy-javascript-insight` on `/` — polyfills shipped that modern browsers don't need. | `/` | Likely a transitive dep; check `next.config.ts` for `swcMinify`/transpile config. |
+| Low | `forced-reflow-insight` on `/browse` — layout-thrashing loop, probably the filter panel measurement on toggle. | `/browse` | Profile with DevTools Performance tab; batch reads/writes with `requestAnimationFrame`. |
 
 ---
 
