@@ -20,6 +20,11 @@ import {
   Image as ImageIcon,
   FileSpreadsheet,
   Upload,
+  Download,
+  FileText,
+  RotateCw,
+  ExternalLink,
+  FileUp,
 } from 'lucide-react';
 import { cn, formatFileSize, formatMonthYear } from '@/lib/utils';
 import { MONTH_NAMES } from '@aim-archive/shared';
@@ -43,6 +48,7 @@ interface Issue {
   pdf_url: string;
   cover_image_url: string | null;
   updated_at: string | null;
+  page_count: number | null;
   magazines: { name: string; language: string };
 }
 
@@ -173,6 +179,16 @@ export default function AdminIssuesPage() {
     setPage(1);
   }, [search, filterMagazine, filterYear, filterStatus, filterTopic]);
 
+  // Keep the open edit panel in sync with the latest issue data after refetches
+  // (e.g. after a PDF replace, file_size_bytes / page_count update).
+  useEffect(() => {
+    setEditingIssue((prev) => {
+      if (!prev) return prev;
+      const fresh = issues.find((i) => i.id === prev.id);
+      return fresh ?? prev;
+    });
+  }, [issues]);
+
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
@@ -191,7 +207,6 @@ export default function AdminIssuesPage() {
     if (!ok) return;
     const res = await fetch(`/api/admin/issues/${issue.id}`, { method: 'DELETE' });
     if (res.ok) {
-      toast.success('Issue deleted');
       setSelected((s) => {
         const next = new Set(s);
         next.delete(issue.id);
@@ -210,7 +225,6 @@ export default function AdminIssuesPage() {
       body: JSON.stringify({ ...issue, is_published: !issue.is_published }),
     });
     if (res.ok) {
-      toast.success(issue.is_published ? 'Unpublished' : 'Published');
       loadData();
     } else {
       toast.error('Failed to toggle publish');
@@ -484,8 +498,8 @@ export default function AdminIssuesPage() {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+            <table className="w-full border-collapse text-left text-sm">
               <thead className="border-b border-gray-100 bg-gray-50/50">
                 <tr>
                   <th className="w-10 px-3 py-3">
@@ -515,19 +529,17 @@ export default function AdminIssuesPage() {
                   <tbody
                     key={issue.id}
                     className={cn(
-                      'group origin-center transition-all duration-200 ease-out last:border-b-0',
+                      'group origin-center transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0',
                       'border-b border-gray-100',
-                      'hover:relative hover:z-10 hover:scale-[1.006] hover:shadow-[0_14px_36px_rgba(190,140,46,0.14)]',
+                      'hover:relative hover:z-10 hover:scale-[1.006] hover:bg-gray-50/40 hover:shadow-[0_14px_36px_rgba(190,140,46,0.14)]',
                       editingIssue?.id === issue.id &&
                         'relative z-10 shadow-[0_14px_36px_rgba(229,86,31,0.12)]',
                     )}
                   >
                   <tr
                     className={cn(
-                      'transition-colors',
-                      editingIssue?.id === issue.id
-                        ? 'bg-gradient-to-r from-gold-50/60 to-flame-50/60'
-                        : 'group-hover:bg-gray-50/40',
+                      editingIssue?.id === issue.id &&
+                        'bg-gradient-to-r from-gold-50/60 to-flame-50/60',
                     )}
                   >
                         <td className="px-3 py-4">
@@ -1143,7 +1155,6 @@ function EditRowForm({
     });
     setSubmitting(false);
     if (res.ok) {
-      toast.success('Issue updated');
       onSaved();
     } else {
       const data = await res.json().catch(() => ({}));
@@ -1155,7 +1166,7 @@ function EditRowForm({
     <form
       onSubmit={submit}
       onClick={(e) => e.stopPropagation()}
-      className="mx-auto my-5 max-w-2xl cursor-default space-y-5 rounded-2xl border-2 border-flame-300 bg-white px-6 py-6 shadow-[0_10px_30px_rgba(190,140,46,0.12)]"
+      className="mx-auto my-5 max-w-5xl cursor-default rounded-2xl border-2 border-flame-300 bg-white px-6 py-6 shadow-[0_10px_30px_rgba(190,140,46,0.12)]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -1172,101 +1183,108 @@ function EditRowForm({
         </button>
       </div>
 
-      {/* Magazine & Date */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Magazine</label>
-          <select
-            value={form.magazine_id}
-            onChange={(e) => setForm({ ...form, magazine_id: e.target.value })}
-            required
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-          >
-            {magazines.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+      {/* Two-column body: PDF management (left) + metadata fields (right) */}
+      <div className="mt-5 grid gap-6 lg:grid-cols-[300px_1fr]">
+        <PdfManagementPanel issue={issue} onChanged={onTopicsRefetch} />
+
+        <div className="space-y-5">
+          {/* Magazine & Date */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Magazine</label>
+              <select
+                value={form.magazine_id}
+                onChange={(e) => setForm({ ...form, magazine_id: e.target.value })}
+                required
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+              >
+                {magazines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Month</label>
+              <select
+                value={form.month}
+                onChange={(e) => setForm({ ...form, month: Number(e.target.value) })}
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+              >
+                {Object.entries(MONTH_NAMES).map(([n, name]) => (
+                  <option key={n} value={n}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Year</label>
+              <input
+                type="number"
+                value={form.year}
+                onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
+                required
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+              />
+            </div>
+          </div>
+
+          {/* Magazine Title */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Magazine Title</label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              required
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+            />
+          </div>
+
+          {/* Theme Title */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Theme Title <span className="text-xs font-normal text-gray-400">(the overarching theme of this issue)</span>
+            </label>
+            <input
+              type="text"
+              value={form.theme}
+              onChange={(e) => setForm({ ...form, theme: e.target.value })}
+              placeholder="e.g. The Psychic Being, Surrender, On Education"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+            />
+          </div>
+
+          {/* Topic Tags */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Topic Tags</label>
+            <TagsInput
+              value={form.topics}
+              onChange={(topics) => setForm({ ...form, topics })}
+              allTopics={allTopics}
+              onTopicsRefetch={onTopicsRefetch}
+              placeholder="Click to manage topic tags"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3}
+              placeholder="Brief description of this issue..."
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+            />
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Month</label>
-          <select
-            value={form.month}
-            onChange={(e) => setForm({ ...form, month: Number(e.target.value) })}
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-          >
-            {Object.entries(MONTH_NAMES).map(([n, name]) => (
-              <option key={n} value={n}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Year</label>
-          <input
-            type="number"
-            value={form.year}
-            onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
-            required
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-          />
-        </div>
-      </div>
-
-      {/* Magazine Title */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Magazine Title</label>
-        <input
-          type="text"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          required
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-        />
-      </div>
-
-      {/* Theme Title */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
-          Theme Title <span className="text-xs font-normal text-gray-400">(the overarching theme of this issue)</span>
-        </label>
-        <input
-          type="text"
-          value={form.theme}
-          onChange={(e) => setForm({ ...form, theme: e.target.value })}
-          placeholder="e.g. The Psychic Being, Surrender, On Education"
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-        />
-      </div>
-
-      {/* Topic Tags */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Topic Tags</label>
-        <TagsInput
-          value={form.topics}
-          onChange={(topics) => setForm({ ...form, topics })}
-          allTopics={allTopics}
-          onTopicsRefetch={onTopicsRefetch}
-          placeholder="Click to manage topic tags"
-        />
-      </div>
-
-      {/* Description */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
-        <textarea
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          rows={3}
-          placeholder="Brief description of this issue..."
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-        />
       </div>
 
       {/* Footer actions */}
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-5">
         <button
           type="button"
           onClick={onCancel}
@@ -1284,5 +1302,262 @@ function EditRowForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// ---------- PDF management side panel ----------
+function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () => void }) {
+  const { toast, confirm } = useUI();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexStatus, setReindexStatus] = useState<string>('Re-running OCR…');
+  const [reindexProgress, setReindexProgress] = useState<{ page: number; total: number } | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const filename = useMemo(() => {
+    try {
+      const decoded = decodeURIComponent(issue.pdf_url.split('?')[0]);
+      const last = decoded.split('/').pop() || 'document.pdf';
+      return last;
+    } catch {
+      return 'document.pdf';
+    }
+  }, [issue.pdf_url]);
+
+
+  async function handleDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(issue.pdf_url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Defer revoke so Firefox gets a chance to start the download
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      toast.error(err instanceof Error ? `Download failed: ${err.message}` : 'Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function handleReplace(file: File) {
+    if (file.type !== 'application/pdf') {
+      toast.error('Please select a PDF file');
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('PDF must be under 100MB');
+      return;
+    }
+    const ok = await confirm({
+      title: 'Replace PDF?',
+      message: `The current PDF will be overwritten with “${file.name}”. The OCR index will be rebuilt automatically. This cannot be undone.`,
+      confirmLabel: 'Replace',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setReplacing(true);
+    const fd = new FormData();
+    fd.append('pdf', file);
+    const res = await fetch(`/api/admin/issues/${issue.id}/pdf`, {
+      method: 'POST',
+      body: fd,
+    });
+    setReplacing(false);
+    if (res.ok) {
+      const data = await res.json();
+      toast.success(`PDF replaced · ${data.pages_indexed ?? 0} pages re-indexed`);
+      onChanged();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || 'Failed to replace PDF');
+    }
+  }
+
+  async function handleReindex() {
+    const pages = issue.page_count ?? 0;
+    const etaText = pages > 0 ? ` Estimated time: ~${pages * 4}s for ${pages} pages.` : '';
+    const ok = await confirm({
+      title: 'Re-run OCR?',
+      message: `The full-text index for this issue will be rebuilt from the current PDF.${etaText} You'll see live page-by-page progress.`,
+      confirmLabel: 'Reindex',
+    });
+    if (!ok) return;
+
+    setReindexing(true);
+    setReindexStatus('Starting…');
+    setReindexProgress(null);
+
+    let finished = false;
+    let lastError: string | null = null;
+    let finalPages = 0;
+
+    try {
+      const res = await fetch(`/api/admin/issues/${issue.id}/reindex`, { method: 'POST' });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (event.type === 'status') {
+            setReindexStatus(String(event.message ?? ''));
+            setReindexProgress(null);
+          } else if (event.type === 'progress') {
+            setReindexStatus('OCR');
+            setReindexProgress({
+              page: Number(event.page),
+              total: Number(event.total),
+            });
+          } else if (event.type === 'done') {
+            finished = true;
+            finalPages = Number(event.pagesIndexed ?? 0);
+          } else if (event.type === 'error') {
+            lastError = String(event.message ?? 'Reindex failed');
+          }
+        }
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Reindex failed';
+    }
+
+    setReindexing(false);
+    setReindexProgress(null);
+
+    if (finished) {
+      toast.success(`Reindexed · ${finalPages} pages`);
+      onChanged();
+    } else {
+      toast.error(lastError || 'Reindex failed');
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-2xl border border-gold-200/70 bg-gradient-to-br from-gold-50/40 to-flame-50/30 p-5">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-flame-600" />
+        <h4 className="font-heading text-sm font-bold tracking-wide text-gray-900 uppercase">PDF File</h4>
+      </div>
+
+      {/* File summary */}
+      <div className="space-y-2.5 rounded-xl border border-gray-200/80 bg-white/70 p-3 text-xs">
+        <div className="break-all font-medium text-gray-900" title={filename}>
+          {filename}
+        </div>
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-gray-500">
+          <dt>Size</dt>
+          <dd className="text-right font-medium text-gray-700">{formatFileSize(issue.file_size_bytes)}</dd>
+          <dt>Pages</dt>
+          <dd className="text-right font-medium text-gray-700">{issue.page_count ?? '—'}</dd>
+          <dt>Reads</dt>
+          <dd className="text-right font-medium text-gray-700">{issue.read_count}</dd>
+          <dt>Downloads</dt>
+          <dd className="text-right font-medium text-gray-700">{issue.download_count}</dd>
+        </dl>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-col gap-2">
+        <Link
+          href={`/read/${issue.id}`}
+          target="_blank"
+          rel="noopener"
+          className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Open in reader
+        </Link>
+
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={downloading}
+          className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-wait disabled:opacity-60"
+        >
+          <Download className="h-3.5 w-3.5" />
+          {downloading ? 'Downloading…' : 'Download PDF'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={replacing}
+          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-3 py-2 text-xs font-semibold text-white shadow-[0_4px_14px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:cursor-wait disabled:opacity-60"
+        >
+          <FileUp className="h-3.5 w-3.5" />
+          {replacing ? 'Replacing…' : 'Replace PDF'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleReindex}
+          disabled={reindexing}
+          className="relative flex items-center justify-center gap-2 overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-wait disabled:opacity-80"
+        >
+          {reindexing && reindexProgress && (
+            <span
+              aria-hidden
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-gold-200/60 to-flame-200/60 transition-[width] duration-200"
+              style={{
+                width: `${Math.min(100, (reindexProgress.page / Math.max(1, reindexProgress.total)) * 100)}%`,
+              }}
+            />
+          )}
+          <span className="relative flex items-center gap-2">
+            <RotateCw className={cn('h-3.5 w-3.5', reindexing && 'animate-spin')} />
+            {reindexing
+              ? reindexProgress
+                ? `OCR · ${reindexProgress.page} / ${reindexProgress.total} pages`
+                : reindexStatus
+              : 'Re-run OCR'}
+          </span>
+        </button>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleReplace(f);
+            e.target.value = '';
+          }}
+          className="hidden"
+        />
+      </div>
+
+      <p className="mt-auto text-[10.5px] leading-relaxed text-gray-400">
+        Replacing the PDF overwrites the existing file in storage and rebuilds the search index. The cover thumbnail is regenerated only if it was auto-generated from page&nbsp;1.
+      </p>
+    </div>
   );
 }

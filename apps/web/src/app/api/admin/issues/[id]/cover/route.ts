@@ -16,7 +16,8 @@ function storagePathFromPdfUrl(pdfUrl: string): string | null {
   const marker = '/magazines/';
   const i = pdfUrl.indexOf(marker);
   if (i < 0) return null;
-  return pdfUrl.slice(i + marker.length);
+  // Strip any query string (e.g. cache-bust ?v=…) before returning the storage path
+  return pdfUrl.slice(i + marker.length).split('?')[0];
 }
 
 export async function POST(
