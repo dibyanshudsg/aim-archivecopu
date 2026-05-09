@@ -7,11 +7,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import { Document, Page, pdfjs } from 'react-pdf';
 import {
+  ArrowRight,
   BookOpen,
   ChevronLeft,
   ChevronRight,
   Heart,
-  Loader2,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -26,8 +26,7 @@ if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
   pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 }
 
-/** Reactive media-query hook — returns true when the current viewport
- *  matches the supplied media query. Used to switch the reader between
+/** Reactive media-query hook — switches the embedded reader between
  *  single-page (mobile/tablet) and two-page-spread (desktop, lg+). */
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
@@ -42,114 +41,130 @@ function useMediaQuery(query: string): boolean {
 }
 
 interface ThisMonthFeaturedProps {
-  /**
-   * Magazines, ordered by `created_at` ASC (AIM first, Agnishikha next, then
-   * future Tamil/Marathi/Bengali editions). Used to render magazine filter chips.
-   */
   magazines: ApiMagazine[];
-  /**
-   * Up to 3 most recent published issues per magazine, ordered newest-first
-   * within each magazine. The carousel slices and filters from this set.
-   */
+  /** Issues from the current + previous calendar months only.
+   *  Already filtered by the server query. */
   issues: ApiIssue[];
+  currentYear: number;
+  currentMonth: number; // 1-12
+  prevYear: number;
+  prevMonth: number; // 1-12
 }
 
-/** Auto-rotation cadence — gentle enough not to rush a reader. */
-const AUTO_ROTATE_MS = 5000;
-/** Swipe distance / velocity thresholds — tuned for natural touch feel. */
-const SWIPE_DISTANCE_PX = 50;
-const SWIPE_VELOCITY_PX_PER_S = 500;
-
 type MagazineFilter = 'all' | string;
-type MonthFilter = 'all' | string; // `${year}-${month}` like "2026-4"
 
-function monthKey(issue: ApiIssue): string {
-  return `${issue.year}-${issue.month}`;
+function inMonth(issue: ApiIssue, year: number, month: number) {
+  return issue.year === year && issue.month === month;
 }
 
 /**
- * "This Month's Editions" — one-issue-at-a-time slideshow with two side-by-side
- * filter strips (Magazine + Month). Auto-rotates every 8s, pauses on hover or
- * any user interaction, with arrows + dots for manual control.
+ * "This Month's Editions" — manual slideshow of issues from the current
+ * calendar month. Shows a single issue at a time with magazine filter chips
+ * and an opt-in "Show Previous Month's Editions" toggle that expands the
+ * window to include last month.
+ *
+ * No auto-rotation. Navigation is fully manual via the control bar (or
+ * keyboard ← / →). Touch swipes within the embedded reader turn pages of the
+ * issue but never switch issues — that requires the explicit nav buttons.
  */
-export function ThisMonthFeatured({ magazines, issues }: ThisMonthFeaturedProps) {
+export function ThisMonthFeatured({
+  magazines,
+  issues,
+  currentYear,
+  currentMonth,
+  prevYear,
+  prevMonth,
+}: ThisMonthFeaturedProps) {
   const prefersReducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ---------- Filter state ----------
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
-  const [monthFilter, setMonthFilter] = useState<MonthFilter>('all');
+  const [showPrevious, setShowPrevious] = useState(false);
 
-  // Sorted issue set (newest first across all magazines) — stable reference
-  // for filter derivation.
-  const sortedIssues = useMemo(
-    () =>
-      [...issues].sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year;
-        if (a.month !== b.month) return b.month - a.month;
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      }),
-    [issues],
+  // Pre-bucket the source issues by month — stable references keep the
+  // downstream memos cheap on re-render.
+  const currentMonthIssues = useMemo(
+    () => issues.filter((i) => inMonth(i, currentYear, currentMonth)),
+    [issues, currentYear, currentMonth],
+  );
+  const prevMonthIssues = useMemo(
+    () => issues.filter((i) => inMonth(i, prevYear, prevMonth)),
+    [issues, prevYear, prevMonth],
   );
 
-  // Distinct months present, newest first — feed the month filter chips.
-  const monthOptions = useMemo(() => {
-    const seen = new Map<string, { year: number; month: number }>();
-    for (const issue of sortedIssues) {
-      const key = monthKey(issue);
-      if (!seen.has(key)) seen.set(key, { year: issue.year, month: issue.month });
+  // The set of issues feeding the current view, before the magazine filter is
+  // applied. Used both to compute `visibleIssues` and to disable magazine
+  // chips that have no representation in the current month set.
+  const monthSet = useMemo(
+    () =>
+      showPrevious
+        ? [...currentMonthIssues, ...prevMonthIssues]
+        : currentMonthIssues,
+    [showPrevious, currentMonthIssues, prevMonthIssues],
+  );
+
+  const visibleIssues = useMemo(
+    () =>
+      monthSet.filter((i) =>
+        magazineFilter === 'all' ? true : i.magazine_id === magazineFilter,
+      ),
+    [monthSet, magazineFilter],
+  );
+
+  /** Magazines that have at least one issue in the current view (regardless
+   *  of the magazine filter). Drives the disabled state of magazine chips. */
+  const magazinesInView = useMemo(
+    () => new Set(monthSet.map((i) => i.magazine_id)),
+    [monthSet],
+  );
+
+  // If the toggle change leaves the active magazine filter pointing at a
+  // magazine with no issues in the new view, fall back to "All". Prevents
+  // a "stuck on disabled chip" empty state.
+  useEffect(() => {
+    if (magazineFilter !== 'all' && !magazinesInView.has(magazineFilter)) {
+      setMagazineFilter('all');
     }
-    return [...seen.entries()].map(([key, { year, month }]) => ({
-      key,
-      year,
-      month,
-      label: `${MONTH_NAMES[month as MonthIndex]} ${year}`,
-    }));
-  }, [sortedIssues]);
+  }, [magazineFilter, magazinesInView]);
 
-  // Apply both filters.
-  const filtered = useMemo(() => {
-    return sortedIssues.filter((issue) => {
-      if (magazineFilter !== 'all' && issue.magazine_id !== magazineFilter)
-        return false;
-      if (monthFilter !== 'all' && monthKey(issue) !== monthFilter) return false;
-      return true;
-    });
-  }, [sortedIssues, magazineFilter, monthFilter]);
-
-  // ---------- Carousel state ----------
+  // ---------- Slideshow state ----------
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  // `direction` drives slide-in animation direction (1 = forward, -1 = back).
+  /** 1 = forward slide animation, -1 = backward. */
   const [direction, setDirection] = useState(1);
 
-  // Reset to first slide whenever the filter set changes.
+  // Reset to the first slide whenever the visible set changes (new filter or
+  // new month-window selection).
   useEffect(() => {
     setCurrentIndex(0);
     setDirection(1);
-  }, [magazineFilter, monthFilter]);
+  }, [magazineFilter, showPrevious]);
 
-  // Clamp current index if the filtered set shrinks.
+  // Defensive clamp — if the visible set shrinks to fewer items than the
+  // current index, snap back to start.
   useEffect(() => {
-    if (currentIndex >= filtered.length) setCurrentIndex(0);
-  }, [filtered.length, currentIndex]);
+    if (currentIndex >= visibleIssues.length) setCurrentIndex(0);
+  }, [visibleIssues.length, currentIndex]);
 
-  // Auto-rotation — re-arm whenever the slide changes, pause on hover, when
-  // there's only one slide to show, or when the user prefers reduced motion.
-  useEffect(() => {
-    if (isPaused || filtered.length <= 1 || prefersReducedMotion) return;
-    const timer = setTimeout(() => {
-      setDirection(1);
-      setCurrentIndex((idx) => (idx + 1) % filtered.length);
-    }, AUTO_ROTATE_MS);
-    return () => clearTimeout(timer);
-  }, [isPaused, filtered.length, currentIndex, prefersReducedMotion]);
+  function goPrev() {
+    if (visibleIssues.length <= 1) return;
+    setDirection(-1);
+    setCurrentIndex(
+      (idx) => (idx - 1 + visibleIssues.length) % visibleIssues.length,
+    );
+  }
+  function goNext() {
+    if (visibleIssues.length <= 1) return;
+    setDirection(1);
+    setCurrentIndex((idx) => (idx + 1) % visibleIssues.length);
+  }
+  function jumpTo(idx: number) {
+    if (idx === currentIndex) return;
+    setDirection(idx > currentIndex ? 1 : -1);
+    setCurrentIndex(idx);
+  }
 
-  // Keyboard navigation — ←/→ when the carousel section has focus anywhere
-  // inside it. We don't hijack the keys globally; only when the user is
-  // already engaged with the section.
+  // Keyboard navigation — only when focus is inside the carousel section.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!containerRef.current?.contains(document.activeElement)) return;
@@ -164,50 +179,69 @@ export function ThisMonthFeatured({ magazines, issues }: ThisMonthFeaturedProps)
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered.length]);
+  }, [visibleIssues.length]);
 
-  function goPrev() {
-    if (filtered.length <= 1) return;
-    setDirection(-1);
-    setCurrentIndex((idx) => (idx - 1 + filtered.length) % filtered.length);
-  }
+  // Preload neighbour issues' cover JPEGs and PDFs into the browser cache so
+  // slide changes don't flash white. Cover JPEGs are ~100 KB and warm
+  // Next/Image's cache; the PDF fetch primes HTTP cache so react-pdf hits the
+  // cache when it remounts on the next slide. Skipped on slow / save-data
+  // connections.
+  useEffect(() => {
+    if (visibleIssues.length <= 1) return;
+    const nextIdx = (currentIndex + 1) % visibleIssues.length;
+    const prevIdx =
+      (currentIndex - 1 + visibleIssues.length) % visibleIssues.length;
+    const neighbours = [visibleIssues[nextIdx], visibleIssues[prevIdx]].filter(
+      (issue, i, arr) => arr.findIndex((j) => j.id === issue.id) === i,
+    );
+    const conn = (
+      navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }
+    ).connection;
+    const slowConn =
+      !!conn &&
+      (conn.saveData === true ||
+        /(2g|slow-2g)/i.test(conn.effectiveType ?? ''));
 
-  function goNext() {
-    if (filtered.length <= 1) return;
-    setDirection(1);
-    setCurrentIndex((idx) => (idx + 1) % filtered.length);
-  }
+    const controllers: AbortController[] = [];
+    for (const issue of neighbours) {
+      if (issue.cover_image_url) {
+        const img = new window.Image();
+        img.src = issue.cover_image_url;
+      }
+      if (!slowConn) {
+        const ctrl = new AbortController();
+        controllers.push(ctrl);
+        fetch(issue.pdf_url, { signal: ctrl.signal, cache: 'force-cache' }).catch(
+          () => {
+            /* prefetch best-effort — surface no error */
+          },
+        );
+      }
+    }
+    return () => controllers.forEach((c) => c.abort());
+  }, [currentIndex, visibleIssues]);
 
-  function jumpTo(idx: number) {
-    if (idx === currentIndex) return;
-    setDirection(idx > currentIndex ? 1 : -1);
-    setCurrentIndex(idx);
-  }
+  // Bail if there's literally nothing to show across both windows. The
+  // section is hidden entirely rather than rendering an empty card on the
+  // homepage.
+  if (currentMonthIssues.length === 0 && prevMonthIssues.length === 0)
+    return null;
 
-  // Hide a filter strip when it has only one real option (so we don't show
-  // "All" + "AIM" when AIM is the only magazine, etc.).
+  const safeIndex =
+    visibleIssues.length > 0
+      ? Math.min(currentIndex, visibleIssues.length - 1)
+      : 0;
+  const currentIssue = visibleIssues[safeIndex];
+
+  const titleText = showPrevious
+    ? "This Month and Previous Month's Editions"
+    : "This Month's Editions";
+  const eyebrowText = showPrevious
+    ? `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} & ${MONTH_NAMES[prevMonth as MonthIndex]} ${prevYear}`
+    : `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear}`;
+
   const showMagazineFilter = magazines.length > 1;
-  const showMonthFilter = monthOptions.length > 1;
-
-  // Issue-switch callback handed down to SlideReader. The reader inspects
-  // swipe magnitude and decides: light swipe = page turn within the issue;
-  // hard swipe (or page-boundary swipe) = bubble up here to switch issues.
-  function handleIssueSlide(d: 1 | -1) {
-    if (d === 1) goNext();
-    else goPrev();
-  }
-
-  // ---------- Render ----------
-  if (sortedIssues.length === 0) return null;
-
-  /* Clamp inline. The effect on line 134-137 also clamps currentIndex when
-     `filtered` shrinks, but effects run AFTER render — so the very first
-     render after a filter narrows the set would otherwise read past the end
-     of the array and crash. */
-  const safeIndex = filtered.length > 0
-    ? Math.min(currentIndex, filtered.length - 1)
-    : 0;
-  const currentIssue = filtered[safeIndex];
+  const hasPrevContent = prevMonthIssues.length > 0;
 
   return (
     <motion.section
@@ -217,100 +251,97 @@ export function ThisMonthFeatured({ magazines, issues }: ThisMonthFeaturedProps)
       transition={{ delay: 0.45, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       aria-labelledby="this-month-heading"
     >
-      <header className="mb-6 text-center">
+      <header className="mb-6 px-6 text-center sm:px-0">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-flame-700">
-          This Month&apos;s Editions
+          {eyebrowText}
         </p>
-        <h2
-          id="this-month-heading"
-          className="font-heading mt-2 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 text-2xl font-medium tracking-wide text-transparent sm:text-3xl"
-        >
-          The latest editions, an offering at Thy Lotus Feet.
-        </h2>
+        {/* Title smoothly cross-fades between the "current" and
+            "current + previous" variants when the toggle changes. */}
+        <div className="relative mt-2 min-h-[2.25rem] sm:min-h-[2.75rem]">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.h2
+              key={titleText}
+              id="this-month-heading"
+              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="font-heading absolute inset-x-0 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 text-2xl font-medium tracking-wide text-transparent sm:text-3xl"
+            >
+              {titleText}
+            </motion.h2>
+          </AnimatePresence>
+        </div>
+        <p className="font-heading mt-2 text-sm text-gray-500 sm:text-base">
+          An offering at Thy Lotus Feet.
+        </p>
       </header>
 
-      {/* Filter strips — side by side on md+, stacked on mobile.
-          Hidden when there's nothing meaningful to filter (only 1 magazine
-          or only 1 month present). */}
-      {(showMagazineFilter || showMonthFilter) && (
+      {/* Toolbar — magazine chips + previous-month toggle. Hidden when there's
+          nothing meaningful to filter. */}
+      {(showMagazineFilter || hasPrevContent) && (
         <div
-          className="mb-6 flex flex-col items-center gap-3 md:flex-row md:items-start md:justify-center md:gap-6"
+          className="mb-6 flex flex-col items-center gap-3 px-6 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:px-0"
           role="toolbar"
-          aria-label="Filter editions by magazine and month"
+          aria-label="Filter editions"
         >
           {showMagazineFilter && (
-            <FilterStrip
-              label="Magazine"
-              options={[
-                { value: 'all', label: 'All' },
-                ...magazines.map((m) => ({ value: m.id, label: m.name })),
-              ]}
+            <MagazineFilterStrip
+              magazines={magazines}
               value={magazineFilter}
+              available={magazinesInView}
               onChange={setMagazineFilter}
             />
           )}
-          {showMonthFilter && (
-            <FilterStrip
-              label="Month"
-              options={[
-                { value: 'all', label: 'All' },
-                ...monthOptions.map((m) => ({ value: m.key, label: m.label })),
-              ]}
-              value={monthFilter}
-              onChange={setMonthFilter}
-            />
+          {hasPrevContent && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <PreviousMonthToggle
+                active={showPrevious}
+                onToggle={() => setShowPrevious((v) => !v)}
+              />
+              {/* When the toggle is on, gently point users at /browse for
+                  anything older than the previous month — the homepage
+                  carousel intentionally caps at two months. */}
+              <AnimatePresence initial={false}>
+                {showPrevious && <BrowseOlderHint />}
+              </AnimatePresence>
+            </div>
           )}
         </div>
       )}
 
-      {/* Slideshow */}
+      {/* Slideshow + control bar */}
       <div
         ref={containerRef}
         className="relative"
         role="region"
         aria-roledescription="carousel"
-        aria-label="This month's editions slideshow"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onFocus={() => setIsPaused(true)}
-        onBlur={() => setIsPaused(false)}
+        aria-label="This month's editions"
       >
-        {/* Live region announces slide changes for screen readers */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          {filtered.length > 0 &&
-            `Showing edition ${safeIndex + 1} of ${filtered.length}: ${
-              filtered[safeIndex]?.title
-            }`}
+          {currentIssue
+            ? `Showing edition ${safeIndex + 1} of ${visibleIssues.length}: ${currentIssue.title}`
+            : ''}
         </div>
-        {filtered.length === 0 ? (
+
+        {visibleIssues.length === 0 ? (
           <EmptyState
-            onClear={() => {
-              setMagazineFilter('all');
-              setMonthFilter('all');
-            }}
+            magazineFilterActive={magazineFilter !== 'all'}
+            showPrevious={showPrevious}
+            hasPrevContent={hasPrevContent}
+            onClearMagazine={() => setMagazineFilter('all')}
+            onShowPrevious={() => setShowPrevious(true)}
           />
         ) : (
           <>
-            {/* Top-of-section carousel controls — gives the slideshow's
-                "you can navigate" affordance immediate visibility, before
-                the user has scrolled past the slide. */}
-            <CarouselControls
-              issues={filtered}
-              currentIndex={safeIndex}
-              goPrev={goPrev}
-              goNext={goNext}
-              jumpTo={jumpTo}
-              className="mb-5"
-            />
-
             <div
               className="relative overflow-hidden rounded-2xl"
               aria-roledescription="slide"
-              aria-label={`${safeIndex + 1} of ${filtered.length}`}
+              aria-label={`${safeIndex + 1} of ${visibleIssues.length}`}
             >
               <AnimatePresence mode="wait" custom={direction}>
                 <motion.div
-                  key={currentIssue.id}
+                  key={currentIssue!.id}
                   custom={direction}
                   initial={
                     prefersReducedMotion
@@ -326,24 +357,17 @@ export function ThisMonthFeatured({ magazines, issues }: ThisMonthFeaturedProps)
                   transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                   className="touch-pan-y"
                 >
-                  <FeaturedSlide
-                    issue={currentIssue}
-                    onReadingChange={setIsPaused}
-                    onIssueSlide={
-                      filtered.length > 1 ? handleIssueSlide : undefined
-                    }
-                  />
+                  <FeaturedSlide issue={currentIssue!} />
                 </motion.div>
               </AnimatePresence>
             </div>
 
             <CarouselControls
-              issues={filtered}
+              issues={visibleIssues}
               currentIndex={safeIndex}
               goPrev={goPrev}
               goNext={goNext}
               jumpTo={jumpTo}
-              className="mt-5"
             />
           </>
         )}
@@ -352,37 +376,55 @@ export function ThisMonthFeatured({ magazines, issues }: ThisMonthFeaturedProps)
   );
 }
 
-// ---------- Filter strip ----------
-function FilterStrip<T extends string>({
-  label,
-  options,
+// ---------- Magazine filter strip ----------
+function MagazineFilterStrip({
+  magazines,
   value,
+  available,
   onChange,
 }: {
-  label: string;
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (next: T) => void;
+  magazines: ApiMagazine[];
+  value: MagazineFilter;
+  /** Magazines that have ≥1 issue in the currently-visible month set. */
+  available: Set<string>;
+  onChange: (next: MagazineFilter) => void;
 }) {
+  const options: {
+    value: MagazineFilter;
+    label: string;
+    disabled?: boolean;
+  }[] = [
+    { value: 'all', label: 'All' },
+    ...magazines.map((m) => ({
+      value: m.id,
+      label: m.name,
+      disabled: !available.has(m.id),
+    })),
+  ];
   return (
     <div className="flex items-start gap-2 sm:gap-3">
       <span className="mt-1.5 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-        {label}
+        Magazine
       </span>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
           const active = opt.value === value;
+          const disabled = !!opt.disabled;
           return (
             <button
               key={opt.value}
               type="button"
+              disabled={disabled}
               onClick={() => onChange(opt.value)}
               aria-pressed={active}
+              title={disabled ? 'No editions in the current view' : undefined}
               className={cn(
                 'rounded-full px-3 py-1.5 text-xs font-medium transition-all',
                 active
                   ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_4px_14px_rgba(190,140,46,0.22)]'
-                  : 'border border-gray-200 bg-white text-gray-600 hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
+                  : disabled
+                    ? 'border border-gray-100 bg-gray-50 text-gray-300 line-through decoration-gray-200'
+                    : 'border border-gray-200 bg-white text-gray-600 hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
               )}
             >
               {opt.label}
@@ -394,52 +436,118 @@ function FilterStrip<T extends string>({
   );
 }
 
-// ---------- Carousel controls (prev / dots / next / counter) ----------
-// Used twice — above the slide for discoverability, below for in-flow access.
-// Hides itself when there's only one slide (nothing to navigate).
+// ---------- Previous-month toggle ----------
+function PreviousMonthToggle({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all',
+        active
+          ? 'border border-flame-300 bg-flame-50 text-flame-700 shadow-sm'
+          : 'border border-gray-200 bg-white text-gray-600 hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors',
+          active ? 'bg-gradient-to-r from-gold-500 to-flame-500' : 'bg-gray-300',
+        )}
+      >
+        <span
+          className={cn(
+            'h-2.5 w-2.5 rounded-full bg-white shadow transition-transform',
+            active ? 'translate-x-2.5' : 'translate-x-0',
+          )}
+        />
+      </span>
+      {active
+        ? "Hide Previous Month's Editions"
+        : "Show Previous Month's Editions"}
+    </button>
+  );
+}
+
+/** Notification-style hint that appears beside the toggle when the user has
+ *  expanded to two months — guiding them to /browse for anything older. The
+ *  homepage carousel intentionally caps at the current + previous month. */
+function BrowseOlderHint() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.92, x: -8 }}
+      animate={{ opacity: 1, scale: 1, x: 0 }}
+      exit={{ opacity: 0, scale: 0.92, x: -8 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Link
+        href="/browse"
+        className="group inline-flex items-center gap-2 rounded-full border border-flame-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-600 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
+      >
+        <span aria-hidden className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flame-400 opacity-70" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-flame-500" />
+        </span>
+        <span>For older editions, browse the archive</span>
+        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+      </Link>
+    </motion.div>
+  );
+}
+
+// ---------- Single unified control bar (below the slide) ----------
 function CarouselControls({
   issues,
   currentIndex,
   goPrev,
   goNext,
   jumpTo,
-  className,
 }: {
   issues: ApiIssue[];
   currentIndex: number;
   goPrev: () => void;
   goNext: () => void;
-  jumpTo: (index: number) => void;
-  className?: string;
+  jumpTo: (i: number) => void;
 }) {
   if (issues.length <= 1) return null;
-
   return (
-    <div className={cn('flex items-center justify-center gap-4', className)}>
+    <div className="mt-6 flex items-center justify-center gap-3 px-6 sm:gap-4 sm:px-0">
       <button
         type="button"
         onClick={goPrev}
         aria-label="Previous edition"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-sm transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-sm transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700"
       >
         <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
       </button>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {issues.map((issue, i) => (
           <button
             key={issue.id}
             type="button"
             onClick={() => jumpTo(i)}
-            aria-label={`Go to slide ${i + 1} of ${issues.length}`}
+            aria-label={`Go to edition ${i + 1} of ${issues.length}`}
             aria-current={i === currentIndex}
-            className={cn(
-              'h-2 rounded-full transition-all',
-              i === currentIndex
-                ? 'w-9 bg-gradient-to-r from-gold-500 to-flame-500'
-                : 'w-2 bg-flame-200 hover:bg-flame-300',
-            )}
-          />
+            className="flex h-9 w-9 items-center justify-center"
+          >
+            <span
+              className={cn(
+                'h-2 rounded-full transition-all',
+                i === currentIndex
+                  ? 'w-9 bg-gradient-to-r from-gold-500 to-flame-500'
+                  : 'w-2 bg-flame-200 hover:bg-flame-300',
+              )}
+            />
+          </button>
         ))}
       </div>
 
@@ -447,50 +555,86 @@ function CarouselControls({
         type="button"
         onClick={goNext}
         aria-label="Next edition"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-sm transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-sm transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700"
       >
         <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
       </button>
 
       <span className="ml-1 hidden text-xs font-semibold tabular-nums text-gray-600 sm:inline">
-        {currentIndex + 1} of {issues.length}
+        {currentIndex + 1} / {issues.length}
       </span>
     </div>
   );
 }
 
 // ---------- Empty state ----------
-function EmptyState({ onClear }: { onClear: () => void }) {
+function EmptyState({
+  magazineFilterActive,
+  showPrevious,
+  hasPrevContent,
+  onClearMagazine,
+  onShowPrevious,
+}: {
+  magazineFilterActive: boolean;
+  showPrevious: boolean;
+  hasPrevContent: boolean;
+  onClearMagazine: () => void;
+  onShowPrevious: () => void;
+}) {
+  if (magazineFilterActive) {
+    return (
+      <EmptyCard
+        title="No editions for this magazine in the current view."
+        ctaLabel="Show all magazines"
+        onCta={onClearMagazine}
+      />
+    );
+  }
+  if (!showPrevious && hasPrevContent) {
+    return (
+      <EmptyCard
+        title="No new editions for this month yet."
+        subtitle="Previous month's editions are available."
+        ctaLabel="Show Previous Month's Editions"
+        onCta={onShowPrevious}
+      />
+    );
+  }
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-flame-200 bg-gradient-to-br from-gold-50/40 to-flame-50/40 px-6 py-16 text-center">
-      <p className="font-heading text-lg text-gray-600">
-        No editions match these filters yet.
-      </p>
-      <button
-        type="button"
-        onClick={onClear}
-        className="mt-4 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
-      >
-        Clear filters
-      </button>
+    <EmptyCard title="No recent editions yet — please check back soon." />
+  );
+}
+
+function EmptyCard({
+  title,
+  subtitle,
+  ctaLabel,
+  onCta,
+}: {
+  title: string;
+  subtitle?: string;
+  ctaLabel?: string;
+  onCta?: () => void;
+}) {
+  return (
+    <div className="mx-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-flame-200 bg-gradient-to-br from-gold-50/40 to-flame-50/40 px-6 py-16 text-center sm:mx-0">
+      <p className="font-heading text-lg text-gray-600">{title}</p>
+      {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
+      {ctaLabel && onCta && (
+        <button
+          type="button"
+          onClick={onCta}
+          className="mt-4 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
+        >
+          {ctaLabel}
+        </button>
+      )}
     </div>
   );
 }
 
 // ---------- Single slide (rich, focused — with embedded reader) ----------
-function FeaturedSlide({
-  issue,
-  onReadingChange,
-  onIssueSlide,
-}: {
-  issue: ApiIssue;
-  /** Called with `true` when the user is actively reading (page > 1) so the
-   *  carousel can pause auto-rotation. */
-  onReadingChange: (reading: boolean) => void;
-  /** Called when a hard swipe on the reader should switch issues — `1` for
-   *  next issue, `-1` for previous. Undefined when there's only one issue. */
-  onIssueSlide?: (direction: 1 | -1) => void;
-}) {
+function FeaturedSlide({ issue }: { issue: ApiIssue }) {
   const { toggle, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(issue.id);
 
@@ -503,8 +647,8 @@ function FeaturedSlide({
 
   return (
     <article className="relative overflow-hidden border-y border-flame-200/60 bg-white shadow-[0_10px_36px_rgba(190,140,46,0.12)] sm:rounded-2xl sm:border">
-      {/* Book on top — full width, single page on mobile/tablet,
-          two-page spread on desktop (lg+) */}
+      {/* Embedded PDF reader on top — single page on mobile/tablet, two-page
+          spread on desktop (lg+). */}
       <SlideReader
         pdfUrl={issue.pdf_url}
         fallbackCoverUrl={issue.cover_image_url}
@@ -513,13 +657,10 @@ function FeaturedSlide({
         monthName={monthName}
         year={issue.year}
         language={language}
-        onReadingChange={onReadingChange}
-        onIssueSlide={onIssueSlide}
       />
 
       {/* Info section below the book */}
       <div className="px-6 py-6 sm:px-10 sm:py-8">
-        {/* Eyebrow + theme — full width, left-aligned */}
         <div className="min-w-0">
           <p className="bg-gradient-to-r from-gold-700 to-flame-600 bg-clip-text text-[11px] font-semibold uppercase tracking-[0.14em] text-transparent">
             {eyebrow}
@@ -542,17 +683,12 @@ function FeaturedSlide({
           )}
         </div>
 
-        {/* Description — centered, prose-width for readability and clamped to
-            keep slide heights consistent across issues with varying description
-            lengths (the carousel transition feels jittery otherwise). */}
         {issue.description && (
           <p className="mx-auto mt-5 line-clamp-3 max-w-prose text-center text-sm leading-relaxed text-gray-600 sm:text-base">
             {issue.description}
           </p>
         )}
 
-        {/* Centered actions — Open Full Reader + bookmark heart, sitting in
-            the visual middle of the info area as the primary call-to-action. */}
         <div className="mt-5 flex items-center justify-center gap-2">
           <Link
             href={`/read/${issue.id}?from=shelf`}
@@ -574,7 +710,6 @@ function FeaturedSlide({
           </button>
         </div>
 
-        {/* Bottom row: topic chips on the left, meta on the right */}
         {(sortedTopics.length > 0 || issue.page_count || issue.file_size_bytes) && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-gray-100 pt-5">
             {sortedTopics.length > 0 ? (
@@ -604,7 +739,7 @@ function FeaturedSlide({
   );
 }
 
-// ---------- Embedded PDF reader (one page at a time, prev/next) ----------
+// ---------- Embedded PDF reader (one issue, manual page turn) ----------
 function SlideReader({
   pdfUrl,
   fallbackCoverUrl,
@@ -613,8 +748,6 @@ function SlideReader({
   monthName,
   year,
   language,
-  onReadingChange,
-  onIssueSlide,
 }: {
   pdfUrl: string;
   fallbackCoverUrl: string | null;
@@ -623,10 +756,6 @@ function SlideReader({
   monthName: string;
   year: number;
   language: Language;
-  onReadingChange: (reading: boolean) => void;
-  /** Hard swipe handler — bubbles up to the carousel for issue switching.
-   *  Undefined when there's only one issue (no carousel to advance). */
-  onIssueSlide?: (direction: 1 | -1) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bookCardRef = useRef<HTMLDivElement>(null);
@@ -634,34 +763,27 @@ function SlideReader({
   const [numPages, setNumPages] = useState<number | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [width, setWidth] = useState(420);
-  /** 1 = next-page motion, -1 = prev-page motion. Drives the slide direction
-   *  on each page transition. */
+  /** 1 = next-page motion, -1 = prev-page motion. */
   const [pageDirection, setPageDirection] = useState(1);
+  /** Flips true the first time react-pdf signals page 1 has finished
+   *  rendering. Drives the cover→canvas cross-fade — the cover overlay
+   *  (rendered on top of the canvas) fades to opacity 0 once this is true,
+   *  revealing the now-painted PDF page underneath without a frame of
+   *  white space. */
+  const [page1Rendered, setPage1Rendered] = useState(false);
+  /** First-time swipe hint — shown once on mobile, then suppressed via
+   *  localStorage. Dismisses on first user interaction or after 4s. */
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
   const reduceMotion = useReducedMotion();
-  /** True at lg+ breakpoint (≥1024px). Drives two-page-spread mode. Mobile
-   *  and tablet stay single-page for thumb-friendly reading. */
+  /** True at lg+ (≥1024px) — drives two-page-spread mode. */
   const isSpread = useMediaQuery('(min-width: 1024px)');
-
   /** Step size — turn the whole spread (2 pages) on desktop, single page on
    *  smaller viewports. */
   const step = isSpread ? 2 : 1;
 
-  // Notify the carousel when reading state changes (any advance from the
-  // first view = actively reading).
-  useEffect(() => {
-    onReadingChange(page > 1);
-  }, [page, onReadingChange]);
-
-  // Reset reading state when this slide unmounts.
-  useEffect(() => {
-    return () => onReadingChange(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Measure the BOOK CARD (not the outer reader) so the PDF renders at the
   // exact display width of the book — accounting for the space taken by the
-  // outside arrow buttons and their gaps. Otherwise the canvas was rendering
-  // at a wider-than-actual width and getting clipped/blurry.
+  // outside arrow buttons and their gaps.
   useLayoutEffect(() => {
     if (bookCardRef.current) {
       const w = bookCardRef.current.clientWidth;
@@ -669,7 +791,6 @@ function SlideReader({
     }
   }, []);
 
-  // Then keep width in sync with viewport changes (orientation, window resize).
   useEffect(() => {
     if (!bookCardRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -680,12 +801,10 @@ function SlideReader({
     return () => ro.disconnect();
   }, []);
 
-  // When toggling between single and spread mode, snap `page` to a valid
-  // anchor — in spread mode `page` represents the LEFT page of the spread
-  // and must be odd (so the spread is always (page, page+1)).
+  // Snap page to an odd anchor when toggling into spread mode so the spread
+  // is always (page, page+1).
   useEffect(() => {
     if (isSpread && page % 2 === 0) {
-      // Snap to the odd left page so the spread is well-formed.
       setPage((p) => Math.max(1, p - 1));
     }
   }, [isSpread, page]);
@@ -706,8 +825,6 @@ function SlideReader({
         setPageDirection(1);
         return p + step;
       }
-      // In spread mode, allow advancing to the last spread (which may show a
-      // single trailing page if the total is odd).
       if (p + step > numPages && (!isSpread || p >= numPages)) return p;
       setPageDirection(1);
       return Math.min(numPages, p + step);
@@ -717,25 +834,21 @@ function SlideReader({
   const canGoPrev = page > 1;
   const canGoNext = numPages ? page < numPages : true;
 
-  // Width allocated to each PDF page. In spread mode we split the container
-  // (minus a small inter-page gap) between two pages; in single mode each
-  // page gets the full container width.
   const SPREAD_GAP_PX = 8;
   const perPageWidth = isSpread
     ? Math.max(120, Math.floor((width - SPREAD_GAP_PX) / 2))
     : width;
 
-  // High-DPI render scale — force the PDF canvas to render at minimum 2× the
-  // CSS resolution so text and image content stay crisp on Retina, 4K, and
-  // browser-zoomed displays. Magazine PDFs are rasterised pages, so anything
-  // less than 2× looks blurry on modern screens.
+  // Force the PDF canvas to render at minimum 2× the CSS resolution so text
+  // stays crisp on Retina, 4K, and browser-zoomed displays.
   const hiDPI =
-    typeof window !== 'undefined' ? Math.max(2, window.devicePixelRatio || 1) : 2;
+    typeof window !== 'undefined'
+      ? Math.max(2, window.devicePixelRatio || 1)
+      : 2;
 
-  // ---------- Zoom (in-place reader zoom for closer reading) ----------
+  // ---------- Zoom (in-place reader zoom) ----------
   const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2];
   const [zoom, setZoom] = useState(1);
-
   function zoomIn() {
     const i = ZOOM_STEPS.indexOf(zoom);
     if (i >= 0 && i < ZOOM_STEPS.length - 1) setZoom(ZOOM_STEPS[i + 1]);
@@ -747,62 +860,52 @@ function SlideReader({
   function zoomReset() {
     setZoom(1);
   }
-
   const canZoomIn = zoom < ZOOM_STEPS[ZOOM_STEPS.length - 1];
   const canZoomOut = zoom > ZOOM_STEPS[0];
   const renderedPageWidth = Math.round(perPageWidth * zoom);
 
   // Reset zoom whenever the slide changes (new issue) so the next reader
-  // doesn't inherit the previous user's zoom level.
+  // doesn't inherit the previous user's zoom level. Same trigger resets the
+  // cover-overlay cross-fade so it covers the new issue's page-1 render.
   useEffect(() => {
     setZoom(1);
+    setPage1Rendered(false);
   }, [pdfUrl]);
 
+  // First-time swipe hint — gated on `localStorage` so it only ever shows
+  // once per browser. Mobile/tablet only (desktop has visible side arrows).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem('aim-swipe-hint-shown')) return;
+    if (window.matchMedia('(min-width: 1024px)').matches) return;
+    setShowSwipeHint(true);
+    const t = setTimeout(() => {
+      setShowSwipeHint(false);
+      window.localStorage.setItem('aim-swipe-hint-shown', '1');
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
 
-  // ---------- Swipe handling — soft = page turn, hard = issue switch ----------
-  // Threshold tuning — calibrated so casual page-turning drags don't
-  // accidentally jump to a different issue.
-  // - A casual drag (< 250 px AND < 1200 px/s) inside the page turns the page.
-  // - To switch issues the user must commit: drag at least 250 px with
-  //   reasonable pace, OR flick decisively (>= 1200 px/s).
-  // - At a page boundary (e.g., page 1 trying to go back, last page trying
-  //   to advance), even a soft swipe is treated as an issue switch — the
-  //   user clearly wants to leave the issue in that direction.
-  const SOFT_DISTANCE_PX = 30;
-  const HARD_DISTANCE_PX = 250;
-  const HARD_VELOCITY_PX = 1200;
-  /** Minimum speed required when distance hits HARD_DISTANCE_PX, so a slow
-   *  drift doesn't accidentally cross the line. */
-  const HARD_DISTANCE_MIN_SPEED = 400;
+  function dismissSwipeHint() {
+    if (!showSwipeHint) return;
+    setShowSwipeHint(false);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('aim-swipe-hint-shown', '1');
+    }
+  }
 
+  // Swipe = page turn within the issue, ALWAYS. Issue switching lives on the
+  // carousel's nav buttons — we never bubble swipes up from here.
   function handleSwipe(_: unknown, info: PanInfo) {
     const offset = info.offset.x;
-    const velocity = info.velocity.x;
     const distance = Math.abs(offset);
-    const speed = Math.abs(velocity);
-
-    // Ignore tiny accidental drags / clicks.
-    if (distance < SOFT_DISTANCE_PX && speed < 200) return;
-
-    const direction: 1 | -1 = offset < 0 ? 1 : -1;
-    const isHard =
-      (distance >= HARD_DISTANCE_PX && speed >= HARD_DISTANCE_MIN_SPEED) ||
-      speed >= HARD_VELOCITY_PX;
-    const wantsForward = direction === 1;
-    const atPageBoundary = wantsForward ? !canGoNext : !canGoPrev;
-
-    if ((isHard || atPageBoundary) && onIssueSlide) {
-      onIssueSlide(direction);
-      return;
-    }
-
-    // Soft swipe within the issue → page turn.
-    if (wantsForward) goNext();
+    const speed = Math.abs(info.velocity.x);
+    dismissSwipeHint();
+    if (distance < 30 && speed < 200) return;
+    if (offset < 0) goNext();
     else goPrev();
   }
 
-  // Page indicator label — adapts to spread vs single mode and trailing
-  // partial spread (odd page count).
   const pageLabel = (() => {
     if (!numPages) return `${page}`;
     if (isSpread) {
@@ -817,49 +920,10 @@ function SlideReader({
       ref={containerRef}
       className="relative bg-white px-2 pt-4 pb-6 sm:px-3 sm:pt-5 sm:pb-7 lg:px-6 lg:pt-7"
     >
-      {/* Zoom toolbar — sits above the book row. Lets the reader zoom into a
-          page for closer inspection without leaving the homepage. */}
-      {!loadError && (
-        <div className="mb-3 flex items-center justify-end gap-1 px-1">
-          <button
-            type="button"
-            onClick={zoomOut}
-            disabled={!canZoomOut}
-            aria-label="Zoom out"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={zoomReset}
-            aria-label={`Zoom level ${Math.round(zoom * 100)}% — click to reset to 100%`}
-            className="min-w-[3.25rem] rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium tabular-nums text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            type="button"
-            onClick={zoomIn}
-            disabled={!canZoomIn}
-            aria-label="Zoom in"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
       {/* Book row — three flex siblings: left arrow, book card, right arrow.
-          The cream/flame "magazine resting on a table" backdrop now lives only
-          on the book card itself, so the arrows sit on the article's white
-          background, visibly outside the book.
-          Page-turn arrows are desktop-only (`hidden lg:flex`) — on mobile and
-          tablet the book takes full width and users swipe / use the carousel
-          arrows to navigate. */}
+          Desktop arrows live OUTSIDE the card; on mobile/tablet the arrows
+          are in the page indicator pill below. */}
       <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-        {/* Left arrow — outside the book on the left, desktop (lg+) only.
-            On phone and tablet, arrows live in the page indicator pill below. */}
         {!loadError && (
           <button
             type="button"
@@ -872,8 +936,6 @@ function SlideReader({
           </button>
         )}
 
-        {/* Book area — the actual PDF spread / page, in its own cream-flame
-            rounded card with a soft shadow. */}
         <motion.div
           ref={bookCardRef}
           drag="x"
@@ -883,137 +945,211 @@ function SlideReader({
           className={cn(
             'relative flex aspect-[3/4] min-w-0 flex-1 cursor-grab items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 via-flame-50/60 to-gold-50 shadow-[0_8px_28px_rgba(190,140,46,0.12)] active:cursor-grabbing lg:aspect-[3/2]',
             // Allow scrolling within the book card when the user has zoomed
-            // beyond the natural fit. At 100% the pages fit perfectly so we
-            // keep overflow-hidden for clean rounded corners.
+            // beyond the natural fit.
             zoom > 1 ? 'overflow-auto' : 'overflow-hidden',
           )}
         >
-          {/* Subtle shadow under the spread — the "open magazine on a table" feel */}
+          {/* "Magazine on a table" shadow */}
           <div className="pointer-events-none absolute inset-x-1/4 bottom-3 h-3 rounded-full bg-black/10 blur-xl" />
-        {loadError ? (
-          /* Network/CORS error — fall back to cover image (single image). */
-          <div className="relative mx-auto aspect-[3/4] max-w-md">
-            <CoverFallback
-              coverUrl={fallbackCoverUrl}
-              magazineName={magazineName}
-              monthName={monthName}
-              year={year}
-              language={language}
-              title={fallbackTitle}
-            />
-          </div>
-        ) : (
-          <Document
-            file={file}
-            onLoadSuccess={({ numPages: n }) => setNumPages(n)}
-            onLoadError={() => setLoadError(true)}
-            onSourceError={() => setLoadError(true)}
-            loading={
-              fallbackCoverUrl && renderedPageWidth > 0 ? (
-                /* Show the pre-rendered cover JPEG (cached, ~100 KB) instead
-                   of a spinner while the full PDF (~25 MB) is being fetched.
-                   The cover is page 1 of the magazine, so when react-pdf
-                   eventually renders the canvas, the visual is identical and
-                   the swap feels seamless. Explicit width/height (vs. fill)
-                   so Next.js doesn't warn when the parent's height isn't yet
-                   resolved on first paint. */
-                <div className="flex h-full w-full items-center justify-center">
-                  <Image
-                    src={fallbackCoverUrl}
-                    alt={fallbackTitle}
-                    width={renderedPageWidth}
-                    height={Math.round(renderedPageWidth * 1.4)}
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    priority
-                    className="h-auto max-h-full w-auto object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-flame-500/70" />
-                </div>
-              )
-            }
-            className="flex h-full w-full items-center justify-center"
-          >
-            <AnimatePresence mode="wait" custom={pageDirection} initial={false}>
-              <motion.div
-                key={`${isSpread ? 'spread' : 'single'}-${page}`}
-                custom={pageDirection}
-                initial={
-                  reduceMotion
-                    ? { opacity: 0 }
-                    : { x: pageDirection * 80, opacity: 0, scale: 0.97 }
-                }
-                animate={{ x: 0, opacity: 1, scale: 1 }}
-                exit={
-                  reduceMotion
-                    ? { opacity: 0 }
-                    : { x: -pageDirection * 80, opacity: 0, scale: 0.97 }
-                }
-                transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-                className={cn(
-                  'flex w-full items-stretch justify-center',
-                  isSpread ? 'gap-2' : 'gap-0',
-                )}
-              >
-                <Page
-                  pageNumber={page}
-                  width={renderedPageWidth}
-                  devicePixelRatio={hiDPI}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  loading={
-                    page === 1 && fallbackCoverUrl && renderedPageWidth > 0 ? (
-                      <Image
-                        src={fallbackCoverUrl}
-                        alt={fallbackTitle}
-                        width={renderedPageWidth}
-                        height={Math.round(renderedPageWidth * 1.4)}
-                        sizes="(max-width: 1024px) 100vw, 50vw"
-                        priority
-                        className="object-contain"
-                      />
-                    ) : (
-                      <div
-                        className="flex items-center justify-center"
-                        style={{
-                          width: renderedPageWidth,
-                          height: renderedPageWidth * 1.4,
-                        }}
-                      >
-                        <Loader2 className="h-7 w-7 animate-spin text-flame-500/60" />
-                      </div>
-                    )
+
+          {loadError ? (
+            <div className="relative mx-auto aspect-[3/4] max-w-md">
+              <CoverFallback
+                coverUrl={fallbackCoverUrl}
+                magazineName={magazineName}
+                monthName={monthName}
+                year={year}
+                language={language}
+                title={fallbackTitle}
+              />
+            </div>
+          ) : (
+            <Document
+              file={file}
+              onLoadSuccess={({ numPages: n }) => setNumPages(n)}
+              onLoadError={() => setLoadError(true)}
+              onSourceError={() => setLoadError(true)}
+              loading={
+                fallbackCoverUrl && renderedPageWidth > 0 ? (
+                  /* Pre-rendered cover JPEG (~100 KB, neighbour-preloaded so
+                     it's cache-warm on slide change) shown in place of a
+                     spinner while the full PDF (~25 MB) is being fetched.
+                     The cover IS page 1, so when react-pdf finishes the
+                     swap is visually identical. */
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Image
+                      src={fallbackCoverUrl}
+                      alt={fallbackTitle}
+                      width={renderedPageWidth}
+                      height={Math.round(renderedPageWidth * 1.4)}
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      priority
+                      className="h-auto max-h-full w-auto object-contain"
+                    />
+                  </div>
+                ) : (
+                  <PageTurnSkeleton width={renderedPageWidth} />
+                )
+              }
+              className="flex h-full w-full items-center justify-center"
+            >
+              <AnimatePresence mode="wait" custom={pageDirection} initial={false}>
+                <motion.div
+                  key={`${isSpread ? 'spread' : 'single'}-${page}`}
+                  custom={pageDirection}
+                  initial={
+                    reduceMotion
+                      ? { opacity: 0 }
+                      : { x: pageDirection * 80, opacity: 0, scale: 0.97 }
                   }
-                  className="!h-auto overflow-hidden"
-                />
-                {isSpread && numPages && page + 1 <= numPages && (
+                  animate={{ x: 0, opacity: 1, scale: 1 }}
+                  exit={
+                    reduceMotion
+                      ? { opacity: 0 }
+                      : { x: -pageDirection * 80, opacity: 0, scale: 0.97 }
+                  }
+                  transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                  className={cn(
+                    'flex w-full items-stretch justify-center',
+                    isSpread ? 'gap-2' : 'gap-0',
+                  )}
+                >
                   <Page
-                    pageNumber={page + 1}
-                    width={perPageWidth}
+                    pageNumber={page}
+                    width={renderedPageWidth}
                     devicePixelRatio={hiDPI}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    onRenderSuccess={() => {
+                      // Trigger the cover→canvas cross-fade only after
+                      // page 1 has actually painted. Subsequent pages don't
+                      // need the overlay (they have the page-turn skeleton
+                      // built into their own loading prop).
+                      if (page === 1) setPage1Rendered(true);
+                    }}
                     loading={
-                      <div
-                        className="flex items-center justify-center"
-                        style={{ width: renderedPageWidth, height: renderedPageWidth * 1.4 }}
-                      >
-                        <Loader2 className="h-7 w-7 animate-spin text-flame-500/60" />
-                      </div>
+                      page === 1 && fallbackCoverUrl && renderedPageWidth > 0 ? (
+                        <Image
+                          src={fallbackCoverUrl}
+                          alt={fallbackTitle}
+                          width={renderedPageWidth}
+                          height={Math.round(renderedPageWidth * 1.4)}
+                          sizes="(max-width: 1024px) 100vw, 50vw"
+                          priority
+                          className="object-contain"
+                        />
+                      ) : (
+                        <PageTurnSkeleton width={renderedPageWidth} />
+                      )
                     }
                     className="!h-auto overflow-hidden"
                   />
-                )}
+                  {isSpread && numPages && page + 1 <= numPages && (
+                    <Page
+                      pageNumber={page + 1}
+                      width={perPageWidth}
+                      devicePixelRatio={hiDPI}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                      loading={<PageTurnSkeleton width={renderedPageWidth} />}
+                      className="!h-auto overflow-hidden"
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </Document>
+          )}
+
+          {/* Cover→canvas cross-fade overlay. Renders the same cover JPEG
+              as Page 1's `loading` prop, but as an absolutely-positioned
+              layer that fades out once react-pdf signals page 1 has painted
+              its canvas underneath. Without this, the swap from cover-image
+              to canvas was a hard DOM replace — perceptible blink. With
+              it, the canvas is already drawn under the overlay by the time
+              the fade starts, so the user sees one continuous image. */}
+          {!loadError && fallbackCoverUrl && (
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+              initial={{ opacity: 1 }}
+              animate={{
+                opacity: page === 1 && !page1Rendered ? 1 : 0,
+              }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+            >
+              <Image
+                src={fallbackCoverUrl}
+                alt=""
+                width={renderedPageWidth}
+                height={Math.round(renderedPageWidth * 1.4)}
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                priority
+                className="h-auto max-h-full w-auto object-contain"
+              />
+            </motion.div>
+          )}
+
+          {/* First-time swipe hint — bottom-center of the book card.
+              Appears once per browser on mobile/tablet, dismisses on first
+              swipe or after 4 s. Pointer-events: none so it doesn't block
+              the underlying drag handler. */}
+          <AnimatePresence>
+            {showSwipeHint && (
+              <motion.div
+                key="swipe-hint"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full bg-gray-900/70 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg"
+              >
+                <motion.span
+                  className="inline-block"
+                  animate={{ x: [-4, 4, -4] }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  ← Swipe to turn pages →
+                </motion.span>
               </motion.div>
-            </AnimatePresence>
-          </Document>
-        )}
+            )}
+          </AnimatePresence>
+
+          {/* Floating zoom pill — top-right corner of the book card. Always
+              visible. Compact: in / level / out. Top-right placement keeps
+              it clear of horizontal page-turn swipes (which start from the
+              middle vertically). */}
+          {!loadError && (
+            <div className="pointer-events-auto absolute right-2 top-2 z-30 flex items-center gap-0.5 rounded-full border border-flame-200/70 bg-white/95 p-0.5 shadow-md sm:right-3 sm:top-3">
+              <button
+                type="button"
+                onClick={zoomOut}
+                disabled={!canZoomOut}
+                aria-label="Zoom out"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={zoomReset}
+                aria-label={`Zoom level ${Math.round(zoom * 100)}% — click to reset to 100%`}
+                className="min-w-[2.75rem] rounded-full px-1 text-[11px] font-semibold tabular-nums text-gray-600 transition-colors hover:text-flame-700"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                disabled={!canZoomIn}
+                aria-label="Zoom in"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </motion.div>
 
-        {/* Right arrow — outside the book on the right, desktop (lg+) only.
-            On phone and tablet, arrows live in the page indicator pill below. */}
         {!loadError && (
           <button
             type="button"
@@ -1028,12 +1164,11 @@ function SlideReader({
       </div>
 
       {/* Page indicator pill — centered below the book.
-          On phone and tablet the pill includes the prev/next arrow buttons
-          (since the side arrows are hidden at < lg). On desktop (lg+) only
-          the page label is shown — the navigation lives on the book's edges. */}
+          Mobile/tablet: prev/next arrows live INSIDE the pill (since the
+          side arrows are hidden < lg). Desktop: just the label. */}
       {!loadError && numPages !== null && (
         <div className="mt-5 flex justify-center">
-          <div className="flex items-center gap-2 rounded-full border border-flame-200/60 bg-white/80 px-2 py-1 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-2 rounded-full border border-flame-200/60 bg-white/80 px-2 py-1 shadow-sm">
             <button
               type="button"
               onClick={goPrev}
@@ -1058,6 +1193,34 @@ function SlideReader({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Page-turn skeleton ----------
+/** Magazine-page-shaped skeleton with shimmering text lines. Renders only as
+ *  a fallback when no cover JPEG is available — the cover is the primary
+ *  loading surface (visually identical to PDF page 1, so the swap is
+ *  imperceptible). The shimmer keyframe is defined in globals.css. */
+function PageTurnSkeleton({ width }: { width: number }) {
+  const w = Math.max(160, width || 320);
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-md bg-white/40 p-6"
+      style={{ width: w, minHeight: w * 1.35 }}
+      aria-hidden
+    >
+      <div className="aim-shimmer-line h-4 w-1/2 rounded" />
+      <div className="aim-shimmer-line mt-3 h-2 w-full rounded" />
+      <div className="aim-shimmer-line h-2 w-11/12 rounded" />
+      <div className="aim-shimmer-line h-2 w-10/12 rounded" />
+      <div className="aim-shimmer-line h-2 w-full rounded" />
+      <div className="aim-shimmer-line h-2 w-9/12 rounded" />
+      <div className="aim-shimmer-line mt-3 h-2 w-full rounded" />
+      <div className="aim-shimmer-line h-2 w-11/12 rounded" />
+      <div className="aim-shimmer-line h-2 w-8/12 rounded" />
+      <div className="aim-shimmer-line mt-3 h-2 w-10/12 rounded" />
+      <div className="aim-shimmer-line h-2 w-full rounded" />
     </div>
   );
 }

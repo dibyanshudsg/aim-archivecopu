@@ -92,3 +92,30 @@ html {
     cursor: not-allowed;
   }
 }
+
+/* Page-turn skeleton — used inside the homepage carousel reader while a PDF
+   is being fetched and no cover JPEG is available yet. The shimmer sweeps
+   from left to right across the skeleton lines, suggesting the page is
+   being inked in. */
+@keyframes aim-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.aim-shimmer-line {
+  background: linear-gradient(
+    90deg,
+    var(--color-flame-50) 0%,
+    var(--color-gold-100) 50%,
+    var(--color-flame-50) 100%
+  );
+  background-size: 200% 100%;
+  animation: aim-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aim-shimmer-line {
+    animation: none;
+    background: var(--color-flame-50);
+  }
+}

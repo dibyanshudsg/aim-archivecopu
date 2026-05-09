@@ -63,6 +63,10 @@ interface HomeClientProps {
   recentIssues: ApiIssue[];
   carouselMagazines: ApiMagazine[];
   carouselIssues: ApiIssue[];
+  carouselCurrentYear: number;
+  carouselCurrentMonth: number;
+  carouselPrevYear: number;
+  carouselPrevMonth: number;
 }
 
 function ContinueReadingShelf() {
@@ -169,6 +173,10 @@ export function HomeClient({
   recentIssues,
   carouselMagazines,
   carouselIssues,
+  carouselCurrentYear,
+  carouselCurrentMonth,
+  carouselPrevYear,
+  carouselPrevMonth,
 }: HomeClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -223,8 +231,16 @@ export function HomeClient({
             </motion.div>
           </motion.div>
 
-          {/* This Month's Editions — focused slideshow with magazine + month filters */}
-          <ThisMonthFeatured magazines={carouselMagazines} issues={carouselIssues} />
+          {/* This Month's Editions — manual slideshow, current month default,
+              optional "Show Previous Month's Editions" toggle */}
+          <ThisMonthFeatured
+            magazines={carouselMagazines}
+            issues={carouselIssues}
+            currentYear={carouselCurrentYear}
+            currentMonth={carouselCurrentMonth}
+            prevYear={carouselPrevYear}
+            prevMonth={carouselPrevMonth}
+          />
 
           {/* Dynamic Bookshelf */}
           <motion.div
