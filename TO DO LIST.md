@@ -196,6 +196,19 @@ Now, to be frank, among the buttons for each rows, -
 
 _____________________
 
+## Up Next — Carousel Polish Continuation (queued 2026-05-08)
+
+A. [ ] **Browse + Bookmarks polish audit** — same pattern as the carousel polish: scoped audit first, then a punch-list of items to ship. Focus areas: list view rows, empty states, filter panel transitions, pagination feel, grid breakpoints.
+
+B. [ ] **Reader parity work** — three sub-options, pick one (see [AUDIT.md](AUDIT.md) "Reader parity"):
+    - User-affecting drift only: align swipe thresholds, zoom grid, spread snap-to-odd between Reader A (`/read/[id]`) and Reader B (homepage carousel).
+    - + Backport Reader B polish (cover JPEG fallback, neighbour preloading, page-turn skeleton, floating zoom pill) to Reader A.
+    - + Extract shared helpers (`useMediaQuery`, zoom grid, ease curves, spread snap) to `apps/web/src/lib/` so both readers stay in sync.
+
+C. [ ] **Lighthouse baseline run** — production build (`pnpm build && pnpm start --port 5000`), DevTools → Lighthouse on `/`, `/browse`, `/search`, `/issue/[id]`, `/read/[id]`. Paste scores into [AUDIT.md](AUDIT.md) score history. First run establishes the baseline; subsequent runs catch regressions.
+
+_____________________
+
 ## Immediate Plan — Post-Kaushal-Approval (2026-05-04)
 
 > Kaushal Ji has approved: (1) Cloudflare R2 storage, (2) current Topic Tags + popular-topics structure as the categorisation layer, (3) the present upload flow, (4) `aimarchive.aurosociety.org` as the new subdomain, and (5) the long-term north star of replacing `aim.aurosociety.org` with this archive once enough issues are uploaded — with the current month's issue prominently featured on the homepage. All technical operations route through **Dibyanshu**.
@@ -262,8 +275,8 @@ _____________________
 
 ### Side items surfaced earlier (low priority, separate)
 
-23. [ ] Remove the bookmark toast (per prior feedback — bookmark add/remove should not produce a toast).
-24. [ ] Audit other toasts and silence the noisy ones; keep toasts for outcomes the user can't otherwise see (uploads, deletes, batch actions).
+23. [x] Remove the bookmark toast (per prior feedback — bookmark add/remove should not produce a toast). **Done 2026-05-05** — confirmed no bookmark toast was ever wired (heart icon flip is the only signal, which is correct).
+24. [x] Audit other toasts and silence the noisy ones; keep toasts for outcomes the user can't otherwise see (uploads, deletes, batch actions). **Done 2026-05-05** — removed three redundant success toasts in admin Issues (delete, publish toggle, edit save) since each already has direct visual feedback (row vanishes, status pill flips, panel closes + row updates). All error toasts and invisible-side-effect toasts (cover replace, PDF replace + OCR, reindex done, bulk counts, CSV export, settings save) kept.
 
 ### Multi-language fonts — when Tamil / Bengali / Marathi editions arrive
 
