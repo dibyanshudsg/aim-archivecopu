@@ -55,3 +55,4 @@ AIM Issues/
 *.tsbuildinfo
 
 .vercel
+.lighthouse/
