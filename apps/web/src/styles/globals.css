@@ -57,10 +57,16 @@ html {
   color: var(--color-flame-900);
 }
 
-/* Focus ring style */
-*:focus-visible {
-  outline: 2px solid var(--color-flame-500);
-  outline-offset: 2px;
+/* Focus ring style — wrapped in @layer base so component-level Tailwind
+   utilities (e.g. focus-visible:outline-none on a custom input that uses an
+   underline as its focus indicator) can override it. Unlayered rules trump
+   utility-layer rules regardless of source order, which makes per-component
+   overrides require !important or inline styles otherwise. */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid var(--color-flame-500);
+    outline-offset: 2px;
+  }
 }
 
 /* Restore pointer cursor on interactive elements (Tailwind v4 preflight removes it). */

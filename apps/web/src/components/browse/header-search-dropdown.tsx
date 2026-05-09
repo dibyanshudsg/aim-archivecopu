@@ -62,10 +62,11 @@ export function HeaderSearchDropdown() {
                     setQuery(e.target.value);
                   }}
                   placeholder="Search issues, topics, magazines…"
-                  // Inline outline:none beats the global *:focus-visible rule
-                  // in globals.css; the gold underline is the focus indicator.
-                  style={{ outline: 'none', boxShadow: 'none' }}
-                  className="w-full bg-transparent py-2 text-left text-base font-medium text-gray-900 placeholder:font-normal placeholder:text-gray-400 sm:text-lg"
+                  // Suppress the global flame focus ring — the animated gold
+                  // underline below is this input's focus indicator. The
+                  // global rule lives in `@layer base`, so utility-layer
+                  // classes like these win the cascade.
+                  className="w-full bg-transparent py-2 text-left text-base font-medium text-gray-900 placeholder:font-normal placeholder:text-gray-400 focus-visible:shadow-none focus-visible:outline-none sm:text-lg"
                 />
                 {localQuery ? (
                   <button
