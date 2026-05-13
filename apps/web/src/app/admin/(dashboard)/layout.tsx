@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   BookCopy,
   FileText,
+  HardDrive,
   LogOut,
   Menu,
   Settings,
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/magazines', icon: BookCopy, label: 'Magazines' },
   { href: '/admin/issues', icon: FileText, label: 'Issues' },
+  { href: '/admin/storage', icon: HardDrive, label: 'Storage' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
