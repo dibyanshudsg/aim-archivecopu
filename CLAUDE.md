@@ -371,6 +371,7 @@ search_issues(search_query, filter_magazine_id, filter_year_from, filter_year_to
 - Search index: public SELECT
 - Analytics visibility: public SELECT
 - Users/bookmarks/history: authenticated users can manage own data
+- Admins: RLS enabled with no public policies — service-role-only access (no anon read/write)
 - Admin writes bypass RLS via service role key
 
 ### Auto-update Triggers

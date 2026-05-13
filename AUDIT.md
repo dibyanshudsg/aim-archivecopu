@@ -123,6 +123,15 @@
 
 ---
 
+## Security
+
+| Severity | Issue | Detected | Status |
+|---|---|---|---|
+| Critical | `admins` table had RLS disabled — anon key could INSERT a row via PostgREST, then forge a session cookie (verifyAdmin only checks row exists by id, not password) to bypass auth entirely. Could also DELETE the real admin row. | Supabase Security Advisor, 2026-05-11 | **Fixed** 2026-05-13 — `ALTER TABLE admins ENABLE ROW LEVEL SECURITY;` applied via SQL Editor. Server access uses service role key (bypasses RLS) so no policies needed. Recorded in [packages/supabase/migrations/00006_security_hardening.sql](packages/supabase/migrations/00006_security_hardening.sql). |
+| Low | `public.update_updated_at()` and `public.search_issues(...)` had mutable `search_path` — hardening warning, not exploitable since neither is `SECURITY DEFINER`. | Supabase Security Advisor, 2026-05-11 | **Fixed** 2026-05-13 — `SET search_path = public, pg_temp` pinned on both functions. Recorded in [packages/supabase/migrations/00006_security_hardening.sql](packages/supabase/migrations/00006_security_hardening.sql). |
+
+---
+
 ## Process notes
 
 - Before fixing High-severity items, capture a Lighthouse baseline so we can prove the regression goes the right way.
