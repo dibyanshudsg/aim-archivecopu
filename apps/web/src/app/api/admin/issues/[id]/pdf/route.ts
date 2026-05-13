@@ -4,20 +4,18 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
+import { isSupabaseStorageUrl, storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
-function storagePathFromPdfUrl(pdfUrl: string): string | null {
-  const marker = '/magazines/';
-  const i = pdfUrl.indexOf(marker);
-  if (i < 0) return null;
-  // Strip any query string (e.g. cache-bust ?v=…) before decoding
-  const rawPath = pdfUrl.slice(i + marker.length).split('?')[0];
-  return decodeURIComponent(rawPath);
-}
-
+/**
+ * Replace the PDF for an existing issue. The new PDF is always written to
+ * R2 — if the issue was on Supabase Storage, this implicitly migrates it.
+ * The storage key is preserved from the original URL so legacy and new
+ * URLs share the same key shape.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -37,9 +35,9 @@ export async function POST(
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
-  const storagePath = storagePathFromPdfUrl(issue.pdf_url);
-  if (!storagePath) {
-    return NextResponse.json({ error: 'Could not derive storage path' }, { status: 500 });
+  const storageKey = storageKeyFromUrl(issue.pdf_url);
+  if (!storageKey) {
+    return NextResponse.json({ error: 'Could not derive storage key' }, { status: 500 });
   }
 
   const formData = await request.formData();
@@ -53,16 +51,25 @@ export async function POST(
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadErr } = await supabase.storage
-    .from('magazines')
-    .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
-  if (uploadErr) {
-    return NextResponse.json({ error: 'Upload failed: ' + uploadErr.message }, { status: 500 });
+  let newPublicUrl: string;
+  try {
+    newPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
+  } catch (uploadErr) {
+    const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
+    return NextResponse.json({ error: 'Upload failed: ' + message }, { status: 500 });
   }
 
-  // Cache-bust the public URL so consumers refresh
-  const { data: urlData } = supabase.storage.from('magazines').getPublicUrl(storagePath);
-  const cacheBustedUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+  // If the previous URL was on Supabase Storage, drop the now-orphaned file.
+  if (isSupabaseStorageUrl(issue.pdf_url)) {
+    try {
+      await supabase.storage.from('magazines').remove([storageKey]);
+    } catch (legacyCleanupErr) {
+      console.error('Legacy Supabase cleanup failed (non-blocking):', legacyCleanupErr);
+    }
+  }
+
+  // Cache-bust so reader/clients pick up the new file
+  const cacheBustedUrl = `${newPublicUrl}?v=${Date.now()}`;
 
   const { error: updErr } = await supabase
     .from('issues')
@@ -87,7 +94,7 @@ export async function POST(
   const isAutoThumb = !issue.cover_image_url || issue.cover_image_url.includes('-thumb.jpg');
   if (isAutoThumb) {
     try {
-      thumbnailUrl = await generateAndUploadThumbnail(supabase, buffer, storagePath);
+      thumbnailUrl = await generateAndUploadThumbnail(buffer, storageKey);
       if (thumbnailUrl) {
         await supabase
           .from('issues')

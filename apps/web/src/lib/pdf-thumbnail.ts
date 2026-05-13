@@ -1,11 +1,14 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { uploadToR2 } from './r2-client';
 
 /**
- * Render the first page of a PDF to a PNG thumbnail and upload it to Supabase Storage.
+ * Render the first page of a PDF to a JPEG thumbnail and upload it to R2.
  * Returns the public URL of the uploaded thumbnail.
+ *
+ * `storagePath` is the source PDF's object key (e.g.
+ * `agnishikha-2026/Agnishikha-Jan-2026.pdf`); the thumbnail is uploaded
+ * to the sibling key `<...>-thumb.jpg`.
  */
 export async function generateAndUploadThumbnail(
-  supabase: SupabaseClient,
   pdfBuffer: Buffer,
   storagePath: string,
 ): Promise<string> {
@@ -31,40 +34,23 @@ export async function generateAndUploadThumbnail(
       viewport,
     }).promise;
 
-    // Encode as JPEG for smaller file size
     const imageBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
 
     page.cleanup();
 
-    // Upload to Supabase Storage alongside the PDF
-    const thumbnailPath = storagePath.replace(/\.pdf$/i, '-thumb.jpg');
-
-    const { error: uploadErr } = await supabase.storage
-      .from('magazines')
-      .upload(thumbnailPath, imageBuffer, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-
-    if (uploadErr) {
-      throw new Error(`Thumbnail upload failed: ${uploadErr.message}`);
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('magazines')
-      .getPublicUrl(thumbnailPath);
-
-    return urlData.publicUrl;
+    const thumbnailKey = storagePath.replace(/\.pdf$/i, '-thumb.jpg');
+    return uploadToR2(thumbnailKey, imageBuffer, 'image/jpeg');
   } finally {
     doc.destroy();
   }
 }
 
 /**
- * Generate a thumbnail from a PDF URL (for backfilling existing issues).
+ * Generate a thumbnail from a PDF URL (used by backfill / reindex routes).
+ * The PDF may currently live on R2 or Supabase Storage — `pdfUrl` is just
+ * fetched over HTTPS — but the thumbnail is always written to R2.
  */
 export async function generateThumbnailFromUrl(
-  supabase: SupabaseClient,
   pdfUrl: string,
   storagePath: string,
 ): Promise<string> {
@@ -76,5 +62,5 @@ export async function generateThumbnailFromUrl(
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  return generateAndUploadThumbnail(supabase, buffer, storagePath);
+  return generateAndUploadThumbnail(buffer, storagePath);
 }

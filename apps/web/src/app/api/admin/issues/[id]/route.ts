@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import {
+  deleteFromR2,
+  isR2Url,
+  isSupabaseStorageUrl,
+  storageKeyFromUrl,
+} from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -33,6 +39,14 @@ export async function PUT(
   return NextResponse.json(data);
 }
 
+/**
+ * Delete an issue and clean up its stored files.
+ *
+ * Files may live on R2 (new uploads) or Supabase Storage (legacy, pre-migration);
+ * we look at each URL and clean up the correct backend. Both `pdf_url` and
+ * `cover_image_url` are removed — earlier code only cleaned up the PDF and
+ * leaked the cover.
+ */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -43,16 +57,29 @@ export async function DELETE(
   const { id } = await params;
   const supabase = getClient();
 
-  // Get issue to find PDF path for cleanup
-  const { data: issue } = await supabase.from('issues').select('pdf_url').eq('id', id).single();
+  const { data: issue } = await supabase
+    .from('issues')
+    .select('pdf_url, cover_image_url')
+    .eq('id', id)
+    .single();
 
   const { error } = await supabase.from('issues').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Clean up storage if PDF was in our bucket
-  if (issue?.pdf_url?.includes('supabase.co/storage')) {
-    const path = issue.pdf_url.split('/magazines/')[1];
-    if (path) await supabase.storage.from('magazines').remove([decodeURIComponent(path)]);
+  const cleanups: Array<string | null | undefined> = [issue?.pdf_url, issue?.cover_image_url];
+  for (const url of cleanups) {
+    if (!url) continue;
+    const key = storageKeyFromUrl(url);
+    if (!key) continue;
+    try {
+      if (isR2Url(url)) {
+        await deleteFromR2(key);
+      } else if (isSupabaseStorageUrl(url)) {
+        await supabase.storage.from('magazines').remove([key]);
+      }
+    } catch (cleanupErr) {
+      console.error(`Storage cleanup failed for ${url}:`, cleanupErr);
+    }
   }
 
   return NextResponse.json({ success: true });

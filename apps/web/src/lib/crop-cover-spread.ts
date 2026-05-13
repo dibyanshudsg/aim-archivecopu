@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { uploadToR2 } from './r2-client';
 
 export type SpreadOrientation = 'front-right' | 'front-left';
 
@@ -18,12 +18,11 @@ const SPREAD_RATIO_THRESHOLD = 1.1;
 
 /**
  * Take an image (typically a combined back+front cover spread), crop the
- * front-cover half, and upload it to Supabase Storage as `<storagePath>-cover.jpg`.
+ * front-cover half, and upload it to R2 as `<storagePath>-cover.jpg`.
  *
  * If the image is already a single portrait cover, it's uploaded unchanged.
  */
 export async function cropAndUploadCover(
-  supabase: SupabaseClient,
   imageBuffer: Buffer,
   storagePath: string,
   orientation: SpreadOrientation = 'front-right',
@@ -53,18 +52,11 @@ export async function cropAndUploadCover(
 
   const out = canvas.toBuffer('image/jpeg', { quality: 0.9 });
 
-  const coverPath = storagePath.replace(/\.pdf$/i, '-cover.jpg');
-
-  const { error } = await supabase.storage
-    .from('magazines')
-    .upload(coverPath, out, { contentType: 'image/jpeg', upsert: true });
-
-  if (error) throw new Error(`Cover upload failed: ${error.message}`);
-
-  const { data } = supabase.storage.from('magazines').getPublicUrl(coverPath);
+  const coverKey = storagePath.replace(/\.pdf$/i, '-cover.jpg');
+  const publicUrl = await uploadToR2(coverKey, out, 'image/jpeg');
 
   return {
-    publicUrl: data.publicUrl,
+    publicUrl,
     cropped: isSpread,
     width: outWidth,
     height: outHeight,

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { indexIssueFromUrl } from '@/lib/search-indexer';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
+import { storageKeyFromUrl } from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -57,14 +58,9 @@ export async function POST(request: NextRequest) {
     let thumbnailUrl: string | null = null;
     if (!issue.cover_image_url) {
       try {
-        const url = new URL(issue.pdf_url);
-        const storagePath = url.pathname.split('/storage/v1/object/public/magazines/')[1];
-        if (storagePath) {
-          thumbnailUrl = await generateThumbnailFromUrl(
-            supabase,
-            issue.pdf_url,
-            decodeURIComponent(storagePath),
-          );
+        const storageKey = storageKeyFromUrl(issue.pdf_url);
+        if (storageKey) {
+          thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
           await supabase
             .from('issues')
             .update({ cover_image_url: thumbnailUrl })

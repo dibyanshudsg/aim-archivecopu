@@ -5,6 +5,7 @@ import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
+import { uploadToR2 } from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -50,19 +51,18 @@ export async function POST(request: NextRequest) {
   const { data: mag } = await supabase.from('magazines').select('name').eq('id', magazineId).single();
   if (!mag) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
 
-  // Upload PDF to storage
-  const storagePath = `${mag.name.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
+  // Upload PDF to R2. The storage key is preserved across the migration so
+  // legacy Supabase rows and new R2 rows share the same key shape.
+  const storageKey = `${mag.name.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadErr } = await supabase.storage
-    .from('magazines')
-    .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
-
-  if (uploadErr) {
-    return NextResponse.json({ error: 'Upload failed: ' + uploadErr.message }, { status: 500 });
+  let pdfPublicUrl: string;
+  try {
+    pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
+  } catch (uploadErr) {
+    const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
+    return NextResponse.json({ error: 'Upload failed: ' + message }, { status: 500 });
   }
-
-  const { data: urlData } = supabase.storage.from('magazines').getPublicUrl(storagePath);
 
   // Cover image: prefer an explicitly-uploaded spread/cover image (cropped to
   // front), fall back to rendering page 1 of the PDF.
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   if (coverFile && coverFile.size > 0 && coverFile.type.startsWith('image/')) {
     try {
       const coverBuf = Buffer.from(await coverFile.arrayBuffer());
-      const result = await cropAndUploadCover(supabase, coverBuf, storagePath, orientation);
+      const result = await cropAndUploadCover(coverBuf, storageKey, orientation);
       coverImageUrl = result.publicUrl;
     } catch (coverErr) {
       console.error('Cover crop/upload failed (falling back to PDF page 1):', coverErr);
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   if (!coverImageUrl) {
     try {
-      coverImageUrl = await generateAndUploadThumbnail(supabase, buffer, storagePath);
+      coverImageUrl = await generateAndUploadThumbnail(buffer, storageKey);
     } catch (thumbErr) {
       console.error('Thumbnail generation failed (non-blocking):', thumbErr);
     }
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       month,
       description: description || null,
       topics,
-      pdf_url: urlData.publicUrl,
+      pdf_url: pdfPublicUrl,
       cover_image_url: coverImageUrl,
       file_size_bytes: file.size,
       is_published: true,

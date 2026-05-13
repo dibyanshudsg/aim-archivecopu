@@ -91,33 +91,23 @@
 
 > **Why:** Supabase Storage charges egress (bandwidth) per GB. R2 charges **zero** egress, forever. With ~25 MB per issue and a public archive, this saves ₹2,000+/month at scale and removes "viral spike" billing risk. Free tier (10 GB / 1M reads/mo) covers the first ~400 issues.
 
-### A. Cloudflare account & bucket setup (manual, ~10 min)
-- [ ] Sign up / log in at https://dash.cloudflare.com
-- [ ] Add payment method (required for R2 even on free tier — won't be charged unless free tier is exceeded)
-- [ ] R2 → **Create bucket**
-  - Name: `aim-archive`
-  - Location: **Asia-Pacific (APAC)** for closest hop to Indian users
-  - Default Storage Class: Standard
-- [ ] Bucket → Settings → **Public access** → enable **r2.dev subdomain**
-  - Save the public URL (`https://pub-XXXXXXXX.r2.dev`)
-- [ ] R2 → **Manage R2 API Tokens** → **Create API Token**
-  - Name: `aim-archive-app`
-  - Permissions: **Object Read & Write**
-  - Specify bucket: `aim-archive` only (not all buckets)
-  - Save: **Access Key ID**, **Secret Access Key**, **Account ID** (from endpoint URL)
+### A. Cloudflare account & bucket setup ✅ DONE (2026-05-11, via Dibyanshu)
+- [x] Society-owned Cloudflare account + `aim-archive` R2 bucket (APAC region)
+- [x] Public access enabled (`pub-3ed08073797148cf93d772ea1eb341f9.r2.dev`)
+- [x] R2 API token issued (Object Read & Write, scoped to `aim-archive` bucket)
+- [x] CORS policy applied — GET/HEAD allowed from `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`, `http://localhost:3000`
+- [x] Smoke test (`scripts/test-r2.mjs`) — all green
 
-### B. Code changes
-- [ ] Add deps: `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`
-- [ ] New file `apps/web/src/lib/r2-client.ts` — configured S3 client pointed at R2
-- [ ] Refactor `apps/web/src/lib/pdf-thumbnail.ts` to upload thumbnails to R2 (drop Supabase Storage dep)
-- [ ] Refactor `/api/admin/upload` to write source PDFs to R2
-- [ ] Refactor `/api/admin/issues/[id]` DELETE to clean up R2 instead of Supabase Storage
-- [ ] Update `apps/web/.env.local.example` with new vars:
-  - `R2_ACCOUNT_ID`
-  - `R2_ACCESS_KEY_ID`
-  - `R2_SECRET_ACCESS_KEY`
-  - `R2_BUCKET=aim-archive`
-  - `R2_PUBLIC_BASE_URL=https://pub-XXXXXXXX.r2.dev`
+### B. Code changes ✅ DONE (2026-05-11)
+- [x] Add dep: `@aws-sdk/client-s3` in `apps/web` runtime deps
+- [x] New file `apps/web/src/lib/r2-client.ts` — S3 client + `uploadToR2`, `deleteFromR2`, `keyFromPublicUrl`, `storageKeyFromUrl`, `isR2Url`, `isSupabaseStorageUrl`
+- [x] Refactor `apps/web/src/lib/pdf-thumbnail.ts` and `crop-cover-spread.ts` to write to R2 (dropped `SupabaseClient` param)
+- [x] Refactor `/api/admin/upload` to write source PDFs + covers to R2
+- [x] Refactor `/api/admin/issues/[id]` DELETE — handles both R2 + Supabase legacy URLs; also cleans up the cover (fixed pre-existing leak)
+- [x] Refactor `/api/admin/issues/[id]/pdf` and `/cover` replace routes to R2 (auto-migrates the issue if it was on Supabase legacy)
+- [x] Refactor `/api/admin/thumbnails`, `/api/admin/reindex`, `/api/admin/issues/[id]/reindex` to R2
+- [x] Add `pub-*.r2.dev` to `next.config.ts` `images.remotePatterns`
+- [x] Update `apps/web/.env.local.example` and `turbo.json` `build.env` with R2 vars
 
 ### C. Migration script (one-shot for existing 8 issues)
 - [ ] New file `scripts/migrate-storage-to-r2.ts`

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
+import { storageKeyFromUrl } from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -37,20 +38,14 @@ export async function POST() {
   const issue = issues[0];
 
   try {
-    const url = new URL(issue.pdf_url);
-    const storagePath = url.pathname.split('/storage/v1/object/public/magazines/')[1];
-
-    if (!storagePath) {
+    const storageKey = storageKeyFromUrl(issue.pdf_url);
+    if (!storageKey) {
       return NextResponse.json({
-        error: `Could not derive storage path from PDF URL for "${issue.title}"`,
+        error: `Could not derive storage key from PDF URL for "${issue.title}"`,
       }, { status: 500 });
     }
 
-    const thumbnailUrl = await generateThumbnailFromUrl(
-      supabase,
-      issue.pdf_url,
-      decodeURIComponent(storagePath),
-    );
+    const thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
 
     await supabase
       .from('issues')

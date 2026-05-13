@@ -95,17 +95,51 @@
 - [x] Admin issues table redesign: cover thumbnails with portal-rendered hover preview; 2-row card unit per issue (main row + actions row); hover scale + lift; inline slide-down edit form (centered card with flame border); Save button gated by isDirty memo; auto-regenerate Magazine Title on dropdown change
 - [x] Browse + Bookmarks grid breakpoints unified (2/3/3/4/4/5 across responsive tiers)
 
-### 1.8 Cloudflare R2 Storage Migration ⬜ UP NEXT
+### 1.8 Cloudflare R2 Storage Migration 🟡 IN PROGRESS (Phases 0–2 done; 3–4 remaining)
 > Goal: Replace Supabase Storage with Cloudflare R2 for zero egress fees + better India delivery. Approved by Kaushal Ji (May 2026).
 
-- [ ] Society-owned Cloudflare account + R2 bucket creation (coordinated with Dibyanshu)
-- [ ] Code refactor: `r2-client.ts`, refactored upload/delete/thumbnail flows
-- [ ] Migration script to copy existing PDFs/thumbnails from Supabase Storage to R2 + rewrite DB URLs
-- [ ] Vercel env vars + production deploy
-- [ ] Empty Supabase Storage bucket post-verification
-- [ ] (Optional) custom domain `cdn.aimarchive.aurosociety.org`
+#### Phase 0 — Account & bucket setup ✅ COMPLETE (2026-05-11)
+- [x] Society-owned Cloudflare account + `aim-archive` R2 bucket (coordinated with Dibyanshu)
+- [x] Public access enabled (`pub-3ed08073797148cf93d772ea1eb341f9.r2.dev`)
+- [x] R2 API token issued (Object Read & Write, scoped to `aim-archive` bucket)
+- [x] CORS policy applied — GET/HEAD allowed from `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`, `http://localhost:3000`
+- [x] Connectivity smoke test (`scripts/test-r2.mjs`) — PUT/LIST/HEAD/GET/DELETE all green, CORS preflight returns 204 with ACAO
 
-See `TO DO LIST.md` § "Up Next — Migrate Storage to Cloudflare R2" for detailed checklist.
+#### Phase 1 — Foundation (no behavior change) ✅ COMPLETE (2026-05-11)
+- [x] Move `@aws-sdk/client-s3` from root devDeps to `apps/web` runtime deps
+- [x] New `apps/web/src/lib/r2-client.ts` — memoised S3 client + `uploadToR2`, `deleteFromR2`, `keyFromPublicUrl`, `storageKeyFromUrl`, `isR2Url`, `isSupabaseStorageUrl` helpers
+- [x] Add `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` to `apps/web/.env.local.example` and `turbo.json` `build.env`
+- [x] Smoke test script `scripts/test-r2.mjs` resolves SDK out of `apps/web/node_modules` via `createRequire`
+
+#### Phase 2 — Wire R2 as the storage layer ✅ COMPLETE (2026-05-11)
+- [x] Refactor `apps/web/src/lib/pdf-thumbnail.ts` to write to R2 (dropped `SupabaseClient` param)
+- [x] Refactor `apps/web/src/lib/crop-cover-spread.ts` to write to R2 (dropped `SupabaseClient` param)
+- [x] `/api/admin/upload` — writes source PDF + cover/thumbnail to R2
+- [x] `/api/admin/issues/[id]` DELETE — recognises both R2 + Supabase legacy URLs; also cleans up the cover (fixed pre-existing leak)
+- [x] `/api/admin/issues/[id]/pdf` — replace always writes to R2; if prior URL was Supabase legacy, the old file is removed (implicit per-issue migration)
+- [x] `/api/admin/issues/[id]/cover` — uploads to R2; derives key from `pdf_url` via `storageKeyFromUrl` (works for either backend)
+- [x] `/api/admin/thumbnails`, `/api/admin/reindex`, `/api/admin/issues/[id]/reindex` — backfill/reindex routes write thumbnails to R2
+- [x] Add `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev` to `next.config.ts` `images.remotePatterns` (Next blocks unconfigured image hosts)
+- [x] Add R2 creds to `apps/web/.env.local` for dev
+- [x] Manual upload test: both "All India Magazine — May 2026" and "Agnishikha — May 2026" uploaded; PDF + cover served from `pub-*.r2.dev`; reader rendered the PDF cleanly
+
+#### Phase 3 — Migrate the existing 8 issues
+- [ ] New `scripts/migrate-storage-to-r2.mjs` — for each issue: download from Supabase, re-upload to R2 with the same key, update `issues.pdf_url` + `issues.cover_image_url`. Idempotent — skips rows already on R2
+- [ ] Dry-run mode first (`--dry`), then real run
+- [ ] Spot-check 2–3 issues in the live reader — PDF + thumbnail load from R2
+
+#### Phase 4 — Production cutover
+- [ ] Add the 5 `R2_*` env vars on Vercel (Production, Preview, Development)
+- [ ] Push, redeploy, verify live site loads PDFs from R2
+- [ ] After ~7 days of stable verification, empty the Supabase Storage `magazines` bucket (keep DB rows; URLs already point at R2)
+- [ ] Documentation: update `CLAUDE.md` §3 (Tech Stack), §15 (Known Issues if any surface), §16 (Deployment Flow with R2 env vars)
+
+#### Phase 5 — Future enhancements (separate work)
+- [ ] Move from `pub-*.r2.dev` to a custom domain like `cdn.aimarchive.aurosociety.org` — single env-var change once DNS is ready
+- [ ] Mirror PDFs to Internet Archive (archive.org) as preservation backup + alternate access route
+- [ ] Cloudflare CDN cache rules for popular issues (further latency improvement)
+
+See `TO DO LIST.md` § "Up Next — Migrate Storage to Cloudflare R2" for the originating checklist.
 
 ### 1.6 Public UI/UX Polish
 > Goal: Make the public archive feel calm, tactile, and easy to explore.

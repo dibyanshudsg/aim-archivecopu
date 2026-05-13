@@ -11,6 +11,7 @@
   "dependencies": {
     "@aim-archive/shared": "workspace:*",
     "@aim-archive/supabase": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@supabase/supabase-js": "^2.49.4",
     "canvas": "^3.2.3",
     "framer-motion": "^12.6.3",

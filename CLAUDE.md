@@ -86,7 +86,7 @@ Magazine
 - **Database**: Supabase (PostgreSQL) — free tier, South Asia (Mumbai) region
 - **Project ID**: `glduurfsjyxpkdnxgdqz`
 - **Authentication**: Session cookie-based admin auth (admin email + shared password)
-- **File Storage**: Supabase Storage (`magazines` bucket, public access)
+- **File Storage**: Cloudflare R2 (`aim-archive` bucket, public via `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev`, custom domain planned) — all new uploads go here. Legacy Supabase Storage (`magazines` bucket) still holds the original 8 pre-May-2026 issues; Phase 3 migration script will move them. Access pattern: server-side uploads via `@aws-sdk/client-s3` pointed at R2, public reads direct from the `pub-*.r2.dev` URL. Helpers in `apps/web/src/lib/r2-client.ts` (`uploadToR2`, `deleteFromR2`, `storageKeyFromUrl`, `isR2Url`, `isSupabaseStorageUrl`) handle both backends so the DELETE/replace routes work on either-era issues.
 - **Full-Text Search**: PostgreSQL Full-Text Search via Supabase RPC function (`search_issues`)
   - Uses `plainto_tsquery`, `ts_rank` for relevance, `ts_headline` for highlighted snippets
   - Fallback to ILIKE on titles/topics when no full-text results
@@ -702,6 +702,9 @@ d:/AIM Project/
 - **Animating `<tr>` and `<tbody>` heights**: Framer Motion's `height: auto` animation works on table elements when wrapped in `motion.tr`/`motion.div` with `overflow: hidden` during animation. The admin Issues edit panel uses `transitionEnd: { overflow: 'visible' }` on the `animate` prop so dropdowns inside the panel (e.g. Topic Tags) aren't clipped after the slide-in completes. See `EditRowForm` in `apps/web/src/app/admin/(dashboard)/issues/page.tsx`.
 - **`overflow-x-auto` implicitly clips overflow-y**: per CSS spec, setting `overflow-x` to anything other than `visible` makes `overflow-y` compute to `auto` rather than visible. The admin Issues table wrapper has `overflow-x-auto` for narrow viewports, which means hover previews positioned absolutely inside table rows get vertically clipped at the wrapper's edges. **Mitigation**: render hover previews via `react-dom`'s `createPortal` to `document.body` and position them with `position: fixed` based on `getBoundingClientRect()`. Auto-clamp vertically against the viewport so the preview stays fully on-screen for top/bottom rows. See `CoverThumbnail` in the admin Issues page.
 - **Card-style hover on table rows**: each issue is wrapped in its own `<tbody>` (HTML5 allows multiple tbodies per table) so a `transform: scale()` and `box-shadow` on hover applies as a unit to both the main row and the actions row. `relative` + `z-10` on hover prevents the elevated card from being clipped by adjacent rows. Border separation between issues comes from `border-b border-gray-100` on each tbody (with `last:border-b-0` to keep the bottom of the table clean).
+- **R2 hostname must be in `next.config.ts` `images.remotePatterns`**: Next's `<Image>` component refuses unconfigured remote hosts at runtime with `Invalid src prop... hostname not configured under images`. Both `*.supabase.co` (legacy) and `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev` (current) are allow-listed. When swapping to a custom domain like `cdn.aimarchive.aurosociety.org`, add it here in the same commit as the env-var change. `next.config.ts` is **not** hot-reloaded — dev server restart is required after editing.
+- **R2 CORS origins must match the actual dev port**: the project's `pnpm dev` listens on `:5000` by default (per `apps/web/package.json`), but the R2 CORS allowlist on the `aim-archive` bucket currently only includes `http://localhost:3000` (along with `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`). Running `next dev -p 3000` is the workaround for local R2 testing. The proper fix is to add `http://localhost:5000` to the bucket CORS via Cloudflare dashboard (R2 → bucket → Settings → CORS Policy). Without this, react-pdf cross-origin fetches from `:5000` will silently fail because the response is missing the `Access-Control-Allow-Origin` header.
+- **`next.config.ts` images.remotePatterns for R2 — wildcard caveat**: R2 public URLs are of the form `pub-<hex>.r2.dev` and the hex is per-bucket. A bare `*.r2.dev` wildcard would technically work but is broader than needed — pin to the exact `pub-*` hostname for least privilege.
 
 ---
 
@@ -717,6 +720,7 @@ d:/AIM Project/
 - **Environment variables**: managed in the Vercel dashboard; required ones:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` (Cloudflare R2 — needed for new uploads to land in R2; reads work without these because PDFs are served directly from `pub-*.r2.dev`)
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `ADMIN_PASSWORD`
   - `NEXT_PUBLIC_APP_URL` (used for OG/SEO tags)

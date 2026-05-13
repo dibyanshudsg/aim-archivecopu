@@ -2,22 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
+import { storageKeyFromUrl } from '@/lib/r2-client';
 
 function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-/**
- * Recover the storage path used when the original PDF was uploaded.
- * `pdf_url` looks like:
- *   https://<project>.supabase.co/storage/v1/object/public/magazines/<storagePath>
- */
-function storagePathFromPdfUrl(pdfUrl: string): string | null {
-  const marker = '/magazines/';
-  const i = pdfUrl.indexOf(marker);
-  if (i < 0) return null;
-  // Strip any query string (e.g. cache-bust ?v=…) before returning the storage path
-  return pdfUrl.slice(i + marker.length).split('?')[0];
 }
 
 export async function POST(
@@ -39,9 +27,9 @@ export async function POST(
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
-  const storagePath = storagePathFromPdfUrl(issue.pdf_url);
-  if (!storagePath) {
-    return NextResponse.json({ error: 'Could not derive storage path' }, { status: 500 });
+  const storageKey = storageKeyFromUrl(issue.pdf_url);
+  if (!storageKey) {
+    return NextResponse.json({ error: 'Could not derive storage key' }, { status: 500 });
   }
 
   const formData = await request.formData();
@@ -59,7 +47,7 @@ export async function POST(
 
   try {
     const buf = Buffer.from(await cover.arrayBuffer());
-    const result = await cropAndUploadCover(supabase, buf, storagePath, orientation);
+    const result = await cropAndUploadCover(buf, storageKey, orientation);
 
     const { error: upErr } = await supabase
       .from('issues')
