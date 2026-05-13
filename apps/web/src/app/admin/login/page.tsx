@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Lock } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Lock } from 'lucide-react';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -39,7 +40,20 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4">
+      {/* Themed back-to-site button. Sits in the top-left corner so it never
+          competes with the centred login card. Gold-flame icon, with a soft
+          flame underglow on hover that matches the Sign-In button's gradient. */}
+      <Link
+        href="/"
+        aria-label="Back to AIM Archive home"
+        className="group absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/90 px-3.5 py-2 text-sm font-medium text-gray-700 shadow-sm backdrop-blur-sm transition-all hover:-translate-x-0.5 hover:border-flame-300 hover:bg-white hover:text-flame-700 hover:shadow-[0_8px_22px_rgba(190,140,46,0.18)] sm:left-6 sm:top-6"
+      >
+        <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5 group-hover:text-flame-600" />
+        <span className="hidden sm:inline">Back to Site</span>
+        <span className="sm:hidden">Back</span>
+      </Link>
+
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Image
