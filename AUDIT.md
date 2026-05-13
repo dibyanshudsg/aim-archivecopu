@@ -25,6 +25,9 @@
 | 2026-05-09 | a68f4a7 | `/read/[id]` | Mobile | 50 | 88 | 100 | 92 | Baseline — worst route. Perf hit by react-pdf bundle + LCP delay; a11y hit by color-contrast, unlabeled controls, missing `<main>` landmark. |
 | 2026-05-09 | a68f4a7 | `/admin/login` | Mobile | 97 | 98 | 100 | 61 | Baseline. SEO 61 is **by design** — admin login carries `robots: noindex` and no canonical (intentional). |
 | 2026-05-09 | a68f4a7 | `/` | Desktop | 78 | 100 | 100 | 100 | Baseline. |
+| 2026-05-09 | _uncommitted_ | `/` | Mobile | **74** ↑4 | 100 | 100 | 100 | Hero subtitle (LCP element) rendered statically (no Framer transform); carousel `next/dynamic` lazy-loaded. |
+| 2026-05-09 | _uncommitted_ | `/browse` | Mobile | **83** ↑21 | 98 | 100 | 100 | First-row cover thumbnails carry `priority` + opacity-gate dropped from card animation. **LCP 25.1s → 3.3s**. |
+| 2026-05-09 | _uncommitted_ | `/read/[id]` | Mobile | **55** ↑5 | **100** ↑12 | 100 | 92 | Cover-JPEG fallback overlay pins LCP to a fast image instead of the PDF canvas. **A11y 88 → 100** — color-contrast, page-input aria-label, `<main>` landmark all fixed. Deeper LCP win still needs SSR-fetched issue data so the cover URL is in initial HTML. |
 
 ---
 
@@ -43,9 +46,9 @@
 
 | Severity | Issue | Route | Status |
 |---|---|---|---|
-| High | `/read/[id]` color-contrast failure — Lighthouse flags one or more text/background pairs below WCAG AA. Likely the page-scrubber or zoom controls on the dark reader chrome. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
-| High | `/read/[id]` form element(s) missing associated `<label>` — likely the page-number input or zoom select in the reader header. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
-| High | `/read/[id]` document missing `<main>` landmark — the reader page wraps everything in `<div>` instead of `<main>`. SR users have no skip target. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | Open |
+| High | `/read/[id]` color-contrast failure — actual culprit was the `<span class="text-gray-400">/ {numPages}</span>` next to the page input (2.6:1 on white). | [read/[id]/page.tsx:1302](apps/web/src/app/read/[id]/page.tsx#L1302) | **Fixed** 2026-05-09 (uncommitted) — bumped to `text-gray-500` and added `aria-hidden` since the label is decorative; the page count is announced via the input's `aria-label`. |
+| High | `/read/[id]` form element missing associated `<label>` — page-number input had no label / aria-label / placeholder. | [read/[id]/page.tsx:1294-1301](apps/web/src/app/read/[id]/page.tsx#L1294-L1301) | **Fixed** 2026-05-09 (uncommitted) — added `aria-label="Page number, of {n}"`. |
+| High | `/read/[id]` document missing `<main>` landmark — all three return paths wrapped content in `<div>`. | [read/[id]/page.tsx](apps/web/src/app/read/[id]/page.tsx) | **Fixed** 2026-05-09 (uncommitted) — wrapped loading, not-found, and main render paths in `<main>` with descriptive `aria-label`. |
 
 ---
 
@@ -76,8 +79,8 @@
 
 | Severity | Issue | Routes affected | Notes |
 |---|---|---|---|
-| High | `unused-javascript` — react-pdf + pdfjs worker shipped on first load even when the carousel isn't visible. ~600 ms savings on `/`, ~300 ms on `/read/[id]`, smaller on others. | `/`, `/read/[id]`, `/browse`, `/search` | Dynamic-import the carousel reader (`next/dynamic` with `ssr: false`) so it loads only when the section enters the viewport. |
-| High | LCP delayed across `/`, `/browse`, `/read/[id]` — Lighthouse scores 0 on LCP for all three. Likely cover thumbnails fetched without `priority` and with poor `sizes` hint. | `/`, `/browse`, `/read/[id]` | Audit `<Image>` usage on hero/cover positions; add `priority` to above-the-fold covers and right-size `sizes`. |
+| High | `unused-javascript` — react-pdf + pdfjs worker shipped on first load even when the carousel isn't visible. ~600 ms savings on `/`, ~300 ms on `/read/[id]`, smaller on others. | `/`, `/read/[id]`, `/browse`, `/search` | **Fixed** 2026-05-09 (uncommitted) — `ThisMonthFeatured` is now `next/dynamic` with `ssr: false` and a min-height skeleton placeholder. `/` First Load JS dropped 285 → 272 kB; route bundle 18.5 → 14.2 kB. |
+| High | LCP delayed across `/`, `/browse`, `/read/[id]` — Lighthouse scores 0 on LCP for all three. | `/`, `/browse`, `/read/[id]` | **Mostly fixed** 2026-05-09 (uncommitted). `/browse` LCP 25.1s → **3.3s** via `priority` on first-row covers + dropping opacity-gate on card animations. `/` LCP element rendered statically. `/read/[id]` LCP element switched from PDF canvas to a cover-JPEG overlay (with `fetchPriority="high"`), but the cover URL isn't known at SSR time so the image still has to wait for hydration — deeper win needs reader page to be SSR-fetched. |
 | Medium | Render-blocking requests — common across all routes; likely Google Fonts CSS not subset/preloaded optimally. | All | Verify `next/font/google` config for Inter + Playfair Display includes `display: 'swap'` and only used weights. |
 | Medium | `legacy-javascript-insight` on `/` — polyfills shipped that modern browsers don't need. | `/` | Likely a transitive dep; check `next.config.ts` for `swcMinify`/transpile config. |
 | Low | `forced-reflow-insight` on `/browse` — layout-thrashing loop, probably the filter panel measurement on toggle. | `/browse` | Profile with DevTools Performance tab; batch reads/writes with `requestAnimationFrame`. |
@@ -98,7 +101,7 @@
 ### Polish Reader B has that Reader A is missing
 | Issue | Status |
 |---|---|
-| Cover JPEG shown while PDF loads (Reader A: blank/spinner ~2-4s) | Open |
+| Cover JPEG shown while PDF loads (Reader A: blank/spinner ~2-4s) | **Partial** 2026-05-09 (uncommitted) — cover JPEG overlay + `firstPageRendered` state added to Reader A; LCP element switches from PDF canvas to cover image. Full polish (smooth fade-out, sized to page aspect) still pending. |
 | Neighbour issue preloading (cover + PDF) | Open |
 | Page-turn shimmer skeleton fallback | Open |
 | Floating zoom pill (always visible vs. scrollable header zoom) | Open |

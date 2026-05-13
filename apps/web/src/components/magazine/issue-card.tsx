@@ -30,10 +30,18 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
   const isSelected = useBulkSelection((s) => s.selectedIds.has(issue.id));
   const toggleSelection = useBulkSelection((s) => s.toggle);
 
+  // Cards above the fold get LCP priority on their cover image. 6 covers
+  // first row across all breakpoints (2/3/3/4/4/5). Only matters on first
+  // paint of /browse + /bookmarks; below-the-fold cards use lazy loading.
+  const isAboveFold = index < 6;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      // No opacity gate on the card — opacity:0 → 1 transitions block LCP
+      // measurement on the first row (the LCP element on /browse). Slide-up
+      // alone preserves the entrance polish without delaying paint.
+      initial={{ y: 20 }}
+      animate={{ y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.4, ease: 'easeOut' }}
       whileHover={{ y: -6, transition: { duration: 0.2, ease: 'easeOut' } }}
       onClick={selectionEnabled ? () => toggleSelection(issue.id) : undefined}
@@ -80,6 +88,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
             fill
             className="object-cover"
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 17vw"
+            priority={isAboveFold}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center">

@@ -2,13 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { BookMarked, BookOpen, LibraryBig, Search, Download, Globe } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
-import { ThisMonthFeatured } from '@/components/home/this-month-featured';
 import { Flame } from '@/components/home/flame';
+
+// Dynamic-import the embedded carousel reader so react-pdf + pdfjs ship in
+// their own chunk and don't block the initial bundle. The carousel sits below
+// the hero (often below the fold on mobile) so we don't need it for first
+// paint. ssr:false because the reader is purely client-side anyway. Skeleton
+// reserves space to avoid layout shift while the chunk arrives.
+const ThisMonthFeatured = dynamic(
+  () =>
+    import('@/components/home/this-month-featured').then((m) => ({
+      default: m.ThisMonthFeatured,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        aria-hidden
+        className="relative -mx-6 mt-16 min-h-[520px] max-w-5xl rounded-3xl border border-flame-100/60 bg-white/60 sm:mx-auto sm:min-h-[640px]"
+      />
+    ),
+  },
+);
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import {
   formatRelativeTime,
@@ -17,10 +38,13 @@ import {
 } from '@/lib/reading-history';
 import { formatMonthYear } from '@/lib/utils';
 
+// Slide-up entrance — no opacity gate. Opacity transitions block LCP measurement
+// (the element isn't "contentful" while opacity:0), so we keep the element fully
+// visible from first paint and animate position only. Saves ~1s of LCP delay
+// on /, since the hero subtitle is the LCP element.
 const fadeInUp = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { y: 20 },
   visible: {
-    opacity: 1,
     y: 0,
     transition: { duration: 0.5, ease: 'easeOut' as const },
   },
@@ -202,16 +226,18 @@ export function HomeClient({
               An Archive<br className="sm:hidden" /> of <br className="sm:hidden" /><span className="whitespace-nowrap">Eternal Flame</span>
             </motion.h1>
 
-            <motion.p
-              variants={fadeInUp}
-              className="mt-6 text-lg leading-relaxed text-gray-600 sm:text-xl"
-            >
+            {/* Static (no Framer motion variant) — this is the LCP element on
+                /. Any Framer transform animation gates LCP measurement until
+                the element reaches its final position; rendering it statically
+                paints it on first frame. The H1 and CTAs stay animated for
+                entrance polish. */}
+            <p className="mt-6 text-lg leading-relaxed text-gray-600 sm:text-xl">
               Decades of spiritual wisdom from{' '}
               <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">Sri Aurobindo</span> and{' '}
               <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">The Mother</span>, preserved and
               accessible to all. Explore the complete archive of All India Magazine, Agnishikha, and
               more.
-            </motion.p>
+            </p>
 
             <motion.div variants={fadeInUp} className="mt-10 flex items-center justify-center gap-4">
               <Link

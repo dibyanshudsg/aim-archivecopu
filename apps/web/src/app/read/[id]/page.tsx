@@ -56,6 +56,11 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const [scale, setScale] = useState(1.0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState(false);
+  // Cover-JPEG-as-LCP-candidate: shown over the PDF viewer area while the
+  // first page is rasterizing so Lighthouse pins LCP to the cover image
+  // (~200ms) instead of waiting for the canvas paint (~3-5s on cold load).
+  // Flipped true once the first Page's onRenderSuccess fires.
+  const [firstPageRendered, setFirstPageRendered] = useState(false);
   const [viewMode, setViewMode] = useState<'single' | 'continuous'>('single');
   const [pagesPerView, setPagesPerView] = useState<1 | 2>(1);
   // Phones (< sm) get single-page only — two-page spreads are unreadable on
@@ -834,22 +839,22 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
   if (pageLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-100">
+      <main aria-label="Loading reader" className="flex h-screen items-center justify-center bg-gray-100">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
-      </div>
+      </main>
     );
   }
 
   if (!issue) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <main className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="font-heading text-2xl font-bold text-gray-900">Issue not found</h1>
           <Link href="/browse" className="mt-4 inline-block bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-transparent">
             Back to Browse
           </Link>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -864,7 +869,10 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const backTarget = backTargets[readerSource];
 
   return (
-    <div className="flex h-screen flex-col bg-gray-100">
+    <main
+      aria-label={`Reading ${issue.title}`}
+      className="flex h-screen flex-col bg-gray-100"
+    >
       {/* Toolbar wrap — animates height for auto-hide on mobile/tablet. The
           progress bar lives inside so it slides off with the toolbar; while
           hidden, page progress is communicated via the floating scrubber. */}
@@ -1062,7 +1070,26 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
       />
 
       {/* PDF Viewer */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="relative flex-1 overflow-auto">
+        {/* Cover-JPEG LCP placeholder. Sits over the PDF area on first paint
+            so Lighthouse can pin LCP to a fast-loading raster image instead
+            of waiting for the PDF canvas. Fades out once the first Page has
+            rendered. priority + fetchPriority="high" so the browser preloads
+            it ahead of the PDF bytes. */}
+        {issue.coverImageUrl && !firstPageRendered && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center p-4 transition-opacity duration-300 sm:p-8"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={issue.coverImageUrl}
+              alt=""
+              fetchPriority="high"
+              className="h-full max-h-full w-auto rounded-md object-contain shadow-xl"
+            />
+          </div>
+        )}
         <div
           className={`flex min-h-full p-4 sm:p-8 ${
             viewMode === 'single'
@@ -1151,6 +1178,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                       scale={SINGLE_RENDER_SCALE}
                       devicePixelRatio={renderDpr}
                       className="shadow-xl"
+                      onRenderSuccess={() => setFirstPageRendered(true)}
                       loading={
                         <div className="flex h-[800px] w-[600px] items-center justify-center rounded-lg bg-white">
                           <div className="h-6 w-6 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
@@ -1204,6 +1232,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                             scale={scale}
                             devicePixelRatio={renderDpr}
                             className="shadow-xl"
+                            onRenderSuccess={() => setFirstPageRendered(true)}
                             loading={
                               <div
                                 className="flex items-center justify-center rounded-lg bg-white"
@@ -1255,7 +1284,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         enabled={viewMode === 'continuous'}
         onJumpToPage={goToPage}
       />
-    </div>
+    </main>
   );
 }
 
@@ -1297,9 +1326,10 @@ function PageControls({
           max={numPages}
           value={currentPage}
           onChange={(e) => goToPage(Number(e.target.value))}
+          aria-label={`Page number, of ${numPages || 'unknown'}`}
           className="w-14 rounded-lg border border-gray-200 px-2 py-1 text-center text-sm text-gray-900 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
         />
-        <span className="text-sm text-gray-400">/ {numPages || '—'}</span>
+        <span aria-hidden="true" className="text-sm text-gray-500">/ {numPages || '—'}</span>
       </div>
 
       <button
