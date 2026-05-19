@@ -15,11 +15,8 @@ import { BulkActionBar } from '@/components/browse/bulk-action-bar';
 import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
 import { fetchIssues, fetchMagazines, normalizeIssue } from '@/lib/api';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
-import {
-  applyFilters,
-  sortIssues,
-  useBrowseFilters,
-} from '@/lib/use-browse-filters';
+import { useBrowseFilters } from '@/lib/use-browse-filters';
+import type { BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
 import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
@@ -30,6 +27,9 @@ const PAGE_SIZE = 24;
 interface BrowseClientProps {
   initialIssues: ApiIssue[];
   initialMagazines: ApiMagazine[];
+  initialTotal: number;
+  initialTotalPages: number;
+  initialFacets: BrowseFacets;
 }
 
 export function BrowseClient(props: BrowseClientProps) {
@@ -42,7 +42,13 @@ export function BrowseClient(props: BrowseClientProps) {
   );
 }
 
-function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
+function BrowseContent({
+  initialIssues,
+  initialMagazines,
+  initialTotal,
+  initialTotalPages,
+  initialFacets,
+}: BrowseClientProps) {
   const {
     filters,
     toggleArray,
@@ -60,7 +66,11 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
   // Seeded from the server render — first paint shows real cards, no skeleton.
   const [magazines, setMagazines] = useState<ApiMagazine[]>(initialMagazines);
   const [issues, setIssues] = useState<ApiIssue[]>(initialIssues);
+  const [total, setTotal] = useState(initialTotal);
+  const [totalPages, setTotalPages] = useState(initialTotalPages);
+  const [facets, setFacets] = useState(initialFacets);
   const [loading, setLoading] = useState(false);
+  const firstFetchRef = useRef(true);
 
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -71,27 +81,45 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
     if (typeof window !== 'undefined') localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
   }, [panelOpen]);
 
-  // Background refresh: re-fetch after hydration so stale ISR snapshots are
-  // brought up to date without blocking first paint. Skip if there's no
-  // server-seeded data (shouldn't happen in practice).
+  // The server component seeds first paint for the current URL. Later URL
+  // changes fetch a real paginated slice instead of filtering a 100-row cache.
   useEffect(() => {
-    Promise.all([fetchMagazines(), fetchIssues({ pageSize: 100 })])
+    if (firstFetchRef.current) {
+      firstFetchRef.current = false;
+      return;
+    }
+
+    setLoading(true);
+    Promise.all([
+      fetchMagazines(),
+      fetchIssues({
+        years: filters.years,
+        months: filters.months,
+        magazines: filters.magazines,
+        languages: filters.languages,
+        subjects: filters.subjects,
+        query: filters.query,
+        sort: filters.sort,
+        dir: filters.dir,
+        page: filters.page,
+        pageSize: PAGE_SIZE,
+      }),
+    ])
       .then(([m, i]) => {
         setMagazines(m);
         setIssues(i.data);
+        setTotal(i.total);
+        setTotalPages(i.totalPages);
+        if (i.facets) setFacets(i.facets);
       })
-      .catch(console.error);
-  }, []);
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [filters]);
 
-  const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
-  const sorted = useMemo(() => sortIssues(filtered, filters.sort, filters.dir), [filtered, filters.sort, filters.dir]);
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(filters.page, totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const pageEnd = Math.min(pageStart + PAGE_SIZE, sorted.length);
-  const paged = useMemo(() => sorted.slice(pageStart, pageEnd), [sorted, pageStart, pageEnd]);
-  const normalized = useMemo(() => paged.map(normalizeIssue), [paged]);
+  const pageEnd = Math.min(pageStart + issues.length, total);
+  const normalized = useMemo(() => issues.map(normalizeIssue), [issues]);
 
   function handlePageChange(page: number) {
     setPage(page);
@@ -115,7 +143,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSelectAllVisible = () => {
-    const visibleIds = sorted.map((i) => i.id);
+    const visibleIds = issues.map((i) => i.id);
     const everySelected =
       visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
     if (everySelected) selectAll([]);
@@ -123,7 +151,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
   };
 
   const handleDownload = async () => {
-    const picked = sorted.filter((i) => selectedIds.has(i.id));
+    const picked = issues.filter((i) => selectedIds.has(i.id));
     if (picked.length === 0) return;
     abortRef.current = new AbortController();
     setProgress({
@@ -172,7 +200,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
         <div className="mx-auto max-w-7xl">
           <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">Browse Archive</h1>
           <p className="mt-2 text-lg text-gray-600">
-            Explore {issues.length} issue{issues.length !== 1 ? 's' : ''} across{' '}
+            Explore {total} issue{total !== 1 ? 's' : ''} across{' '}
             {magazines.length} magazine{magazines.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -194,8 +222,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
             }`}
           >
             <FilterPanel
-              issues={issues}
-              magazines={magazines}
+              facets={facets}
               filters={filters}
               onToggle={toggleArray}
               onClearAll={clearAll}
@@ -230,8 +257,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
               className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] shadow-xl md:hidden"
             >
               <FilterPanel
-                issues={issues}
-                magazines={magazines}
+                facets={facets}
                 filters={filters}
                 onToggle={toggleArray}
                 onClearAll={clearAll}
@@ -262,11 +288,11 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
 
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <span className="hidden text-sm text-gray-400 sm:inline">
-                {sorted.length === 0
+                {total === 0
                   ? 'No issues'
-                  : sorted.length <= PAGE_SIZE
-                    ? `${sorted.length} issue${sorted.length !== 1 ? 's' : ''}`
-                    : `${pageStart + 1}–${pageEnd} of ${sorted.length} issues`}
+                  : total <= PAGE_SIZE
+                    ? `${total} issue${total !== 1 ? 's' : ''}`
+                    : `${pageStart + 1}-${pageEnd} of ${total} issues`}
               </span>
               <button
                 onClick={() => (selectionEnabled ? disableSelection() : enableSelection())}
@@ -295,7 +321,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
 
           {loading ? (
             <LoadingState view={filters.view} />
-          ) : sorted.length === 0 ? (
+          ) : total === 0 ? (
             <EmptyState onClearAll={clearAll} hasActiveFilters={hasActiveFilters} />
           ) : filters.view === 'list' ? (
             <IssueListView
@@ -312,7 +338,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
             </div>
           )}
 
-          {!loading && sorted.length > 0 && (
+          {!loading && total > 0 && (
             <Pagination
               current={currentPage}
               total={totalPages}
@@ -323,7 +349,7 @@ function BrowseContent({ initialIssues, initialMagazines }: BrowseClientProps) {
       </div>
 
       <BulkActionBar
-        issues={sorted}
+        issues={issues}
         onDownload={handleDownload}
         onSelectAll={handleSelectAllVisible}
       />

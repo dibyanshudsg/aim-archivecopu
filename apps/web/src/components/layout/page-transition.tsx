@@ -21,6 +21,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
 
+  // Admin routes have their own persistent sidebar shell. Keying the whole
+  // app by pathname remounts that shell on every sidebar click, which causes a
+  // white flash and repeats admin boot work. Keep admin transitions local.
+  if (pathname?.startsWith('/admin')) return <>{children}</>;
+
   return (
     <motion.div
       key={pathname ?? 'root'}
