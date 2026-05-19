@@ -11,13 +11,26 @@ import {
   type ReactNode,
 } from 'react';
 import { Check, AlertCircle, Info, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 type ToastKind = 'success' | 'error' | 'info';
+type ToastPosition = 'top-right' | 'top-center';
+type ToastVariant = 'default' | 'admin';
+
+interface ToastOptions {
+  title?: string;
+  durationMs?: number;
+  position?: ToastPosition;
+  variant?: ToastVariant;
+}
 
 interface ToastItem {
   id: number;
   kind: ToastKind;
+  title?: string;
   message: string;
+  position: ToastPosition;
+  variant: ToastVariant;
 }
 
 interface ConfirmOptions {
@@ -30,9 +43,9 @@ interface ConfirmOptions {
 
 interface UIContextValue {
   toast: {
-    success: (message: string) => void;
-    error: (message: string) => void;
-    info: (message: string) => void;
+    success: (message: string, options?: ToastOptions) => void;
+    error: (message: string, options?: ToastOptions) => void;
+    info: (message: string, options?: ToastOptions) => void;
   };
   confirm: (options: ConfirmOptions) => Promise<boolean>;
 }
@@ -52,10 +65,20 @@ export function UIProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const push = useCallback(
-    (kind: ToastKind, message: string) => {
+    (kind: ToastKind, message: string, options?: ToastOptions) => {
       const id = ++idRef.current;
-      setToasts((prev) => [...prev, { id, kind, message }]);
-      setTimeout(() => remove(id), 3500);
+      setToasts((prev) => [
+        ...prev,
+        {
+          id,
+          kind,
+          message,
+          title: options?.title,
+          position: options?.position ?? 'top-right',
+          variant: options?.variant ?? 'default',
+        },
+      ]);
+      setTimeout(() => remove(id), options?.durationMs ?? 3500);
     },
     [remove],
   );
@@ -63,9 +86,9 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const value = useMemo<UIContextValue>(
     () => ({
       toast: {
-        success: (m) => push('success', m),
-        error: (m) => push('error', m),
-        info: (m) => push('info', m),
+        success: (m, options) => push('success', m, options),
+        error: (m, options) => push('error', m, options),
+        info: (m, options) => push('info', m, options),
       },
       confirm: (options) =>
         new Promise<boolean>((resolve) => setConfirmState({ ...options, resolve })),
@@ -77,12 +100,16 @@ export function UIProvider({ children }: { children: ReactNode }) {
     <UIContext.Provider value={value}>
       {children}
 
-      {/* Toasts */}
-      <div className="pointer-events-none fixed top-4 right-4 z-[1000] flex flex-col gap-2">
-        {toasts.map((t) => (
-          <ToastView key={t.id} item={t} onClose={() => remove(t.id)} />
-        ))}
-      </div>
+      <ToastStack
+        position="top-right"
+        toasts={toasts.filter((toast) => toast.position === 'top-right')}
+        onClose={remove}
+      />
+      <ToastStack
+        position="top-center"
+        toasts={toasts.filter((toast) => toast.position === 'top-center')}
+        onClose={remove}
+      />
 
       {/* Confirm dialog */}
       {confirmState && (
@@ -104,22 +131,65 @@ export function useUI() {
   return ctx;
 }
 
+function ToastStack({
+  position,
+  toasts,
+  onClose,
+}: {
+  position: ToastPosition;
+  toasts: ToastItem[];
+  onClose: (id: number) => void;
+}) {
+  const positionClass =
+    position === 'top-center'
+      ? 'left-1/2 top-5 w-[min(92vw,420px)] -translate-x-1/2 items-stretch'
+      : 'right-4 top-4 items-end';
+
+  return (
+    <div className={`pointer-events-none fixed z-[1000] flex flex-col gap-2 ${positionClass}`}>
+      <AnimatePresence initial={false}>
+        {toasts.map((toast) => (
+          <ToastView key={toast.id} item={toast} onClose={() => onClose(toast.id)} />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function ToastView({ item, onClose }: { item: ToastItem; onClose: () => void }) {
   const Icon = item.kind === 'success' ? Check : item.kind === 'error' ? AlertCircle : Info;
-  const accent =
+  const defaultAccent =
     item.kind === 'success'
       ? 'border-green-200 bg-green-50 text-green-700'
       : item.kind === 'error'
         ? 'border-red-200 bg-red-50 text-red-700'
         : 'border-sky-200 bg-sky-50 text-sky-700';
+  const accent =
+    item.variant === 'admin' && item.kind === 'success'
+      ? 'border-flame-200/80 bg-white text-gray-800 shadow-[0_18px_45px_rgba(190,140,46,0.22)] ring-1 ring-flame-100'
+      : defaultAccent;
+  const iconAccent =
+    item.variant === 'admin' && item.kind === 'success'
+      ? 'bg-gradient-to-br from-gold-500 to-flame-500 text-white'
+      : '';
 
   return (
-    <div
-      className={`pointer-events-auto flex min-w-[260px] max-w-sm items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm shadow-lg ${accent}`}
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -12, scale: 0.98 }}
+      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      className={`pointer-events-auto flex min-w-[260px] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 text-sm shadow-lg ${accent}`}
       role="status"
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <p className="flex-1 leading-relaxed">{item.message}</p>
+      <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${iconAccent}`}>
+        <Icon className="h-4 w-4 shrink-0" />
+      </span>
+      <span className="flex-1 leading-relaxed">
+        {item.title && <span className="block font-semibold text-gray-900">{item.title}</span>}
+        <span className={item.title ? 'block text-gray-600' : ''}>{item.message}</span>
+      </span>
       <button
         onClick={onClose}
         className="-mr-1 rounded-md p-0.5 opacity-50 transition-opacity hover:opacity-100"
@@ -127,7 +197,7 @@ function ToastView({ item, onClose }: { item: ToastItem; onClose: () => void }) 
       >
         <X className="h-3.5 w-3.5" />
       </button>
-    </div>
+    </motion.div>
   );
 }
 

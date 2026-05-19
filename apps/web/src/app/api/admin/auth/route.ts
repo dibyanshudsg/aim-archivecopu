@@ -1,12 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createSessionToken, ADMIN_COOKIE } from '@/lib/admin-auth';
+import { createSessionToken, ADMIN_COOKIE, SESSION_TTL_SECONDS } from '@/lib/admin-auth';
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 8;
+const attempts = new Map<string, { count: number; resetAt: number }>();
 
 function getAdminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
+}
+
+function clientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || request.headers.get('x-real-ip') || 'unknown';
+}
+
+function rateLimitKey(request: NextRequest, email: string): string {
+  return `${clientIp(request)}:${email.toLowerCase()}`;
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const entry = attempts.get(key);
+  if (!entry || entry.resetAt <= now) {
+    attempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > MAX_LOGIN_ATTEMPTS;
+}
+
+function clearAttempts(key: string) {
+  attempts.delete(key);
 }
 
 export async function POST(request: NextRequest) {
@@ -19,8 +47,19 @@ export async function POST(request: NextRequest) {
   }
 
   const { email, password } = parsed.data;
+  const passwordFromEnv = process.env.ADMIN_PASSWORD;
 
-  if (password !== (process.env.ADMIN_PASSWORD || '[REDACTED_ADMIN_PASSWORD]')) {
+  if (!passwordFromEnv) {
+    console.error('ADMIN_PASSWORD is not configured');
+    return NextResponse.json({ error: 'Admin login is not configured', code: 'SERVER_CONFIG' }, { status: 500 });
+  }
+
+  const key = rateLimitKey(request, email);
+  if (isRateLimited(key)) {
+    return NextResponse.json({ error: 'Too many login attempts', code: 'RATE_LIMITED' }, { status: 429 });
+  }
+
+  if (password !== passwordFromEnv) {
     return NextResponse.json({ error: 'Invalid credentials', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
@@ -35,6 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Admin not found', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
+  clearAttempts(key);
   const token = createSessionToken(admin);
 
   const response = NextResponse.json({ admin });
@@ -42,7 +82,7 @@ export async function POST(request: NextRequest) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: SESSION_TTL_SECONDS,
     path: '/',
   });
 

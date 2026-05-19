@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useUI } from '@/components/ui/toast';
 
 export interface ManagedTopic {
   name: string;
@@ -41,6 +42,7 @@ export function TagsInput({
   placeholder = 'Click to manage topics',
   className,
 }: TagsInputProps) {
+  const { toast, confirm } = useUI();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
@@ -138,7 +140,7 @@ export function TagsInput({
       onTopicsRefetch();
     } catch (err) {
       console.error(err);
-      alert('Could not rename topic. Please try again.');
+      toast.error('Could not rename topic. Please try again.');
     } finally {
       setEditing(null);
       setPending(null);
@@ -146,11 +148,15 @@ export function TagsInput({
   }
 
   async function deleteTopic(name: string, count: number) {
-    const confirmed = window.confirm(
-      count > 0
-        ? `Delete "${name}"? It is used in ${count} issue${count === 1 ? '' : 's'} and will be removed from all of them.`
-        : `Delete "${name}"?`,
-    );
+    const confirmed = await confirm({
+      title: 'Delete topic',
+      message:
+        count > 0
+          ? `Delete "${name}"? It is used in ${count} issue${count === 1 ? '' : 's'} and will be removed from all of them.`
+          : `Delete "${name}"?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
     if (!confirmed) return;
     setPending(name);
     try {
@@ -167,7 +173,7 @@ export function TagsInput({
       onTopicsRefetch();
     } catch (err) {
       console.error(err);
-      alert('Could not delete topic. Please try again.');
+      toast.error('Could not delete topic. Please try again.');
     } finally {
       setPending(null);
     }

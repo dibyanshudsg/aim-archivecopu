@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { createAdminClient } from '@/lib/supabase-server';
-import { readSiteSettings, upsertSiteSettings } from '@/lib/site-settings';
+import { upsertSiteSettings } from '@/lib/site-settings';
+import { getAdminSiteSettings } from '@/lib/admin-data';
 import { formatZodError, siteSettingsSchema } from '@/lib/validations';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -18,7 +19,7 @@ export async function GET() {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const settings = await readSiteSettings(createAdminClient());
+    const settings = await getAdminSiteSettings();
     return NextResponse.json(settings);
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to read settings');

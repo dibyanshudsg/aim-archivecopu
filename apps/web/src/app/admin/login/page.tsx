@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react';
+
+const LOGIN_SUCCESS_KEY = 'aim-admin-login-success';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -28,13 +31,17 @@ export default function AdminLoginPage() {
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || 'Login failed');
+        setLoading(false);
         return;
       }
 
-      router.push('/admin');
+      try {
+        sessionStorage.setItem(LOGIN_SUCCESS_KEY, '1');
+      } catch {}
+
+      router.replace('/admin');
     } catch {
       setError('Something went wrong');
-    } finally {
       setLoading(false);
     }
   }
@@ -82,21 +89,34 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-                placeholder="admin@aurosociety.org"
+                placeholder="Enter Admin Email"
               />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-                placeholder="Enter admin password"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="w-full rounded-xl border border-gray-200 py-3 pl-4 pr-12 text-sm transition-colors focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+                  placeholder="Enter admin password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-flame-50 hover:text-flame-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-flame-200"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
 
