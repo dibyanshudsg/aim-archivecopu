@@ -22,6 +22,7 @@ export default function UploadIssuePage() {
   const [magazines, setMagazines] = useState<Magazine[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progressStep, setProgressStep] = useState<{ label: string; pct: number } | null>(null);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
   const [allTopics, setAllTopics] = useState<ManagedTopic[]>([]);
@@ -179,7 +180,8 @@ export default function UploadIssuePage() {
     if (!file) { setError('Please select a PDF file'); return; }
 
     setUploading(true);
-    setProgress('Uploading PDF...');
+    setProgress('Starting upload…');
+    setProgressStep({ label: 'Starting upload…', pct: 5 });
     setError('');
 
     const formData = new FormData();
@@ -196,21 +198,80 @@ export default function UploadIssuePage() {
       formData.append('cover_orientation', coverOrientation);
     }
 
+    // Map server step → user-facing label + % so the bar fills as events arrive.
+    const STEP_MAP: Record<string, { label: string; pct: number }> = {
+      'uploading-pdf': { label: 'Uploading PDF to storage', pct: 30 },
+      'processing-cover': { label: 'Processing cover image', pct: 65 },
+      'creating-record': { label: 'Saving issue', pct: 90 },
+    };
+
     try {
       const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
 
-      if (!res.ok) {
-        const data = await res.json();
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
         setError(data.error || 'Upload failed');
         return;
       }
 
-      setProgress('Done!');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let finishedOk = false;
+      let streamError: string | null = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          if (event.type === 'status') {
+            const stepKey = String(event.step ?? '');
+            const mapped = STEP_MAP[stepKey];
+            if (mapped) {
+              setProgressStep(mapped);
+              setProgress(mapped.label + '…');
+            } else if (typeof event.message === 'string') {
+              setProgress(event.message);
+            }
+          } else if (event.type === 'done') {
+            finishedOk = true;
+            setProgressStep({ label: 'Done!', pct: 100 });
+            setProgress('Done!');
+          } else if (event.type === 'error') {
+            streamError = String(event.message ?? 'Upload failed');
+          }
+        }
+      }
+
+      if (streamError) {
+        setError(streamError);
+        return;
+      }
+      if (!finishedOk) {
+        setError('Upload ended unexpectedly. Please try again.');
+        return;
+      }
+
       router.push('/admin/issues');
     } catch {
       setError('Upload failed. Please try again.');
     } finally {
       setUploading(false);
+      setProgressStep(null);
     }
   }
 
@@ -495,6 +556,24 @@ export default function UploadIssuePage() {
           <Upload className="h-4 w-4" />
           {uploading ? progress : 'Upload Issue'}
         </button>
+
+        {uploading && progressStep && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-gray-700">{progressStep.label}</span>
+              <span className="font-semibold text-flame-600">{progressStep.pct}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-flame-100/60">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-gold-500 to-flame-500 transition-all duration-300 ease-out"
+                style={{ width: `${progressStep.pct}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-gray-500">
+              Search indexing (OCR) continues in the background after upload completes.
+            </p>
+          </div>
+        )}
       </form>
     </div>
   );

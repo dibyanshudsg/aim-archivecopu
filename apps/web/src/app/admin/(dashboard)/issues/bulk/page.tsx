@@ -143,14 +143,51 @@ export default function BulkUploadPage() {
     fd.append('month', String(item.month));
     fd.append('description', '');
     fd.append('topics', '');
+
     const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-    if (!res.ok) {
+    if (!res.ok || !res.body) {
       const data = await res.json().catch(() => ({}));
       patch(item.id, { status: 'error', message: data.error || 'Upload failed' });
       return false;
     }
-    patch(item.id, { status: 'done', message: 'Uploaded' });
-    return true;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let succeeded = false;
+    let lastError: string | null = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try {
+          const event = JSON.parse(line) as { type: string; [k: string]: unknown };
+          if (event.type === 'status' && typeof event.message === 'string') {
+            patch(item.id, { status: 'uploading', message: event.message });
+          } else if (event.type === 'done') {
+            succeeded = true;
+          } else if (event.type === 'error') {
+            lastError = String(event.message ?? 'Upload failed');
+          }
+        } catch {
+          // skip malformed line
+        }
+      }
+    }
+
+    if (succeeded) {
+      patch(item.id, { status: 'done', message: 'Uploaded' });
+      return true;
+    }
+    patch(item.id, { status: 'error', message: lastError || 'Upload failed' });
+    return false;
   }
 
   async function uploadAll() {

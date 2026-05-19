@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { extractPdfText } from '@/lib/pdf-extract';
@@ -11,6 +11,19 @@ function getClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
+/**
+ * Upload a new issue.
+ *
+ * Streams NDJSON progress events so the form can show per-step progress —
+ * R2 upload is the dominant cost (~3-5s) and cover processing is another
+ * 2-5s. Event shapes (one JSON object per line):
+ *   { type: 'status', step: 'uploading-pdf' | 'processing-cover' | 'creating-record', message: string }
+ *   { type: 'done',   issue: {...}, indexing: 'in_progress' }
+ *   { type: 'error',  message: string }
+ *
+ * OCR + search indexing run via after() once the stream closes, so the user
+ * gets immediate "Done!" feedback while indexing populates in the background.
+ */
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,80 +60,110 @@ export async function POST(request: NextRequest) {
 
   const supabase = getClient();
 
-  // Get magazine name for storage path
   const { data: mag } = await supabase.from('magazines').select('name').eq('id', magazineId).single();
   if (!mag) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
 
-  // Upload PDF to R2. The storage key is preserved across the migration so
-  // legacy Supabase rows and new R2 rows share the same key shape.
   const storageKey = `${mag.name.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  let pdfPublicUrl: string;
-  try {
-    pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
-  } catch (uploadErr) {
-    const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
-    return NextResponse.json({ error: 'Upload failed: ' + message }, { status: 500 });
-  }
-
-  // Cover image: prefer an explicitly-uploaded spread/cover image (cropped to
-  // front), fall back to rendering page 1 of the PDF.
-  let coverImageUrl: string | null = null;
   const coverFile = formData.get('cover') as File | null;
   const orientationRaw = formData.get('cover_orientation');
   const orientation: SpreadOrientation =
     orientationRaw === 'front-left' ? 'front-left' : 'front-right';
 
-  if (coverFile && coverFile.size > 0 && coverFile.type.startsWith('image/')) {
-    try {
-      const coverBuf = Buffer.from(await coverFile.arrayBuffer());
-      const result = await cropAndUploadCover(coverBuf, storageKey, orientation);
-      coverImageUrl = result.publicUrl;
-    } catch (coverErr) {
-      console.error('Cover crop/upload failed (falling back to PDF page 1):', coverErr);
-    }
-  }
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (event: object) => {
+        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
+      };
 
-  if (!coverImageUrl) {
-    try {
-      coverImageUrl = await generateAndUploadThumbnail(buffer, storageKey);
-    } catch (thumbErr) {
-      console.error('Thumbnail generation failed (non-blocking):', thumbErr);
-    }
-  }
+      try {
+        // Step 1: Upload PDF to R2 (~3-5s)
+        send({ type: 'status', step: 'uploading-pdf', message: 'Uploading PDF to storage…' });
+        let pdfPublicUrl: string;
+        try {
+          pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
+        } catch (uploadErr) {
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
+          send({ type: 'error', message: 'Upload failed: ' + message });
+          controller.close();
+          return;
+        }
 
-  // Create issue record
-  const { data: issue, error: insertErr } = await supabase
-    .from('issues')
-    .insert({
-      magazine_id: magazineId,
-      title,
-      theme: themeTrimmed || null,
-      year,
-      month,
-      description: description || null,
-      topics,
-      pdf_url: pdfPublicUrl,
-      cover_image_url: coverImageUrl,
-      file_size_bytes: file.size,
-      is_published: true,
-    })
-    .select()
-    .single();
+        // Step 2: Cover image (crop uploaded image or render page 1) (~2-5s)
+        send({ type: 'status', step: 'processing-cover', message: 'Processing cover image…' });
+        let coverImageUrl: string | null = null;
+        if (coverFile && coverFile.size > 0 && coverFile.type.startsWith('image/')) {
+          try {
+            const coverBuf = Buffer.from(await coverFile.arrayBuffer());
+            const result = await cropAndUploadCover(coverBuf, storageKey, orientation);
+            coverImageUrl = result.publicUrl;
+          } catch (coverErr) {
+            console.error('Cover crop/upload failed (falling back to PDF page 1):', coverErr);
+          }
+        }
+        if (!coverImageUrl) {
+          try {
+            coverImageUrl = await generateAndUploadThumbnail(buffer, storageKey);
+          } catch (thumbErr) {
+            console.error('Thumbnail generation failed (non-blocking):', thumbErr);
+          }
+        }
 
-  if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
-  }
+        // Step 3: DB insert (~500ms)
+        send({ type: 'status', step: 'creating-record', message: 'Saving issue…' });
+        const { data: issue, error: insertErr } = await supabase
+          .from('issues')
+          .insert({
+            magazine_id: magazineId,
+            title,
+            theme: themeTrimmed || null,
+            year,
+            month,
+            description: description || null,
+            topics,
+            pdf_url: pdfPublicUrl,
+            cover_image_url: coverImageUrl,
+            file_size_bytes: file.size,
+            is_published: true,
+          })
+          .select()
+          .single();
 
-  // Extract text from PDF and index for full-text search
-  let pagesIndexed = 0;
-  try {
-    const pages = await extractPdfText(buffer);
-    pagesIndexed = await indexIssue(supabase, issue.id, pages);
-  } catch (extractErr) {
-    console.error('PDF text extraction failed (can be retried via reindex):', extractErr);
-  }
+        if (insertErr) {
+          send({ type: 'error', message: insertErr.message });
+          controller.close();
+          return;
+        }
 
-  return NextResponse.json({ ...issue, pages_indexed: pagesIndexed }, { status: 201 });
+        // Schedule background OCR + indexing — runs after the stream closes.
+        // Falls back to the per-issue Reindex button if the platform cuts off
+        // the after() callback (Vercel Hobby max duration).
+        after(async () => {
+          try {
+            const pages = await extractPdfText(buffer);
+            await indexIssue(supabase, issue.id, pages);
+          } catch (extractErr) {
+            console.error('PDF text extraction failed (can be retried via reindex):', extractErr);
+          }
+        });
+
+        send({ type: 'done', issue, indexing: 'in_progress' });
+        controller.close();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        send({ type: 'error', message });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
