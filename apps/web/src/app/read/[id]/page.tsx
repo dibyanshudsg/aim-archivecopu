@@ -35,6 +35,7 @@ import { useBookmarks } from '@/lib/bookmarks-store';
 import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import { shareIssue, sharePage } from '@/lib/share-issue';
 import { ReaderPageScrubber } from '@/components/reader/page-scrubber';
+import { CopyDisclaimerToast } from '@/components/reader/copy-disclaimer-toast';
 import type { IssueWithMagazine } from '@aim-archive/shared';
 
 // PDF.js worker
@@ -215,7 +216,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
     const urlPage = new URLSearchParams(window.location.search).get('page');
     if (!urlPage && savedPage != null) setCurrentPage(savedPage);
-  }, [issue?.id]);
+  }, [issue]);
 
   // Hold a reference to the underlying pdfjs document so we can render any
   // requested page to an image on demand (used by the share-page button).
@@ -650,13 +651,14 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
       if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current);
     };
   }, [
-    issue?.id,
+    issue,
     currentPage,
     scale,
     viewMode,
     effectivePagesPerView,
     scrollProgress,
     initialScrollDone,
+    numPages,
   ]);
 
   // Auto-hide the toolbar on scroll-down past a threshold; reveal on scroll-up
@@ -936,10 +938,10 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
             {/* Right cluster: actions. Zoom + fullscreen + info live here on
                 desktop; on phone/tablet zoom moves to row 2 and fullscreen/info
                 are hidden (they're not useful on touch devices). */}
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-0.5 rounded-xl bg-gradient-to-br from-flame-50/50 to-gold-50/40 p-0.5 ring-1 ring-flame-100/70">
               <button
                 onClick={() => toggle(issue.id)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
                 aria-label="Bookmark"
               >
                 <Heart
@@ -955,7 +957,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
               />
               <button
                 onClick={() => setInfoDrawerOpen(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-flame-50 hover:text-flame-700"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
                 aria-label="Issue information"
                 title="Issue information"
               >
@@ -964,11 +966,11 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
               {/* Desktop-only: zoom + fullscreen + info */}
               <div className="hidden md:flex md:items-center md:gap-1">
-                <div className="mx-1 h-5 w-px bg-gray-200" />
+                <div className="mx-1 h-5 w-px bg-flame-200/70" />
                 <ZoomControls scale={scale} zoomIn={zoomIn} zoomOut={zoomOut} />
                 <button
                   onClick={toggleFullscreen}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
                   aria-label="Toggle fullscreen"
                 >
                   {isFullscreen ? (
@@ -983,7 +985,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
           {/* Row 2 (phone/tablet only): page controls + zoom. Horizontally
               scrollable if it overflows on very narrow screens. */}
-          <div className="flex items-center justify-center gap-1 overflow-x-auto border-t border-gray-100 px-2 py-1.5 md:hidden">
+          <div className="flex items-center justify-center gap-2 overflow-x-auto border-t border-gray-100 px-2 py-1.5 md:hidden">
             <PageControls
               currentPage={currentPage}
               numPages={numPages}
@@ -994,8 +996,9 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
               setPagesPerView={setPagesPerView}
               showPagesPerViewToggle={!isPhone}
             />
-            <div className="mx-1 h-5 w-px shrink-0 bg-gray-200" />
-            <ZoomControls scale={scale} zoomIn={zoomIn} zoomOut={zoomOut} />
+            <div className="flex shrink-0 items-center gap-0.5 rounded-xl bg-gradient-to-br from-flame-50/50 to-gold-50/40 p-0.5 ring-1 ring-flame-100/70">
+              <ZoomControls scale={scale} zoomIn={zoomIn} zoomOut={zoomOut} />
+            </div>
           </div>
         </header>
 
@@ -1284,6 +1287,8 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         enabled={viewMode === 'continuous'}
         onJumpToPage={goToPage}
       />
+
+      <CopyDisclaimerToast />
     </main>
   );
 }
@@ -1308,12 +1313,15 @@ function PageControls({
   /** Phones force single-page; hide the toggle so users can't fight it. */
   showPagesPerViewToggle?: boolean;
 }) {
+  const buttonClass =
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-600 disabled:hover:shadow-none';
+
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5 rounded-xl bg-gradient-to-br from-flame-50/50 to-gold-50/40 p-0.5 ring-1 ring-flame-100/70">
       <button
         onClick={() => goToPage(currentPage - pagesPerView)}
         disabled={currentPage <= 1}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-30"
+        className={buttonClass}
         aria-label="Previous page"
       >
         <ChevronLeft className="h-5 w-5" />
@@ -1327,7 +1335,7 @@ function PageControls({
           value={currentPage}
           onChange={(e) => goToPage(Number(e.target.value))}
           aria-label={`Page number, of ${numPages || 'unknown'}`}
-          className="w-14 rounded-lg border border-gray-200 px-2 py-1 text-center text-sm text-gray-900 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
+          className="w-14 rounded-lg border border-flame-200/60 bg-white/80 px-2 py-1 text-center text-sm text-gray-900 transition-colors focus:border-flame-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-flame-100/70 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
         />
         <span aria-hidden="true" className="text-sm text-gray-500">/ {numPages || '—'}</span>
       </div>
@@ -1335,15 +1343,17 @@ function PageControls({
       <button
         onClick={() => goToPage(currentPage + pagesPerView)}
         disabled={currentPage >= numPages}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-30"
+        className={buttonClass}
         aria-label="Next page"
       >
         <ChevronRight className="h-5 w-5" />
       </button>
 
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-flame-200/70" aria-hidden="true" />
+
       <button
         onClick={() => setViewMode((m) => (m === 'single' ? 'continuous' : 'single'))}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+        className={buttonClass}
         aria-label={
           viewMode === 'single' ? 'Switch to continuous scroll' : 'Switch to single page'
         }
@@ -1363,7 +1373,7 @@ function PageControls({
       {showPagesPerViewToggle && (
         <button
           onClick={() => setPagesPerView((p) => (p === 1 ? 2 : 1))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+          className={buttonClass}
           aria-label={
             pagesPerView === 1 ? 'Show two pages side-by-side' : 'Show one page at a time'
           }
@@ -1397,7 +1407,7 @@ function ZoomControls({
     <div className="flex shrink-0 items-center">
       <button
         onClick={zoomOut}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
         aria-label="Zoom out"
       >
         <ZoomOut className="h-4 w-4" />
@@ -1407,7 +1417,7 @@ function ZoomControls({
       </span>
       <button
         onClick={zoomIn}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
         aria-label="Zoom in"
       >
         <ZoomIn className="h-4 w-4" />
@@ -1656,8 +1666,10 @@ function ShareIssueButton({ issue }: { issue: IssueWithMagazine }) {
       }}
       aria-label="Share issue"
       title={copied ? 'Link copied' : 'Share issue'}
-      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-        copied ? 'text-green-600' : 'text-gray-600 hover:bg-gray-100'
+      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all ${
+        copied
+          ? 'text-green-600'
+          : 'text-gray-600 hover:bg-white hover:text-flame-700 hover:shadow-sm'
       }`}
     >
       {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
@@ -1691,8 +1703,10 @@ function SharePageButton({
       }}
       aria-label={`Share page ${pageNumber}`}
       title={copied ? 'Link copied' : `Share this page (${pageNumber})`}
-      className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-        copied ? 'text-green-600' : 'text-gray-600 hover:bg-gray-100'
+      className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-all ${
+        copied
+          ? 'text-green-600'
+          : 'text-gray-600 hover:bg-white hover:text-flame-700 hover:shadow-sm'
       } ${busy ? 'opacity-60' : ''}`}
     >
       {copied ? (
