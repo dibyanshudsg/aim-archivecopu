@@ -48,6 +48,9 @@ Agnisikha 2026/
 Agnishikha 2026/
 AIM Issues/
 
+# Loose PDFs at repo root (drop sources into AIM 2026/ etc. instead)
+/*.pdf
+
 # Dev server / agent logs
 .codex-logs/
 
