@@ -8,8 +8,8 @@
 
 ## How to run a Lighthouse audit
 
-1. `pnpm build && pnpm start --port 5000` from `apps/web/` — Lighthouse needs a production build (dev mode inflates bundle sizes and renders unminified, both of which skew perf scores by 20-30 points).
-2. Open Chrome on `http://localhost:5000`, F12 → **Lighthouse** tab.
+1. `pnpm build && pnpm start` from `apps/web/` — Lighthouse needs a production build (dev mode inflates bundle sizes and renders unminified, both of which skew perf scores by 20-30 points). `pnpm start` binds to port 3000 per the package's script.
+2. Open Chrome on `http://localhost:3000`, F12 → **Lighthouse** tab.
 3. Select **Performance**, **Accessibility**, **Best Practices**, **SEO**. Mode: **Navigation**. Device: **Mobile** for first run, **Desktop** for second.
 4. Run for: `/`, `/browse`, `/search`, `/issue/[id]` (any), `/read/[id]` (any), `/admin/login`.
 5. Paste the four scores below per route, plus any High-severity findings into the relevant table.

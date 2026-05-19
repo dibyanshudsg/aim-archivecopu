@@ -41,18 +41,18 @@ pnpm.cmd dev
 The app runs at:
 
 ```text
-http://localhost:5000
+http://localhost:3000
 ```
 
 PowerShell may block the `pnpm.ps1` shim with an execution-policy error. Use `pnpm.cmd` instead of `pnpm`.
 
-If `localhost:5000` hangs or times out, check for a stuck process occupying the port:
+If `localhost:3000` hangs or times out, check for a stuck process occupying the port:
 
 ```powershell
-netstat -ano | Select-String ':5000'
+netstat -ano | Select-String ':3000'
 ```
 
-If a stale Node/Next process is listening on `5000` but not responding, stop only that owning process, then restart the dev server.
+If a stale Node/Next process is listening on `3000` but not responding, stop only that owning process, then restart the dev server.
 
 ## Common Commands
 

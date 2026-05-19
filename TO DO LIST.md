@@ -75,8 +75,8 @@
 
 ## Up Next - System Improvements From Review
 - [x] Public issue API: prevent drafts from loading by direct ID (`/api/issues/[id]`, reader, issue page)
-- [ ] Admin auth hardening: signed session cookie, no default password fallback, login rate limiting
-- [ ] Browse scalability: move filtering, sorting, facets, and pagination server-side (current client data is capped)
+- [x] Admin auth hardening: signed session cookie, no default password fallback, login rate limiting
+- [x] Browse scalability: move filtering, sorting, facets, and pagination server-side; search parity covers title, theme, magazine name, description, and partial topic text
 - [x] Footer magazine links: replace slug-like values (`aim`, `agnisikha`) with working IDs/slugs
 - [x] Download analytics: add a download route that increments `download_count` before serving/redirecting PDF
 - [x] Read analytics: use an atomic DB/RPC increment for `read_count`
@@ -84,7 +84,7 @@
 - [x] Admin Issues UI: remove per-row "view public page" and "download PDF" actions to free table space
 - [ ] Mobile readiness: add missing Expo assets and fix mobile lint dependency/config
 - [ ] Test baseline: add focused tests for auth, draft visibility, browse filters, search, and counters
-- [ ] Tooling cleanup: migrate web lint script away from deprecated `next lint`
+- [x] Tooling cleanup: migrate web lint script away from deprecated `next lint`
 - [ ] Optional resilience: self-host fonts / PDF worker to reduce external build/runtime dependency
 
 ## Up Next — Migrate Storage to Cloudflare R2
@@ -110,16 +110,16 @@
 - [x] Update `apps/web/.env.local.example` and `turbo.json` `build.env` with R2 vars
 
 ### C. Migration script (one-shot for existing 8 issues)
-- [ ] New file `scripts/migrate-storage-to-r2.ts`
+- [x] New file `scripts/migrate-storage-to-r2.mjs`
   - List all objects in Supabase Storage `magazines` bucket
   - Stream each to R2 via S3 SDK (`PutObjectCommand`)
   - Update `issues.pdf_url` and `issues.cover_image_url` rows in DB to point at new R2 URLs
-- [ ] Run script locally with both Supabase + R2 creds in `.env.local`
+- [ ] Run script in apply mode locally with both Supabase + R2 creds in `.env.local`
 - [ ] Spot-check: open 2–3 issues in the reader, confirm PDF + thumbnail load from R2 URLs
 
 ### D. Vercel + production
 - [ ] Add the same 5 env vars on Vercel: Settings → Environment Variables (all three environments: Production, Preview, Development)
-- [ ] Add `R2_*` and `R2_PUBLIC_BASE_URL` to `turbo.json` `globalEnv` and `build.env`
+- [x] Add `R2_*`, `R2_PUBLIC_BASE_URL`, and admin auth vars to `turbo.json` `globalEnv` and `build.env`
 - [ ] Push, redeploy, verify live site loads PDFs from R2
 
 ### E. Cleanup (after ~7 days of stable verification)
@@ -195,7 +195,7 @@ B. [ ] **Reader parity work** — three sub-options, pick one (see [AUDIT.md](AU
     - + Backport Reader B polish (cover JPEG fallback, neighbour preloading, page-turn skeleton, floating zoom pill) to Reader A.
     - + Extract shared helpers (`useMediaQuery`, zoom grid, ease curves, spread snap) to `apps/web/src/lib/` so both readers stay in sync.
 
-C. [ ] **Lighthouse baseline run** — production build (`pnpm build && pnpm start --port 5000`), DevTools → Lighthouse on `/`, `/browse`, `/search`, `/issue/[id]`, `/read/[id]`. Paste scores into [AUDIT.md](AUDIT.md) score history. First run establishes the baseline; subsequent runs catch regressions.
+C. [ ] **Lighthouse baseline run** — production build (`pnpm build && pnpm start`, port 3000), DevTools → Lighthouse on `/`, `/browse`, `/search`, `/issue/[id]`, `/read/[id]`. Paste scores into [AUDIT.md](AUDIT.md) score history. First run establishes the baseline; subsequent runs catch regressions.
 
 _____________________
 
@@ -280,5 +280,4 @@ _____________________
 27. [ ] **Marathi** — Marathi uses Devanagari script, so `Tiro Devanagari Hindi` already covers it. No font work needed; the magazine row + uploads are enough.
 28. [ ] **Why the composition matters** — `next/font/google` generates obfuscated font-family names (e.g. `__Tiro_Tamil_abc123`), so `font-family: 'Tiro Tamil'` as a literal in CSS won't match anything. Each font must reference its own variable, and the design-system token (`--font-heading`) composes them all in one cascade so the browser picks the right font per-character.
 29. [ ] Verify on each magazine's detail page after upload — Tamil / Bengali / Marathi theme titles should render with correct script-specific glyphs, not system fallbacks.
-
 

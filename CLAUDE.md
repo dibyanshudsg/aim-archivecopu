@@ -82,7 +82,7 @@ Magazine
 - **Shared Logic**: Shared TypeScript types/utilities with web via @aim-archive/shared
 
 ### Backend & Infrastructure
-- **API**: Next.js API Routes (Route Handlers) — 16 endpoints
+- **API**: Next.js API Routes (Route Handlers) — 24 route handlers
 - **Database**: Supabase (PostgreSQL) — free tier, South Asia (Mumbai) region
 - **Project ID**: `glduurfsjyxpkdnxgdqz`
 - **Authentication**: Session cookie-based admin auth (admin email + shared password)
@@ -135,10 +135,10 @@ Magazine
   - **Hover effect**: each issue card scales by 1.006, lifts with a soft gold-flame shadow, and z-raises so the lift doesn't get clipped. Smooth 200ms ease-out.
   - **Edit panel** slides down inline below the issue (no modal): same single-column layout as the upload form (Magazine / Month / Year, Magazine Title, Theme Title, Topic Tags, Description). Save button stays disabled until the form is dirty (`isDirty` memo). Auto-regenerates Magazine Title when magazine/month/year change (skips the first render so a customised title isn't clobbered on open). Click outside the form (on the tinted band) or press Esc to close. Topic Tags dropdown uses `transitionEnd` to flip `overflow: visible` after the slide-in completes so it doesn't clip the dropdown. See `EditRowForm` in `issues/page.tsx`.
   - Bulk select, status filter, topic filter, CSV export, bulk upload, duplicate-issue prefill, last-modified column, sortable columns (Magazine Title, Reads, Downloads, Size, Modified).
-- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, optional Cover Image override (auto-detects spread vs single, lets admin download front/back halves as PDFs), Magazine / Month / Year, **Magazine Title** (auto-generated), **Theme Title** (the issue's overarching theme — e.g. "Sunlit Path", "सूर्यलोकित पथ"), **Topic Tags**, Description. Uploads to Supabase Storage + OCR indexing + auto-generated cover thumbnail.
+- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, optional Cover Image override (auto-detects spread vs single, lets admin download front/back halves as PDFs), Magazine / Month / Year, **Magazine Title** (auto-generated), **Theme Title** (the issue's overarching theme — e.g. "Sunlit Path", "सूर्यलोकित पथ"), **Topic Tags**, Description. New uploads go to Cloudflare R2, then OCR indexing and auto-generated cover thumbnail run.
 - **Topics** — managed dropdown (component: `components/admin/tags-input.tsx`) used in upload + inline edit. Pill-style with click-to-toggle, add new (Enter or +Add button), inline rename via pencil icon (renames across every issue), delete via trash icon (removes from every issue with usage-count confirmation). All topic mutations sort alphabetically and dedupe.
 
-#### API Routes (22 endpoints)
+#### API Routes (24 route handlers)
 | Route | Methods | Purpose |
 |---|---|---|
 | `/api/magazines` | GET | List all magazines |
@@ -156,13 +156,15 @@ Magazine
 | `/api/admin/issues` | GET | List all issues (admin view) |
 | `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue (PUT now accepts `theme`) |
 | `/api/admin/issues/[id]/cover` | POST | Replace cover image for a single issue |
+| `/api/admin/issues/[id]/pdf` | POST | Replace the source PDF, reindex OCR, and refresh storage URLs |
 | `/api/admin/issues/[id]/reindex` | POST | Re-run OCR + regenerate thumbnail on single issue |
 | `/api/admin/upload` | POST | Upload PDF + create issue + OCR index + thumbnail. Now accepts `theme` field. |
 | `/api/admin/reindex` | POST | Batch reindex (one issue per call) |
+| `/api/admin/storage` | GET, DELETE | Inspect and clean Cloudflare R2 objects, including legacy Supabase references |
 | `/api/admin/thumbnails` | POST | Backfill cover thumbnails for issues missing one (one per call) |
 | `/api/admin/topics` | GET, DELETE | List all topics with usage counts / delete a topic from every issue |
 | `/api/admin/topics/rename` | POST | Rename a topic across every issue (`{from, to}`) |
-| `/api/admin/site-settings` | GET, PUT | Manage public site settings (feedback form URL, etc.) |
+| `/api/admin/site-settings` | GET, PATCH | Manage public site settings (feedback form URL, etc.) |
 
 #### Database (8 tables + `site_settings`, Supabase PostgreSQL)
 - `magazines` — 2 records (All India Magazine, Agnishikha)
@@ -176,7 +178,7 @@ Magazine
 - `site_settings` — feedback-form URLs and other public knobs
 
 **Search is theme-aware everywhere:**
-- Browse / Bookmarks page filter (`matchesQuery` in `apps/web/src/lib/use-browse-filters.ts`) checks title + **theme** + magazine name + description + topics.
+- Browse / Bookmarks page filter checks title + **theme** + magazine name + description + partial topic text. Browse now performs this parity search from the server-side listing helper (`apps/web/src/lib/public-issues.ts`) instead of relying on a capped client list.
 - Admin Issues page search box checks title + **theme** + topics.
 - `/api/search` (global Search page + Header search) merges OCR full-text results with metadata results that include `theme.ilike.%q%`.
 
@@ -215,17 +217,9 @@ Magazine
 
 ### 4.2 What's Not Built Yet
 
-#### Admin Enhancements (Planned)
-- Bulk select & bulk actions
-- Manual cover image upload per issue (auto-generation already wired)
-- View/open link to public page
-- Download count column
-- Pagination for large lists (admin issues table)
-- Status filter (Published/Draft) + topic filter (browse public side already has these)
-- Export as CSV
-- Bulk upload (multiple PDFs with auto-detect)
-- Duplicate issue for quick uploads
-- Confirmation toasts (currently using `window.alert` / `window.confirm`)
+#### Admin Enhancements
+- Core admin issue enhancements are implemented: bulk select/actions, manual cover replacement, PDF replacement, download/read columns, pagination, status/topic filters, CSV export, bulk upload, duplicate issue prefill, custom toasts, and custom confirm dialogs.
+- Remaining polish: batch topic editing and deeper server-first data loading for mutation refreshes on very large admin datasets.
 
 #### Phase 1.5: Polish & Deploy
 - ✅ SEO optimization (meta tags, sitemap, structured data)
@@ -427,7 +421,7 @@ d:/AIM Project/
 │   │   │   │   │       └── issues/
 │   │   │   │   │           ├── page.tsx    # Issue table
 │   │   │   │   │           └── new/page.tsx # Upload
-│   │   │   │   └── api/                # 19 API routes (incl. /admin/topics, /admin/topics/rename, /admin/thumbnails)
+│   │   │   │   └── api/                # 24 route handlers
 │   │   │   ├── components/
 │   │   │   │   ├── admin/tags-input.tsx       # Pill-style topic editor with master-list CRUD
 │   │   │   │   ├── browse/                    # Browse-page-only components
@@ -508,7 +502,7 @@ d:/AIM Project/
 
 ### Admin Access
 - **Email**: `admin@aurosociety.org`
-- **Password**: `[REDACTED_ADMIN_PASSWORD]` (set via `ADMIN_PASSWORD` env var, defaults to this)
+- **Password**: Set via `ADMIN_PASSWORD` in the environment. There is no default password fallback.
 - **Admin panel URL**: `/admin/login`
 
 ### GitHub
@@ -529,7 +523,7 @@ d:/AIM Project/
 7. ✅ **Download** — individual PDF download via Supabase Storage CDN
 8. ✅ **Responsive design** — works on desktop, tablet, mobile
 9. ✅ **Admin panel** — login, upload PDFs, edit metadata, manage issues/magazines
-10. ✅ **Database + API** — full backend with Supabase (8 tables, 16 API routes)
+10. ✅ **Database + API** — full backend with Supabase (8 tables, 24 route handlers)
 
 ### MVP Remaining
 - Custom domain (aimarchive.aurosociety.org)
@@ -628,6 +622,19 @@ d:/AIM Project/
 - Use Row Level Security (RLS) policies
 - Index frequently queried columns
 - Admin writes use service role key (bypasses RLS)
+- **Explicit GRANTs required for new `public` tables (from Oct 30, 2026)**: Supabase is removing default Data API exposure for tables in `public`. Every migration that creates a table the web/mobile clients need to read must include explicit grants, or supabase-js will return `42501`. The existing 8 tables keep their current grants — this only affects new tables created after Oct 30, 2026. Template:
+  ```sql
+  create table public.foo ( ... );
+
+  -- Public-readable table (anon + authenticated)
+  grant select on public.foo to anon;
+  grant select, insert, update, delete on public.foo to authenticated;
+  grant select, insert, update, delete on public.foo to service_role;
+
+  alter table public.foo enable row level security;
+  -- + RLS policies
+  ```
+  For **admin-only / service-role tables** (matching the `admins` table pattern from commit `de055ac`), omit the `anon` and `authenticated` grants — only `grant ... to service_role`.
 
 ### Content Conventions
 - **Magazine Title format** (the `title` column): `{Magazine Name} — {Full Month} {Year}` — e.g. `All India Magazine — February 2024`, `Agnishikha — April 2026`.
@@ -703,8 +710,9 @@ d:/AIM Project/
 - **Animating `<tr>` and `<tbody>` heights**: Framer Motion's `height: auto` animation works on table elements when wrapped in `motion.tr`/`motion.div` with `overflow: hidden` during animation. The admin Issues edit panel uses `transitionEnd: { overflow: 'visible' }` on the `animate` prop so dropdowns inside the panel (e.g. Topic Tags) aren't clipped after the slide-in completes. See `EditRowForm` in `apps/web/src/app/admin/(dashboard)/issues/page.tsx`.
 - **`overflow-x-auto` implicitly clips overflow-y**: per CSS spec, setting `overflow-x` to anything other than `visible` makes `overflow-y` compute to `auto` rather than visible. The admin Issues table wrapper has `overflow-x-auto` for narrow viewports, which means hover previews positioned absolutely inside table rows get vertically clipped at the wrapper's edges. **Mitigation**: render hover previews via `react-dom`'s `createPortal` to `document.body` and position them with `position: fixed` based on `getBoundingClientRect()`. Auto-clamp vertically against the viewport so the preview stays fully on-screen for top/bottom rows. See `CoverThumbnail` in the admin Issues page.
 - **Card-style hover on table rows**: each issue is wrapped in its own `<tbody>` (HTML5 allows multiple tbodies per table) so a `transform: scale()` and `box-shadow` on hover applies as a unit to both the main row and the actions row. `relative` + `z-10` on hover prevents the elevated card from being clipped by adjacent rows. Border separation between issues comes from `border-b border-gray-100` on each tbody (with `last:border-b-0` to keep the bottom of the table clean).
+- **Dev server uses webpack, not Turbopack**: `apps/web/package.json` `dev` script is `next dev -p 3000` (no `--turbopack` flag). Production builds (`pnpm build` → `next build`) are unaffected — webpack vs Turbopack is a dev-only choice. **Why**: on Windows, Turbopack repeatedly emitted transient `Element type is invalid` runtime errors after a few HMR cycles, then cascaded into `ENOENT … _buildManifest.js.tmp.*` and `app-build-manifest.json` failures that made every subsequent request 500 until `.next/` was nuked. The Turbopack warning `⚠ Webpack is configured while Turbopack is not, which may cause problems.` was the root signal — `next.config.ts` has a webpack config that Turbopack silently ignores. Webpack honors that config and HMR is stable. Cold-start cost is ~5s vs Turbopack's ~3.5s; worth it. **If reverting**: re-add `--turbopack` to the dev script, port the webpack config to the `turbopack` key in `next.config.ts` (see Next.js docs), and re-test the full admin nav loop before declaring it fixed.
 - **R2 hostname must be in `next.config.ts` `images.remotePatterns`**: Next's `<Image>` component refuses unconfigured remote hosts at runtime with `Invalid src prop... hostname not configured under images`. Both `*.supabase.co` (legacy) and `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev` (current) are allow-listed. When swapping to a custom domain like `cdn.aimarchive.aurosociety.org`, add it here in the same commit as the env-var change. `next.config.ts` is **not** hot-reloaded — dev server restart is required after editing.
-- **R2 CORS origins must match the actual dev port**: the project's `pnpm dev` listens on `:5000` by default (per `apps/web/package.json`), but the R2 CORS allowlist on the `aim-archive` bucket currently only includes `http://localhost:3000` (along with `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`). Running `next dev -p 3000` is the workaround for local R2 testing. The proper fix is to add `http://localhost:5000` to the bucket CORS via Cloudflare dashboard (R2 → bucket → Settings → CORS Policy). Without this, react-pdf cross-origin fetches from `:5000` will silently fail because the response is missing the `Access-Control-Allow-Origin` header.
+- **R2 CORS origins must match the actual dev port**: the project's `pnpm dev` listens on `:3000` (per `apps/web/package.json`), which matches the R2 CORS allowlist on the `aim-archive` bucket (`http://localhost:3000`, `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`). If you ever change the local port via `next dev -p <other>`, add that origin to the bucket CORS via Cloudflare dashboard (R2 → bucket → Settings → CORS Policy), otherwise react-pdf cross-origin fetches will silently fail because the response is missing the `Access-Control-Allow-Origin` header.
 - **`next.config.ts` images.remotePatterns for R2 — wildcard caveat**: R2 public URLs are of the form `pub-<hex>.r2.dev` and the hex is per-bucket. A bare `*.r2.dev` wildcard would technically work but is broader than needed — pin to the exact `pub-*` hostname for least privilege.
 
 ---
