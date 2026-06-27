@@ -11,8 +11,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/search`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
   ];
 
-  // Dynamic issue pages
-  const issues = await listSitemapIssues();
+  // Dynamic issue pages. Do not fail the whole production build if the
+  // deployment environment is missing DB credentials; static URLs are still
+  // better than no deployment, and runtime DB-backed routes report their own
+  // errors separately.
+  const issues = await listSitemapIssues().catch((error) => {
+    console.warn('Skipping issue sitemap entries:', error instanceof Error ? error.message : error);
+    return [];
+  });
 
   const issuePages: MetadataRoute.Sitemap = (issues || []).map((issue) => ({
     url: `${baseUrl}/issue/${issue.id}`,
