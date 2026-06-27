@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { listAdminMagazines } from '@/lib/admin-data';
 import { createAdminMagazineInDb } from '@/lib/db';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export async function GET() {
   const admin = await verifyAdmin();
@@ -29,5 +30,6 @@ export async function POST(request: NextRequest) {
   }
 
   const data = await createAdminMagazineInDb(parsed.data);
+  refreshPublicArchiveCaches();
   return NextResponse.json(data, { status: 201 });
 }

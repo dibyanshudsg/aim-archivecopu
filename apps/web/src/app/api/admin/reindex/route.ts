@@ -4,6 +4,7 @@ import { listReindexCandidatesFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { indexIssueFromUrl } from '@/lib/search-indexer';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
         if (storageKey) {
           thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
           await updateIssueCoverInDb(issue.id, thumbnailUrl);
+          refreshPublicArchiveCaches(issue.id);
         }
       } catch (thumbErr) {
         console.error('Thumbnail generation failed (non-blocking):', thumbErr);

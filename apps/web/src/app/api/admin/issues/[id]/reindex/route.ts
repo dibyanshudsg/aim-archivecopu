@@ -5,6 +5,7 @@ import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export const runtime = 'nodejs';
 
@@ -76,6 +77,7 @@ export async function POST(
             if (storageKey) {
               thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
               await updateIssueCoverInDb(issue.id, thumbnailUrl);
+              refreshPublicArchiveCaches(issue.id);
             }
           } catch (thumbErr) {
             console.error('Thumbnail generation failed (non-blocking):', thumbErr);

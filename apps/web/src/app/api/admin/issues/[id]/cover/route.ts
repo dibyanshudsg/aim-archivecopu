@@ -3,6 +3,7 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -46,11 +47,13 @@ export async function POST(
       const thumbnailKey = storageKey.replace(/\.pdf$/i, '-thumb.jpg');
       const publicUrl = await uploadToR2(thumbnailKey, buf, cover.type || 'image/jpeg');
       await updateIssueCoverInDb(id, publicUrl);
+      refreshPublicArchiveCaches(id);
       return NextResponse.json({ cover_image_url: publicUrl, cropped: false });
     }
 
     const result = await cropAndUploadCover(buf, storageKey, orientation);
     await updateIssueCoverInDb(id, result.publicUrl);
+    refreshPublicArchiveCaches(id);
 
     return NextResponse.json({ cover_image_url: result.publicUrl, cropped: result.cropped });
   } catch (err) {

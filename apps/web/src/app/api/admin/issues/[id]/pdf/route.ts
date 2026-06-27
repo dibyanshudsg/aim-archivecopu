@@ -9,6 +9,7 @@ import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 /**
  * Replace the PDF for an existing issue. The new PDF is always written to
@@ -83,6 +84,7 @@ export async function POST(
       console.error('Thumbnail regeneration failed (non-blocking):', thumbErr);
     }
   }
+  refreshPublicArchiveCaches(id);
 
   return NextResponse.json({
     success: true,

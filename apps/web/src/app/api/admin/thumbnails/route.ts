@@ -3,6 +3,7 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { listIssuesMissingCoverFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 /**
  * POST /api/admin/thumbnails
@@ -37,6 +38,7 @@ export async function POST() {
     const thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
 
     await updateIssueCoverInDb(issue.id, thumbnailUrl);
+    refreshPublicArchiveCaches(issue.id);
 
     return NextResponse.json({
       processed: 1,

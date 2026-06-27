@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { deleteTopicFromDb, listTopicCountsFromDb } from '@/lib/db';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 /** GET /api/admin/topics → list of all topics with usage counts */
 export async function GET() {
@@ -21,5 +22,6 @@ export async function DELETE(request: NextRequest) {
   }
 
   const updated = await deleteTopicFromDb(name);
+  refreshPublicArchiveCaches();
   return NextResponse.json({ success: true, updated });
 }

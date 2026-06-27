@@ -14,6 +14,13 @@ const magazineCache = new AsyncTtlCache<ApiMagazine[]>(PUBLIC_LOOKUP_CACHE_MS);
 const issueArrayCache = new AsyncTtlCache<ApiIssue[]>(PUBLIC_LOOKUP_CACHE_MS);
 const issueCache = new AsyncTtlCache<ApiIssue | null>(SHORT_PUBLIC_CACHE_MS);
 
+export function clearPublicRepositoryCaches(): void {
+  publicListCache.clear();
+  magazineCache.clear();
+  issueArrayCache.clear();
+  issueCache.clear();
+}
+
 export async function listMagazines(options: { orderBy?: 'name' | 'created_at' } = {}): Promise<ApiMagazine[]> {
   const orderBy = options.orderBy === 'created_at' ? 'created_at' : 'name';
   return magazineCache.get(orderBy, async () => {

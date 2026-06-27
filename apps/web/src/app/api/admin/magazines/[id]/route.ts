@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { deleteAdminMagazineInDb, updateAdminMagazineInDb } from '@/lib/db';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export async function PUT(
   request: NextRequest,
@@ -19,6 +20,7 @@ export async function PUT(
 
   const data = await updateAdminMagazineInDb(id, parsed.data);
   if (!data) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
+  refreshPublicArchiveCaches();
   return NextResponse.json(data);
 }
 
@@ -31,5 +33,6 @@ export async function DELETE(
 
   const { id } = await params;
   await deleteAdminMagazineInDb(id);
+  refreshPublicArchiveCaches();
   return NextResponse.json({ success: true });
 }

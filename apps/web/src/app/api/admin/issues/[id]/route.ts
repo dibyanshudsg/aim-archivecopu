@@ -10,6 +10,7 @@ import {
   isR2Url,
   storageKeyFromUrl,
 } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export async function PUT(
   request: NextRequest,
@@ -28,6 +29,7 @@ export async function PUT(
 
   const data = await updateAdminIssueInDb(id, parsed.data);
   if (!data) return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
+  refreshPublicArchiveCaches(id);
   return NextResponse.json(data);
 }
 
@@ -47,6 +49,7 @@ export async function DELETE(
   const { id } = await params;
   const issue = await getIssueStorageUrlsFromDb(id);
   await deleteAdminIssueInDb(id);
+  refreshPublicArchiveCaches(id);
 
   const cleanups: Array<string | null | undefined> = [issue?.pdf_url, issue?.cover_image_url];
   for (const url of cleanups) {

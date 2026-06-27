@@ -6,6 +6,7 @@ import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { uploadToR2 } from '@/lib/r2-client';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
           file_size_bytes: file.size,
           is_published: true,
         });
+        refreshPublicArchiveCaches(String(issue.id));
 
         // Schedule background OCR + indexing — runs after the stream closes.
         // Falls back to the per-issue Reindex button if the platform cuts off

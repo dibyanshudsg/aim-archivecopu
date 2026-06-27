@@ -6,7 +6,7 @@ import {
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { HomeClient } from './home-client';
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 /** Latest 8 issues for the homepage bookshelf — excludes embargoed ones so
  *  the page-turn preview never points at a PDF the user can't actually open. */

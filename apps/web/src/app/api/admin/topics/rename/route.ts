@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { renameTopicInDb } from '@/lib/db';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 /** POST /api/admin/topics/rename  body: { from, to } → rename across every issue */
 export async function POST(request: NextRequest) {
@@ -16,5 +17,6 @@ export async function POST(request: NextRequest) {
   if (from === newName) return NextResponse.json({ success: true, updated: 0 });
 
   const updated = await renameTopicInDb(from, newName);
+  refreshPublicArchiveCaches();
   return NextResponse.json({ success: true, updated });
 }
