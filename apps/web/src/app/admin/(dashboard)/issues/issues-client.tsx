@@ -33,6 +33,7 @@ import type { MonthIndex } from '@aim-archive/shared';
 import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 import { useUI } from '@/components/ui/toast';
 import type { AdminIssue, AdminIssueListResult, AdminMagazine } from '@/lib/admin-data';
+import { renderPdfFirstPageCoverFromUrl } from '@/lib/pdf-cover-client';
 
 type Issue = AdminIssue;
 
@@ -71,7 +72,7 @@ export function AdminIssuesClient({
   const [filterTopic, setFilterTopic] = useState('all');
 
   // Sort
-  const [sortField, setSortField] = useState<SortField>('year');
+  const [sortField, setSortField] = useState<SortField>('updated_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // Pagination
@@ -872,11 +873,18 @@ function ReplaceCoverModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const [orientation, setOrientation] = useState<'front-right' | 'front-left'>('front-right');
+  const [coverSource, setCoverSource] = useState<'manual' | 'pdf-first-page'>('manual');
+  const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function pick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f || !f.type.startsWith('image/')) return;
+    setCoverSource('manual');
+    showPreview(f);
+  }
+
+  function showPreview(f: File) {
     setFile(f);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const url = URL.createObjectURL(f);
@@ -886,6 +894,21 @@ function ReplaceCoverModal({
     img.src = url;
   }
 
+  async function generateFromPdf() {
+    setGenerating(true);
+    try {
+      const generated = await renderPdfFirstPageCoverFromUrl(issue.pdf_url, issue.title);
+      if (!generated) throw new Error('Could not render PDF page 1');
+      setCoverSource('pdf-first-page');
+      showPreview(generated);
+      toast.success('Cover generated from page 1');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate cover');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   const isSpread = dims ? dims.w / dims.h > 1.1 : false;
 
   async function submit() {
@@ -893,6 +916,7 @@ function ReplaceCoverModal({
     setSubmitting(true);
     const fd = new FormData();
     fd.append('cover', file);
+    fd.append('cover_source', coverSource);
     fd.append('cover_orientation', orientation);
     const res = await fetch(`/api/admin/issues/${issue.id}/cover`, {
       method: 'POST',
@@ -984,6 +1008,16 @@ function ReplaceCoverModal({
           className="hidden"
         />
 
+        <button
+          type="button"
+          onClick={generateFromPdf}
+          disabled={generating || submitting}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-flame-200 bg-flame-50/50 px-4 py-2.5 text-sm font-semibold text-flame-700 transition-colors hover:bg-flame-50 disabled:cursor-wait disabled:opacity-60"
+        >
+          <ImageIcon className="h-4 w-4" />
+          {generating ? 'Generating from PDF...' : 'Generate from PDF page 1'}
+        </button>
+
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -993,7 +1027,7 @@ function ReplaceCoverModal({
           </button>
           <button
             onClick={submit}
-            disabled={!file || submitting}
+            disabled={!file || submitting || generating}
             className="rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
           >
             {submitting ? 'Uploading...' : 'Replace cover'}

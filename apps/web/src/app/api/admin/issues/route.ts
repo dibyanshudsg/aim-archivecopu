@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
 function parseInput(request: Request): AdminIssueListInput {
   const searchParams = new URL(request.url).searchParams;
-  const sort = searchParams.get('sort') ?? 'year';
+  const sort = searchParams.get('sort') ?? 'updated_at';
   const dir = searchParams.get('dir') ?? 'desc';
   const status = searchParams.get('status') ?? 'all';
 
@@ -49,7 +49,7 @@ function parseInput(request: Request): AdminIssueListInput {
       ? (status as AdminIssueStatusFilter)
       : 'all',
     topic: normalizeFilter(searchParams.get('topic')),
-    sort: SORT_FIELDS.has(sort as AdminIssueSortField) ? (sort as AdminIssueSortField) : 'year',
+    sort: SORT_FIELDS.has(sort as AdminIssueSortField) ? (sort as AdminIssueSortField) : 'updated_at',
     dir: SORT_DIRS.has(dir as AdminIssueSortDir) ? (dir as AdminIssueSortDir) : 'desc',
   };
 }

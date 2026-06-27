@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
-import { storageKeyFromUrl } from '@/lib/r2-client';
+import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest,
@@ -33,13 +36,20 @@ export async function POST(
   }
 
   const orientationRaw = formData.get('cover_orientation');
+  const coverSource = formData.get('cover_source');
   const orientation: SpreadOrientation =
     orientationRaw === 'front-left' ? 'front-left' : 'front-right';
 
   try {
     const buf = Buffer.from(await cover.arrayBuffer());
-    const result = await cropAndUploadCover(buf, storageKey, orientation);
+    if (coverSource === 'pdf-first-page') {
+      const thumbnailKey = storageKey.replace(/\.pdf$/i, '-thumb.jpg');
+      const publicUrl = await uploadToR2(thumbnailKey, buf, cover.type || 'image/jpeg');
+      await updateIssueCoverInDb(id, publicUrl);
+      return NextResponse.json({ cover_image_url: publicUrl, cropped: false });
+    }
 
+    const result = await cropAndUploadCover(buf, storageKey, orientation);
     await updateIssueCoverInDb(id, result.publicUrl);
 
     return NextResponse.json({ cover_image_url: result.publicUrl, cropped: result.cropped });

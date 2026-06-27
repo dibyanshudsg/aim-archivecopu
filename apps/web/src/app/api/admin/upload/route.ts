@@ -7,6 +7,9 @@ import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { uploadToR2 } from '@/lib/r2-client';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 /**
  * Upload a new issue.
  *
@@ -61,6 +64,7 @@ export async function POST(request: NextRequest) {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const coverFile = formData.get('cover') as File | null;
+  const coverSource = formData.get('cover_source');
   const orientationRaw = formData.get('cover_orientation');
   const orientation: SpreadOrientation =
     orientationRaw === 'front-left' ? 'front-left' : 'front-right';
@@ -91,8 +95,13 @@ export async function POST(request: NextRequest) {
         if (coverFile && coverFile.size > 0 && coverFile.type.startsWith('image/')) {
           try {
             const coverBuf = Buffer.from(await coverFile.arrayBuffer());
-            const result = await cropAndUploadCover(coverBuf, storageKey, orientation);
-            coverImageUrl = result.publicUrl;
+            if (coverSource === 'pdf-first-page') {
+              const thumbnailKey = storageKey.replace(/\.pdf$/i, '-thumb.jpg');
+              coverImageUrl = await uploadToR2(thumbnailKey, coverBuf, coverFile.type || 'image/jpeg');
+            } else {
+              const result = await cropAndUploadCover(coverBuf, storageKey, orientation);
+              coverImageUrl = result.publicUrl;
+            }
           } catch (coverErr) {
             console.error('Cover crop/upload failed (falling back to PDF page 1):', coverErr);
           }

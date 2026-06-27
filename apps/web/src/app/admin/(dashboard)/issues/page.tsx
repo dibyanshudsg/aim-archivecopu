@@ -13,7 +13,7 @@ export default async function AdminIssuesPage() {
       year: 'all',
       status: 'all',
       topic: 'all',
-      sort: 'year',
+      sort: 'updated_at',
       dir: 'desc',
     }),
     listAdminMagazines(),

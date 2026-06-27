@@ -8,6 +8,7 @@ import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 import { formatFileSize } from '@/lib/utils';
 import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
+import { renderPdfFirstPageCoverFromFile } from '@/lib/pdf-cover-client';
 
 interface Magazine {
   id: string;
@@ -208,8 +209,23 @@ export default function UploadIssuePage() {
     formData.append('month', String(form.month));
     formData.append('description', form.description);
     formData.append('topics', form.topics.join(','));
-    if (coverFile) {
-      formData.append('cover', coverFile);
+    let effectiveCoverFile = coverFile;
+    let coverSource: 'manual' | 'pdf-first-page' | null = coverFile ? 'manual' : null;
+
+    if (!effectiveCoverFile) {
+      setProgress('Preparing cover image…');
+      setProgressStep({ label: 'Preparing cover image', pct: 15 });
+      try {
+        effectiveCoverFile = await renderPdfFirstPageCoverFromFile(file);
+        coverSource = effectiveCoverFile ? 'pdf-first-page' : null;
+      } catch (coverErr) {
+        console.warn('Client cover generation failed; server fallback will try PDF page 1:', coverErr);
+      }
+    }
+
+    if (effectiveCoverFile) {
+      formData.append('cover', effectiveCoverFile);
+      if (coverSource) formData.append('cover_source', coverSource);
       formData.append('cover_orientation', coverOrientation);
     }
 
