@@ -16,9 +16,18 @@ import {
 let cached: S3Client | null = null;
 
 function env(name: string): string {
-  const v = process.env[name];
+  const v = process.env[name]?.trim();
   if (!v) throw new Error(`Missing env var: ${name}`);
   return v;
+}
+
+function validateBucketName(bucket: string): string {
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) {
+    throw new Error(
+      'Invalid R2_BUCKET: use the raw Cloudflare bucket slug, for example "aim-archive". Do not use a URL, display name, or value with spaces.',
+    );
+  }
+  return bucket;
 }
 
 export function getR2Client(): S3Client {
@@ -36,7 +45,7 @@ export function getR2Client(): S3Client {
 }
 
 export function r2Bucket(): string {
-  return env('R2_BUCKET');
+  return validateBucketName(env('R2_BUCKET'));
 }
 
 export function r2PublicBaseUrl(): string {
