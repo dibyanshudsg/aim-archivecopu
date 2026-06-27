@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Plus,
@@ -31,7 +32,7 @@ import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 import { useUI } from '@/components/ui/toast';
-import type { AdminIssue, AdminMagazine } from '@/lib/admin-data';
+import type { AdminIssue, AdminIssueListResult, AdminMagazine } from '@/lib/admin-data';
 
 type Issue = AdminIssue;
 
@@ -44,17 +45,23 @@ type StatusFilter = 'all' | 'published' | 'draft';
 const PAGE_SIZE = 25;
 
 export function AdminIssuesClient({
-  initialIssues,
+  initialIssueResult,
   initialMagazines,
 }: {
-  initialIssues: Issue[];
+  initialIssueResult: AdminIssueListResult;
   initialMagazines: Magazine[];
 }) {
   const { toast, confirm } = useUI();
+  const router = useRouter();
 
-  const [issues, setIssues] = useState<Issue[]>(initialIssues);
-  const [magazines, setMagazines] = useState<Magazine[]>(initialMagazines);
+  const [issues, setIssues] = useState<Issue[]>(initialIssueResult.data);
+  const [totalIssues, setTotalIssues] = useState(initialIssueResult.total);
+  const [totalPages, setTotalPages] = useState(initialIssueResult.totalPages);
+  const [years, setYears] = useState<number[]>(initialIssueResult.facets.years);
+  const [allTopics, setAllTopics] = useState<ManagedTopic[]>(initialIssueResult.facets.topics);
+  const [magazines] = useState<Magazine[]>(initialMagazines);
   const [loading, setLoading] = useState(false);
+  const didMountRef = useRef(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -79,87 +86,61 @@ export function AdminIssuesClient({
   // Replace-cover modal state
   const [coverModalIssue, setCoverModalIssue] = useState<Issue | null>(null);
 
-  // Master topic list with usage counts
-  const allTopics = useMemo<ManagedTopic[]>(() => {
-    const counts = new Map<string, number>();
-    for (const i of issues) for (const t of i.topics) counts.set(t, (counts.get(t) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-  }, [issues]);
-
-  async function loadData() {
-    const [issuesRes, magsRes] = await Promise.all([
-      fetch('/api/admin/issues', { cache: 'no-store' }),
-      fetch('/api/admin/magazines', { cache: 'no-store' }),
-    ]);
-    if (issuesRes.ok) setIssues(await issuesRes.json());
-    if (magsRes.ok) setMagazines(await magsRes.json());
-    setLoading(false);
-  }
-
-  const years = useMemo(
-    () => [...new Set(issues.map((i) => i.year))].sort((a, b) => b - a),
-    [issues],
-  );
-
-  const filteredIssues = useMemo(() => {
-    let result = issues;
-
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (i) =>
-          i.title.toLowerCase().includes(q) ||
-          (i.theme && i.theme.toLowerCase().includes(q)) ||
-          i.topics.some((t) => t.toLowerCase().includes(q)),
-      );
-    }
-    if (filterMagazine !== 'all') {
-      result = result.filter((i) => i.magazine_id === filterMagazine);
-    }
-    if (filterYear !== 'all') {
-      result = result.filter((i) => i.year === Number(filterYear));
-    }
-    if (filterStatus !== 'all') {
-      result = result.filter((i) => (filterStatus === 'published' ? i.is_published : !i.is_published));
-    }
-    if (filterTopic !== 'all') {
-      result = result.filter((i) => i.topics.includes(filterTopic));
-    }
-
-    result = [...result].sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'title') cmp = a.title.localeCompare(b.title);
-      else if (sortField === 'year') cmp = a.year * 100 + a.month - (b.year * 100 + b.month);
-      else if (sortField === 'read_count') cmp = a.read_count - b.read_count;
-      else if (sortField === 'download_count') cmp = a.download_count - b.download_count;
-      else if (sortField === 'file_size_bytes') cmp = a.file_size_bytes - b.file_size_bytes;
-      else if (sortField === 'updated_at') {
-        const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-        const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-        cmp = ta - tb;
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-
-    return result;
-  }, [issues, search, filterMagazine, filterYear, filterStatus, filterTopic, sortField, sortDir]);
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredIssues.length / PAGE_SIZE));
   const pageStart = (page - 1) * PAGE_SIZE;
-  const pageIssues = filteredIssues.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageIssues = issues;
 
-  // Reset page when filters reduce result count below current page
   useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
+    const timeout = window.setTimeout(() => {
+      router.prefetch('/admin/issues/new');
+      router.prefetch('/admin/issues/bulk');
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [router]);
 
-  // Reset page when filters change
+  const loadData = useCallback(async (nextPage = page, signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const issuesRes = await fetch(
+        buildAdminIssuesUrl({
+          page: nextPage,
+          pageSize: PAGE_SIZE,
+          q: search,
+          magazine: filterMagazine,
+          year: filterYear,
+          status: filterStatus,
+          topic: filterTopic,
+          sort: sortField,
+          dir: sortDir,
+        }),
+        { cache: 'no-store', signal },
+      );
+      if (!issuesRes.ok) throw new Error('Failed to load issues');
+      const result = (await issuesRes.json()) as AdminIssueListResult;
+      setIssues(result.data);
+      setTotalIssues(result.total);
+      setTotalPages(result.totalPages);
+      setYears(result.facets.years);
+      setAllTopics(result.facets.topics);
+      if (result.page > result.totalPages) setPage(result.totalPages);
+    } catch (error) {
+      if (signal?.aborted) return;
+      toast.error(error instanceof Error ? error.message : 'Failed to load issues');
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [filterMagazine, filterStatus, filterTopic, filterYear, page, search, sortDir, sortField, toast]);
+
   useEffect(() => {
-    setPage(1);
-  }, [search, filterMagazine, filterYear, filterStatus, filterTopic]);
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    setSelected(new Set());
+    loadData(page, controller.signal);
+    return () => controller.abort();
+  }, [loadData, page]);
 
   // Keep the open edit panel in sync with the latest issue data after refetches
   // (e.g. after a PDF replace, file_size_bytes / page_count update).
@@ -172,6 +153,7 @@ export function AdminIssuesClient({
   }, [issues]);
 
   function toggleSort(field: SortField) {
+    setPage(1);
     if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
       setSortField(field);
@@ -228,8 +210,27 @@ export function AdminIssuesClient({
     window.location.href = '/admin/issues/new';
   }
 
-  function exportCsv() {
-    const rows = filteredIssues.map((i) => ({
+  async function exportCsv() {
+    const res = await fetch(
+      buildAdminIssuesUrl({
+        page: 1,
+        pageSize: 5000,
+        q: search,
+        magazine: filterMagazine,
+        year: filterYear,
+        status: filterStatus,
+        topic: filterTopic,
+        sort: sortField,
+        dir: sortDir,
+      }),
+      { cache: 'no-store' },
+    );
+    if (!res.ok) {
+      toast.error('Failed to export issues');
+      return;
+    }
+    const result = (await res.json()) as AdminIssueListResult;
+    const rows = result.data.map((i) => ({
       Title: i.title,
       Magazine: i.magazines?.name ?? '',
       Year: i.year,
@@ -342,7 +343,7 @@ export function AdminIssuesClient({
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
-            disabled={filteredIssues.length === 0}
+            disabled={totalIssues === 0}
             className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 sm:flex"
           >
             <FileSpreadsheet className="h-4 w-4" />
@@ -350,6 +351,8 @@ export function AdminIssuesClient({
           </button>
           <Link
             href="/admin/issues/bulk"
+            onMouseEnter={() => router.prefetch('/admin/issues/bulk')}
+            onFocus={() => router.prefetch('/admin/issues/bulk')}
             className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:flex"
           >
             <Upload className="h-4 w-4" />
@@ -357,6 +360,8 @@ export function AdminIssuesClient({
           </Link>
           <Link
             href="/admin/issues/new"
+            onMouseEnter={() => router.prefetch('/admin/issues/new')}
+            onFocus={() => router.prefetch('/admin/issues/new')}
             className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
           >
             <Plus className="h-4 w-4" />
@@ -372,13 +377,19 @@ export function AdminIssuesClient({
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search issues..."
             className="w-full rounded-xl border border-gray-200 py-2.5 pr-9 pl-10 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
           />
           {search && (
             <button
-              onClick={() => setSearch('')}
+              onClick={() => {
+                setSearch('');
+                setPage(1);
+              }}
               className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <X className="h-4 w-4" />
@@ -388,7 +399,10 @@ export function AdminIssuesClient({
 
         <select
           value={filterMagazine}
-          onChange={(e) => setFilterMagazine(e.target.value)}
+          onChange={(e) => {
+            setFilterMagazine(e.target.value);
+            setPage(1);
+          }}
           className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
         >
           <option value="all">All Magazines</option>
@@ -401,7 +415,10 @@ export function AdminIssuesClient({
 
         <select
           value={filterYear}
-          onChange={(e) => setFilterYear(e.target.value)}
+          onChange={(e) => {
+            setFilterYear(e.target.value);
+            setPage(1);
+          }}
           className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
         >
           <option value="all">All Years</option>
@@ -414,7 +431,10 @@ export function AdminIssuesClient({
 
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
+          onChange={(e) => {
+            setFilterStatus(e.target.value as StatusFilter);
+            setPage(1);
+          }}
           className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
         >
           <option value="all">All Status</option>
@@ -424,7 +444,10 @@ export function AdminIssuesClient({
 
         <select
           value={filterTopic}
-          onChange={(e) => setFilterTopic(e.target.value)}
+          onChange={(e) => {
+            setFilterTopic(e.target.value);
+            setPage(1);
+          }}
           className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
         >
           <option value="all">All Topics</option>
@@ -436,7 +459,7 @@ export function AdminIssuesClient({
         </select>
 
         <span className="ml-auto text-sm text-gray-400">
-          {filteredIssues.length} of {issues.length} issues
+          {totalIssues} matching issue{totalIssues === 1 ? '' : 's'}
         </span>
       </div>
 
@@ -484,9 +507,9 @@ export function AdminIssuesClient({
             </div>
           ))}
         </div>
-      ) : filteredIssues.length === 0 ? (
+      ) : totalIssues === 0 ? (
         <div className="rounded-2xl border border-gray-100 bg-white py-16 text-center">
-          <p className="text-gray-400">{issues.length === 0 ? 'No issues yet' : 'No issues match your filters'}</p>
+          <p className="text-gray-400">No issues match your filters</p>
         </div>
       ) : (
         <>
@@ -717,8 +740,8 @@ export function AdminIssuesClient({
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm text-gray-500">
                 Showing <span className="font-medium text-gray-700">{pageStart + 1}</span>–
-                <span className="font-medium text-gray-700">{Math.min(pageStart + PAGE_SIZE, filteredIssues.length)}</span>{' '}
-                of <span className="font-medium text-gray-700">{filteredIssues.length}</span>
+                <span className="font-medium text-gray-700">{Math.min(pageStart + PAGE_SIZE, totalIssues)}</span>{' '}
+                of <span className="font-medium text-gray-700">{totalIssues}</span>
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -758,6 +781,31 @@ export function AdminIssuesClient({
 
     </div>
   );
+}
+
+function buildAdminIssuesUrl(input: {
+  page: number;
+  pageSize: number;
+  q: string;
+  magazine: string;
+  year: string;
+  status: StatusFilter;
+  topic: string;
+  sort: SortField;
+  dir: SortDir;
+}) {
+  const params = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize),
+    sort: input.sort,
+    dir: input.dir,
+  });
+  if (input.q.trim()) params.set('q', input.q.trim());
+  if (input.magazine !== 'all') params.set('magazine', input.magazine);
+  if (input.year !== 'all') params.set('year', input.year);
+  if (input.status !== 'all') params.set('status', input.status);
+  if (input.topic !== 'all') params.set('topic', input.topic);
+  return `/api/admin/issues?${params.toString()}`;
 }
 
 function SortHeader({

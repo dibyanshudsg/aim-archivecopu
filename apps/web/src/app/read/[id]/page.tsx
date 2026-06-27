@@ -860,6 +860,41 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     );
   }
 
+  // Embargoed issues never carry a pdfUrl on the public API. Bounce out of the
+  // reader to a friendly explanation rather than handing react-pdf a null URL.
+  if (issue.isEmbargoed || !issue.pdfUrl) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-gradient-to-b from-gold-50 via-flame-50/40 to-white px-6">
+        <div className="max-w-xl rounded-2xl border border-flame-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-flame-50 text-flame-600 ring-1 ring-flame-200">
+            <Info className="h-6 w-6" />
+          </div>
+          <h1 className="font-heading mt-4 text-2xl font-bold text-gray-900">
+            {issue.embargoLiftLabel ? `Available ${issue.embargoLiftLabel}` : 'Available to subscribers'}
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">
+            This edition is reserved for our print subscribers while it&apos;s still in active
+            circulation. The archive opens it to everyone on a rolling 5-year window.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href={`/issue/${issue.id}`}
+              className="rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
+            >
+              View details
+            </Link>
+            <Link
+              href="/browse"
+              className="rounded-xl border border-flame-200 bg-white px-5 py-2.5 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+            >
+              Browse archive
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const bookmarked = isBookmarked(issue.id);
   const backTargets: Record<ReaderSource, { href: string; label: string; aria: string }> = {
     issue: { href: `/issue/${issue.id}`, label: 'Issue', aria: 'Back to issue details' },

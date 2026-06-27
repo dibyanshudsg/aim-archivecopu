@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { createPublicClient } from '@/lib/supabase-server';
 import { BrowseClient } from './browse-client';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import {
@@ -22,16 +21,13 @@ async function fetchInitialBrowseData(
   totalPages: number;
   facets: BrowseFacets;
 }> {
-  const supabase = createPublicClient();
   const result = await listPublicIssues(
     parsePublicIssueListInput({ ...searchParams, page_size: searchParams.page_size ?? '24' }),
   );
 
-  const { data: magazinesRes } = await supabase.from('magazines').select('*').order('name');
-
   return {
     issues: result.data,
-    magazines: (magazinesRes ?? []) as ApiMagazine[],
+    magazines: result.magazines,
     total: result.total,
     totalPages: result.totalPages,
     facets: result.facets,

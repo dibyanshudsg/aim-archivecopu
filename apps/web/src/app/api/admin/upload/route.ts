@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { createAdminIssueInDb, getMagazineNameFromDb } from '@/lib/db';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { uploadToR2 } from '@/lib/r2-client';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
 
 /**
  * Upload a new issue.
@@ -58,12 +54,10 @@ export async function POST(request: NextRequest) {
   const topics = topicsStr ? topicsStr.split(',').map((t) => t.trim()).filter(Boolean) : [];
   const themeTrimmed = theme.trim();
 
-  const supabase = getClient();
+  const magazineName = await getMagazineNameFromDb(magazineId);
+  if (!magazineName) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
 
-  const { data: mag } = await supabase.from('magazines').select('name').eq('id', magazineId).single();
-  if (!mag) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
-
-  const storageKey = `${mag.name.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
+  const storageKey = `${magazineName.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const coverFile = formData.get('cover') as File | null;
@@ -113,29 +107,19 @@ export async function POST(request: NextRequest) {
 
         // Step 3: DB insert (~500ms)
         send({ type: 'status', step: 'creating-record', message: 'Saving issue…' });
-        const { data: issue, error: insertErr } = await supabase
-          .from('issues')
-          .insert({
-            magazine_id: magazineId,
-            title,
-            theme: themeTrimmed || null,
-            year,
-            month,
-            description: description || null,
-            topics,
-            pdf_url: pdfPublicUrl,
-            cover_image_url: coverImageUrl,
-            file_size_bytes: file.size,
-            is_published: true,
-          })
-          .select()
-          .single();
-
-        if (insertErr) {
-          send({ type: 'error', message: insertErr.message });
-          controller.close();
-          return;
-        }
+        const issue = await createAdminIssueInDb({
+          magazine_id: magazineId,
+          title,
+          theme: themeTrimmed || null,
+          year,
+          month,
+          description: description || null,
+          topics,
+          pdf_url: pdfPublicUrl,
+          cover_image_url: coverImageUrl,
+          file_size_bytes: file.size,
+          is_published: true,
+        });
 
         // Schedule background OCR + indexing — runs after the stream closes.
         // Falls back to the per-issue Reindex button if the platform cuts off
@@ -143,7 +127,7 @@ export async function POST(request: NextRequest) {
         after(async () => {
           try {
             const pages = await extractPdfText(buffer);
-            await indexIssue(supabase, issue.id, pages);
+            await indexIssue(String(issue.id), pages);
           } catch (extractErr) {
             console.error('PDF text extraction failed (can be retried via reindex):', extractErr);
           }

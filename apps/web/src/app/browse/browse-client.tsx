@@ -153,29 +153,52 @@ function BrowseContent({
   const handleDownload = async () => {
     const picked = issues.filter((i) => selectedIds.has(i.id));
     if (picked.length === 0) return;
+
+    // Embargoed picks have no `pdf_url` to fetch — surface them as pre-skipped
+    // entries in the modal so the user can see exactly which issues didn't
+    // make it into the ZIP.
+    const downloadable = picked.filter((i): i is ApiIssue & { pdf_url: string } => !!i.pdf_url);
+    const preSkipped = picked.filter((i) => !i.pdf_url).map((i) => i.title);
+
+    if (downloadable.length === 0) {
+      setProgress({
+        phase: 'error',
+        fetched: 0,
+        total: picked.length,
+        zipPercent: 0,
+        skipped: preSkipped,
+        errorMessage:
+          preSkipped.length > 0
+            ? 'All selected issues are subscriber-only until their embargo lifts.'
+            : 'No files could be downloaded.',
+      });
+      setDownloadOpen(true);
+      return;
+    }
+
     abortRef.current = new AbortController();
     setProgress({
       phase: 'fetching',
       fetched: 0,
-      total: picked.length,
+      total: downloadable.length,
       zipPercent: 0,
-      skipped: [],
+      skipped: preSkipped,
     });
     setDownloadOpen(true);
     try {
       await downloadAsZip({
-        files: picked.map((i) => ({ name: i.title, url: i.pdf_url })),
-        zipName: `AIM Archive — ${picked.length} issue${picked.length === 1 ? '' : 's'}`,
-        onProgress: setProgress,
+        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url })),
+        zipName: `AIM Archive — ${downloadable.length} issue${downloadable.length === 1 ? '' : 's'}`,
+        onProgress: (p) => setProgress({ ...p, skipped: [...preSkipped, ...p.skipped] }),
         signal: abortRef.current.signal,
       });
     } catch (err) {
       setProgress({
         phase: 'error',
         fetched: 0,
-        total: picked.length,
+        total: downloadable.length,
         zipPercent: 0,
-        skipped: [],
+        skipped: preSkipped,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
     }

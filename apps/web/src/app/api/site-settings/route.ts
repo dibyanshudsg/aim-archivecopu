@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient } from '@/lib/supabase-server';
-import { DEFAULT_SITE_SETTINGS, readSiteSettings } from '@/lib/site-settings';
+import { readSiteSettingsFromDb } from '@/lib/db';
+import { DEFAULT_SITE_SETTINGS } from '@/lib/site-settings';
 
 export async function GET() {
   try {
-    const settings = await readSiteSettings(createPublicClient());
+    const settings = await readSiteSettingsFromDb();
     return NextResponse.json({
       feedback_form_url: settings.feedback_form_url,
     });

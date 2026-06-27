@@ -78,32 +78,53 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
   };
 
   /** Run a ZIP build for an arbitrary subset of issues — shared between the
-   *  bulk-bar Download button and the page-level "Download all" shortcut. */
+   *  bulk-bar Download button and the page-level "Download all" shortcut.
+   *  Embargoed issues are skipped silently (they have no `pdf_url`); the
+   *  modal lists them as skipped so the user knows what didn't make it in. */
   const runDownload = async (picked: ApiIssue[]) => {
     if (picked.length === 0) return;
+    const downloadable = picked.filter((i): i is ApiIssue & { pdf_url: string } => !!i.pdf_url);
+    const preSkipped = picked.filter((i) => !i.pdf_url).map((i) => i.title);
+
+    if (downloadable.length === 0) {
+      setProgress({
+        phase: 'error',
+        fetched: 0,
+        total: picked.length,
+        zipPercent: 0,
+        skipped: preSkipped,
+        errorMessage:
+          preSkipped.length > 0
+            ? 'All selected bookmarks are subscriber-only until their embargo lifts.'
+            : 'No files could be downloaded.',
+      });
+      setDownloadOpen(true);
+      return;
+    }
+
     abortRef.current = new AbortController();
     setProgress({
       phase: 'fetching',
       fetched: 0,
-      total: picked.length,
+      total: downloadable.length,
       zipPercent: 0,
-      skipped: [],
+      skipped: preSkipped,
     });
     setDownloadOpen(true);
     try {
       await downloadAsZip({
-        files: picked.map((i) => ({ name: i.title, url: i.pdf_url })),
-        zipName: `AIM Archive — ${picked.length} bookmark${picked.length === 1 ? '' : 's'}`,
-        onProgress: setProgress,
+        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url })),
+        zipName: `AIM Archive — ${downloadable.length} bookmark${downloadable.length === 1 ? '' : 's'}`,
+        onProgress: (p) => setProgress({ ...p, skipped: [...preSkipped, ...p.skipped] }),
         signal: abortRef.current.signal,
       });
     } catch (err) {
       setProgress({
         phase: 'error',
         fetched: 0,
-        total: picked.length,
+        total: downloadable.length,
         zipPercent: 0,
-        skipped: [],
+        skipped: preSkipped,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
     }

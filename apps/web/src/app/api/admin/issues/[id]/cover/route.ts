@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { storageKeyFromUrl } from '@/lib/r2-client';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
 
 export async function POST(
   request: NextRequest,
@@ -16,14 +12,9 @@ export async function POST(
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const supabase = getClient();
 
-  const { data: issue, error: fetchErr } = await supabase
-    .from('issues')
-    .select('id, pdf_url')
-    .eq('id', id)
-    .single();
-  if (fetchErr || !issue) {
+  const issue = await getAdminIssueFileRowFromDb(id);
+  if (!issue) {
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
@@ -49,13 +40,7 @@ export async function POST(
     const buf = Buffer.from(await cover.arrayBuffer());
     const result = await cropAndUploadCover(buf, storageKey, orientation);
 
-    const { error: upErr } = await supabase
-      .from('issues')
-      .update({ cover_image_url: result.publicUrl })
-      .eq('id', id);
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
-    }
+    await updateIssueCoverInDb(id, result.publicUrl);
 
     return NextResponse.json({ cover_image_url: result.publicUrl, cropped: result.cropped });
   } catch (err) {

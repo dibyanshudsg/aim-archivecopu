@@ -1,13 +1,8 @@
 import type { MetadataRoute } from 'next';
-import { createClient } from '@supabase/supabase-js';
+import { listSitemapIssues } from '@/lib/db';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org';
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
 
   // Static pages
   const staticPages: MetadataRoute.Sitemap = [
@@ -17,12 +12,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   // Dynamic issue pages
-  const { data: issues } = await supabase
-    .from('issues')
-    .select('id, updated_at')
-    .eq('is_published', true)
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
+  const issues = await listSitemapIssues();
 
   const issuePages: MetadataRoute.Sitemap = (issues || []).map((issue) => ({
     url: `${baseUrl}/issue/${issue.id}`,

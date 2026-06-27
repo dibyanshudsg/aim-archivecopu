@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { createPublicClient } from '@/lib/supabase-server';
+import { listMagazines, listPublicIssues } from '@/lib/db';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { BookmarksClient } from './bookmarks-client';
 
@@ -10,20 +10,23 @@ import { BookmarksClient } from './bookmarks-client';
 export const revalidate = 60;
 
 async function fetchAllIssuesServer(): Promise<ApiIssue[]> {
-  const supabase = createPublicClient();
-  const { data } = await supabase
-    .from('issues')
-    .select('*, magazines!inner(id, name, language, description, cover_image_url)')
-    .eq('is_published', true)
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
-  return (data ?? []) as ApiIssue[];
+  const result = await listPublicIssues({
+    years: [],
+    months: [],
+    magazines: [],
+    languages: [],
+    subjects: [],
+    q: '',
+    sort: null,
+    dir: 'desc',
+    page: 1,
+    pageSize: 100,
+  });
+  return result.data;
 }
 
 async function fetchAllMagazinesServer(): Promise<ApiMagazine[]> {
-  const supabase = createPublicClient();
-  const { data } = await supabase.from('magazines').select('*').order('name');
-  return (data ?? []) as ApiMagazine[];
+  return listMagazines();
 }
 
 export default async function BookmarksPage() {

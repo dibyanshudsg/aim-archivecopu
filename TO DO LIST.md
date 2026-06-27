@@ -1,5 +1,15 @@
 # AIM Archive — To Do List
 
+_________________________
+
+Personal Addition:
+
+1. we might use only Hindi version - Agnishikha. So, we need to do a system wide audit and find out everywhere, where multiple Lang promises were maid. It will be 2 lang fixed and might we add more as a optional. But it should not be a promise. Thus, audit and create a .md file adding all the lines and whether we need to change it (what should be - add) or keep it as it is. We will decide. 
+
+2. 
+
+_________________________
+
 ## Completed
 - [x] Create CLAUDE.md (comprehensive project bible)
 - [x] Create ROADMAP.md (phased development plan)
@@ -281,3 +291,126 @@ _____________________
 28. [ ] **Why the composition matters** — `next/font/google` generates obfuscated font-family names (e.g. `__Tiro_Tamil_abc123`), so `font-family: 'Tiro Tamil'` as a literal in CSS won't match anything. Each font must reference its own variable, and the design-system token (`--font-heading`) composes them all in one cascade so the browser picks the right font per-character.
 29. [ ] Verify on each magazine's detail page after upload — Tamil / Bengali / Marathi theme titles should render with correct script-specific glyphs, not system fallbacks.
 
+_____________________
+
+## Immediate Plan - Supabase Runtime Removal and Local Speed Fixes (2026-06-27)
+
+> Goal: finish the Turso + R2 cutover so local/admin clicks stop waiting on dead Supabase assets, then remove Supabase from active runtime code once the data is clean.
+
+1. [x] **Neutralize legacy Supabase image URLs in runtime display paths**
+    - [x] Add a shared display sanitizer that turns `.supabase.co` asset URLs into `null`.
+    - [x] Apply it to Turso public issue/magazine mappers so public cards, search, issue detail, reader, and homepage do not render dead legacy thumbnails.
+    - [x] Apply it to the admin Issues list response so the table does not trigger slow `_next/image` failures for legacy covers.
+    - [x] Smoke test public surfaces and APIs to confirm no Supabase asset URLs are returned.
+    - [x] Smoke test public surfaces; no new `_next/image?...supabase.co...` failures appeared in the dev-server log after the sanitizer.
+    - [ ] Authenticated Admin Issues browser smoke still needed to confirm the table emits no legacy Supabase image requests under a real admin session.
+
+2. [x] **Inventory remaining Supabase references**
+    - [x] Run a code search for `@supabase/supabase-js`, `createPublicClient`, `createAdminClient`, `supabase.storage`, `.rpc(`, and `.supabase.co`.
+    - [x] Classify each hit as active runtime fallback, migration/archive script, docs, env example, or expected legacy detector.
+    - [x] Active public fallback buckets found and removed: public pages/routes, sitemap/metadata, public site settings, search fallback, issue read/download APIs, and Browse listing helper.
+    - [x] Active admin fallback buckets found and removed: admin auth/routes, admin-data helper fallbacks, admin storage/settings routes, and upload/reindex/update routes.
+    - [x] Intentional keep-for-now buckets found: migration scripts, `packages/supabase`, R2 migration tooling, and legacy URL detectors.
+    - [x] Create the removal order so storage-cleanup tools are not broken before legacy data is handled.
+
+3. [ ] **Clean legacy data references**
+    - [ ] Use the admin storage surface or a one-off verification script to list every issue whose `pdf_url` or `cover_image_url` contains `supabase.co`.
+    - [ ] Reupload/migrate covers and PDFs to R2 where the source files exist.
+    - [ ] For unavailable legacy cover files, intentionally null `cover_image_url` rather than leaving broken Supabase URLs.
+    - [ ] Verify public published rows do not depend on Supabase Storage.
+
+4. [x] **Remove Supabase runtime fallback code**
+    - [x] Delete Supabase fallback branches from public pages/routes.
+    - [x] Delete Supabase fallback branches from admin pages/routes.
+    - [x] Replace any remaining `createPublicClient()` / `createAdminClient()` usage with Turso repository functions or R2 helpers.
+    - [x] Remove or archive `apps/web/src/lib/supabase-server.ts` after no runtime imports remain.
+
+5. [x] **Remove Supabase runtime dependencies**
+    - [x] Remove `@supabase/supabase-js` from `apps/web/package.json` after runtime imports are gone.
+    - [x] Remove `@aim-archive/supabase` from `apps/web/package.json` if no active app code imports it.
+    - [x] Remove unused mobile `@supabase/supabase-js` dependency.
+    - [x] Keep migration scripts only if they remain useful, and document that they are not runtime dependencies.
+    - [x] Point legacy migration scripts at `packages/supabase` instead of `apps/web` for their Supabase client dependency.
+    - [x] Refresh `pnpm-lock.yaml`.
+
+6. [ ] **Local responsiveness fixes after Supabase cleanup**
+    - [x] Add a dev prewarm command for `/`, `/browse`, `/search`, `/admin/login`, `/admin`, `/admin/issues`, `/api/issues`, `/api/magazines`, and one real issue detail/reader route.
+    - [x] Add `pnpm.cmd dev:local-db` so local UI testing can run against `.migration/turso-local-smoke.db` instead of the remote Turso database.
+    - [x] Remove duplicate magazine fetching from Browse's Turso path.
+    - [x] Remove Supabase image optimizer allowance from `next.config.ts`.
+    - [x] Add hover/focus route prefetching to public and admin navigation.
+    - [x] Add short in-memory TTL caches for repeated public read queries and admin identity checks.
+    - [x] Replace Browse facet row fanout with aggregate/cached counts if warm Browse remains above target.
+    - [x] Move Admin Issues toward server-side pagination/filtering before the archive grows.
+    - [x] Prefetch Admin Upload/Bulk Upload routes from the Issues page and parallelize Upload form lookup loading.
+    - [x] Add a development-only public route warmer so Home compiles Browse, Search, Bookmarks, and public lookup APIs before the first tab click.
+
+7. [ ] **Verification**
+    - [x] Run `pnpm.cmd --filter @aim-archive/web exec tsc --noEmit --pretty false`.
+    - [x] Run `pnpm.cmd --filter @aim-archive/web build` (sandboxed run failed on blocked Google Fonts; escalated run passed).
+    - [x] Run local warm smoke checks against homepage, Browse, Search, and unauthenticated Admin Issues redirect.
+    - [x] Confirm warm local DB timings after prewarm: `/api/issues` ~45-58ms, `/browse` ~281-294ms, unauthenticated `/admin/issues/new` redirect ~178ms.
+    - [x] Confirm authenticated warm admin issue listing API after server-side pagination: `/api/admin/issues?page=1&pageSize=25` ~37ms.
+    - [x] Confirm fixed Upload route compiles and responds after prewarm; warm unauthenticated route guard measured ~287ms.
+    - [x] Confirm warmed public tab timings after route warmer: Browse ~307ms, Search ~188ms, Bookmarks ~153ms, `/api/issues?page=1&page_size=24` ~25ms.
+    - [x] Confirm server logs no longer show new `_next/image` requests for `glduurfsjyxpkdnxgdqz.supabase.co` during public smoke checks.
+    - [ ] Authenticated admin smoke checks for Admin Issues, upload, replace PDF, replace cover, topics, settings, and storage.
+    - [ ] Update `CLAUDE.md` to state Turso/libSQL + R2 are the runtime stack and Supabase is migration history only.
+
+_____________________
+
+## Up Next - Finish Supabase to Turso Migration Cleanup
+
+> Status 2026-05-27: Turso database created, Supabase export imported, public reads/admin reads/admin writes are wired behind `DATABASE_PROVIDER=turso`, and Turso-mode production builds pass. The 8 legacy Supabase-hosted PDF/cover issues are imported as drafts until reupload, so published Turso rows do not depend on Supabase Storage.
+
+1. [ ] **Browser smoke test with `DATABASE_PROVIDER=turso`**
+    - [ ] Homepage loads from Turso.
+    - [ ] Browse filters/facets/pagination work.
+    - [ ] Search returns metadata and OCR results via SQL fallback search.
+    - [ ] Issue detail and reader open for the 2 R2-backed published issues.
+    - [ ] Bookmarks page initial catalog loads.
+    - [ ] Sitemap builds with Turso issue rows.
+
+2. [ ] **Admin smoke test with Turso**
+    - [ ] Admin login and `/api/admin/auth/check` work.
+    - [ ] Dashboard stats load from Turso.
+    - [ ] Magazine create/edit/delete works.
+    - [ ] Issue inline edit/status toggle works.
+    - [ ] Topic rename/delete works.
+    - [ ] Site settings save works.
+    - [ ] Storage page loads R2 objects and can clear deleted cover references.
+
+3. [ ] **Upload/reindex smoke test**
+    - [ ] Upload a small test PDF; confirm PDF + cover go to R2 and issue row goes to Turso.
+    - [ ] Confirm OCR rows are written to Turso `issue_search_index`.
+    - [ ] Replace PDF and confirm `pdf_url`, `file_size_bytes`, page count, and OCR rows update.
+    - [ ] Replace cover and confirm `cover_image_url` updates.
+    - [ ] Run single-issue reindex.
+    - [ ] Run thumbnail backfill if any issue is missing cover.
+
+4. [ ] **Legacy PDF reupload plan**
+    - [ ] Reupload the 8 legacy Supabase-hosted PDFs/covers through the admin panel when files are ready.
+    - [ ] Publish each reuploaded issue after confirming R2 PDF and cover URLs.
+    - [ ] Verify no published Turso issue has `pdf_url` or `cover_image_url` containing `supabase.co`.
+
+5. [ ] **Remove Supabase runtime dependency after smoke tests**
+    - [ ] Delete Supabase fallback branches from public routes/pages.
+    - [ ] Delete Supabase fallback branches from admin routes.
+    - [ ] Replace/remove `apps/web/src/lib/supabase-server.ts` usage.
+    - [ ] Remove runtime `@supabase/supabase-js` usage from `apps/web/src`.
+    - [ ] Decide whether Supabase export scripts stay as historical tools or move to an archive folder.
+    - [ ] Remove `@aim-archive/supabase` and `@supabase/supabase-js` from `apps/web/package.json` once no runtime code needs them.
+
+6. [ ] **Deployment env**
+    - [ ] Add `DATABASE_PROVIDER=turso` to Vercel.
+    - [ ] Add `TURSO_DATABASE_URL` to Vercel.
+    - [ ] Add `TURSO_AUTH_TOKEN` to Vercel.
+    - [ ] Keep Supabase env vars temporarily until final Supabase fallback cleanup is deployed and verified.
+    - [ ] After cleanup, remove Supabase env vars from Vercel runtime.
+
+7. [ ] **Final verification**
+    - [ ] Run `pnpm.cmd --filter @aim-archive/web exec tsc --noEmit --pretty false`.
+    - [ ] Run `cd apps/web; pnpm.cmd build` with `DATABASE_PROVIDER=turso`.
+    - [ ] Run `pnpm.cmd migration:verify:turso -- --export .migration/supabase-export-20260527T142432Z`.
+    - [ ] Run `rg "@supabase/supabase-js|createPublicClient|createAdminClient|supabase\\.storage|\\.rpc\\(" apps/web/src` and confirm only intentionally archived/migration code remains.
+    - [ ] Update `CLAUDE.md` to say Turso/libSQL is the production database and Supabase is no longer a runtime dependency.

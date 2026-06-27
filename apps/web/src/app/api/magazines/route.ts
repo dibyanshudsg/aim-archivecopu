@@ -1,18 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient } from '@/lib/supabase-server';
+import { listMagazines } from '@/lib/db';
 
 export async function GET() {
-  const supabase = createPublicClient();
-
-  const { data, error } = await supabase
-    .from('magazines')
-    .select('*')
-    .order('name');
-
-  if (error) {
-    return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
-  }
-
+  const data = await listMagazines();
   // Magazines are very stable — admin edits are infrequent. Cache aggressively
   // on the edge; SWR keeps responses warm during revalidation.
   return NextResponse.json(data, {

@@ -1,16 +1,12 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl } from '@/lib/r2-client';
 
 export const runtime = 'nodejs';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
 
 /**
  * Reindex a single issue's OCR + (if missing) cover thumbnail.
@@ -44,14 +40,8 @@ export async function POST(
       };
 
       try {
-        const supabase = getClient();
-
-        const { data: issue, error } = await supabase
-          .from('issues')
-          .select('id, title, pdf_url, cover_image_url')
-          .eq('id', id)
-          .single();
-        if (error || !issue) {
+        const issue = await getAdminIssueFileRowFromDb(id);
+        if (!issue) {
           send({ type: 'error', message: 'Issue not found' });
           controller.close();
           return;
@@ -75,7 +65,7 @@ export async function POST(
 
         send({ type: 'status', message: 'Writing search index…' });
 
-        const pagesIndexed = await indexIssue(supabase, id, pages);
+        const pagesIndexed = await indexIssue(id, pages);
 
         // Regenerate thumbnail only if missing — don't overwrite a custom cover
         let thumbnailUrl: string | null = issue.cover_image_url;
@@ -85,10 +75,7 @@ export async function POST(
             const storageKey = storageKeyFromUrl(issue.pdf_url);
             if (storageKey) {
               thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
-              await supabase
-                .from('issues')
-                .update({ cover_image_url: thumbnailUrl })
-                .eq('id', issue.id);
+              await updateIssueCoverInDb(issue.id, thumbnailUrl);
             }
           } catch (thumbErr) {
             console.error('Thumbnail generation failed (non-blocking):', thumbErr);

@@ -3,10 +3,15 @@
   "private": true,
   "scripts": {
     "dev": "turbo dev",
+    "dev:local-db": "node scripts/dev-local-db.mjs",
+    "dev:prewarm": "node scripts/prewarm-local.mjs",
     "build": "turbo build",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "migration:export:supabase": "node scripts/export-supabase-data.mjs",
+    "migration:import:turso": "node scripts/import-turso-data.mjs",
+    "migration:verify:turso": "node scripts/verify-migrated-data.mjs",
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {

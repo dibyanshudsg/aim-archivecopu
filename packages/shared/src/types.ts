@@ -22,7 +22,9 @@ export interface Issue {
   month: number;
   description: string | null;
   topics: string[];
-  pdfUrl: string;
+  /** Null when the issue is embargoed (see `isEmbargoed`) — the public API
+   *  strips it so subscribers keep their head start on current issues. */
+  pdfUrl: string | null;
   epubUrl: string | null;
   mobiUrl: string | null;
   coverImageUrl: string | null;
@@ -31,6 +33,12 @@ export interface Issue {
   readCount: number;
   downloadCount: number;
   isPublished: boolean;
+  /** True while the issue is inside the 5-year rolling embargo window. UI
+   *  surfaces show cover/theme/topics but never the PDF for these. */
+  isEmbargoed: boolean;
+  /** Human-readable month/year for when the embargo lifts (e.g.
+   *  `"May 2031"`). Null once the issue is publicly available. */
+  embargoLiftLabel: string | null;
   createdAt: string;
   updatedAt: string;
 }

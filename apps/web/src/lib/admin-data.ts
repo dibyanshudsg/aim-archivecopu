@@ -1,14 +1,11 @@
-import { ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { createAdminClient } from '@/lib/supabase-server';
 import {
-  getR2Client,
-  isR2Url,
-  isSupabaseStorageUrl,
-  r2Bucket,
-  r2PublicUrl,
-  storageKeyFromUrl,
-} from '@/lib/r2-client';
-import { readSiteSettings } from '@/lib/site-settings';
+  getAdminSiteSettingsFromDb,
+  getAdminStatsFromDb,
+  getAdminStorageDataFromDb,
+  listAdminIssuesFromDb,
+  listAdminIssuesPageFromDb,
+  listAdminMagazinesFromDb,
+} from '@/lib/db';
 
 export interface AdminStats {
   totalMagazines: number;
@@ -43,6 +40,39 @@ export interface AdminIssue {
   updated_at: string | null;
   page_count: number | null;
   magazines: { name: string; language: string };
+}
+
+export type AdminIssueSortField = 'title' | 'year' | 'read_count' | 'download_count' | 'file_size_bytes' | 'updated_at';
+export type AdminIssueSortDir = 'asc' | 'desc';
+export type AdminIssueStatusFilter = 'all' | 'published' | 'draft';
+
+export interface AdminIssueListInput {
+  page: number;
+  pageSize: number;
+  q: string;
+  magazineId: string;
+  year: string;
+  status: AdminIssueStatusFilter;
+  topic: string;
+  sort: AdminIssueSortField;
+  dir: AdminIssueSortDir;
+}
+
+export interface AdminIssueFacetTopic {
+  name: string;
+  count: number;
+}
+
+export interface AdminIssueListResult {
+  data: AdminIssue[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  facets: {
+    years: number[];
+    topics: AdminIssueFacetTopic[];
+  };
 }
 
 export interface AdminSiteSettings {
@@ -87,136 +117,26 @@ export interface AdminStorageData {
   };
 }
 
-interface IssueUrlRow {
-  id: string;
-  title: string;
-  pdf_url: string | null;
-  cover_image_url: string | null;
-}
-
 export async function getAdminStats(): Promise<AdminStats> {
-  const supabase = createAdminClient();
-
-  const [magazines, issues] = await Promise.all([
-    supabase.from('magazines').select('id', { count: 'exact', head: true }),
-    supabase.from('issues').select('id, read_count, download_count'),
-  ]);
-
-  if (magazines.error) throw new Error(magazines.error.message);
-  if (issues.error) throw new Error(issues.error.message);
-
-  const issueData = issues.data ?? [];
-  const reads = issueData.reduce((sum, issue) => sum + (issue.read_count || 0), 0);
-  const downloads = issueData.reduce((sum, issue) => sum + (issue.download_count || 0), 0);
-
-  const { data: popular, error: popularError } = await supabase
-    .from('issues')
-    .select('id, title, read_count, download_count')
-    .order('read_count', { ascending: false })
-    .limit(5);
-
-  if (popularError) throw new Error(popularError.message);
-
-  return {
-    totalMagazines: magazines.count || 0,
-    totalIssues: issueData.length,
-    totalReads: reads,
-    totalDownloads: downloads,
-    popularIssues: popular ?? [],
-  };
+  return getAdminStatsFromDb();
 }
 
 export async function listAdminMagazines(): Promise<AdminMagazine[]> {
-  const { data, error } = await createAdminClient().from('magazines').select('*').order('name');
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AdminMagazine[];
+  return listAdminMagazinesFromDb();
 }
 
 export async function listAdminIssues(): Promise<AdminIssue[]> {
-  const { data, error } = await createAdminClient()
-    .from('issues')
-    .select('*, magazines(name, language)')
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
+  return listAdminIssuesFromDb();
+}
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AdminIssue[];
+export async function listAdminIssuesPage(input: AdminIssueListInput): Promise<AdminIssueListResult> {
+  return listAdminIssuesPageFromDb(input);
 }
 
 export async function getAdminSiteSettings(): Promise<AdminSiteSettings> {
-  return readSiteSettings(createAdminClient());
+  return getAdminSiteSettingsFromDb();
 }
 
 export async function getAdminStorageData(): Promise<AdminStorageData> {
-  const r2Objects: Array<Omit<R2Object, 'linkedIssue'>> = [];
-  let token: string | undefined;
-
-  do {
-    const response = await getR2Client().send(
-      new ListObjectsV2Command({
-        Bucket: r2Bucket(),
-        ContinuationToken: token,
-        MaxKeys: 1000,
-      }),
-    );
-
-    for (const object of response.Contents ?? []) {
-      if (!object.Key) continue;
-      r2Objects.push({
-        key: object.Key,
-        size: object.Size ?? 0,
-        lastModified: object.LastModified ? object.LastModified.toISOString() : null,
-        publicUrl: r2PublicUrl(object.Key),
-      });
-    }
-
-    token = response.IsTruncated ? response.NextContinuationToken : undefined;
-  } while (token);
-
-  const { data, error } = await createAdminClient()
-    .from('issues')
-    .select('id, title, pdf_url, cover_image_url')
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
-
-  if (error) throw new Error(error.message);
-
-  const issues = (data ?? []) as IssueUrlRow[];
-  const keyToIssue = new Map<string, LinkedIssue>();
-
-  for (const issue of issues) {
-    for (const field of ['pdf_url', 'cover_image_url'] as const) {
-      const url = issue[field];
-      if (!url || !isR2Url(url)) continue;
-      const key = storageKeyFromUrl(url);
-      if (key) keyToIssue.set(key, { id: issue.id, title: issue.title, field });
-    }
-  }
-
-  const enrichedObjects = r2Objects.map((object) => ({
-    ...object,
-    linkedIssue: keyToIssue.get(object.key) ?? null,
-  }));
-
-  const legacyIssues = issues
-    .map((issue) => {
-      const pdfOnSupabase = !!issue.pdf_url && isSupabaseStorageUrl(issue.pdf_url);
-      const coverOnSupabase = !!issue.cover_image_url && isSupabaseStorageUrl(issue.cover_image_url);
-      return { id: issue.id, title: issue.title, pdfOnSupabase, coverOnSupabase };
-    })
-    .filter((issue) => issue.pdfOnSupabase || issue.coverOnSupabase);
-
-  return {
-    r2: {
-      objects: enrichedObjects,
-      objectCount: enrichedObjects.length,
-      totalBytes: enrichedObjects.reduce((sum, object) => sum + object.size, 0),
-      orphanCount: enrichedObjects.filter((object) => !object.linkedIssue).length,
-      linkedCount: enrichedObjects.filter((object) => object.linkedIssue).length,
-    },
-    supabaseLegacy: {
-      issueCount: legacyIssues.length,
-      issues: legacyIssues,
-    },
-  };
+  return getAdminStorageDataFromDb();
 }

@@ -1,4 +1,4 @@
-import { createPublicClient } from '@/lib/supabase-server';
+import { listMagazines } from '@/lib/db';
 import type { ApiMagazine } from '@/lib/api';
 import { SearchClient } from './search-client';
 
@@ -8,9 +8,7 @@ import { SearchClient } from './search-client';
 export const revalidate = 60;
 
 async function fetchMagazinesServer(): Promise<ApiMagazine[]> {
-  const supabase = createPublicClient();
-  const { data } = await supabase.from('magazines').select('*').order('name');
-  return (data ?? []) as ApiMagazine[];
+  return listMagazines();
 }
 
 export default async function SearchPage() {

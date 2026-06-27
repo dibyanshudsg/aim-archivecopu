@@ -10,7 +10,9 @@ export interface ApiIssue {
   month: number;
   description: string | null;
   topics: string[];
-  pdf_url: string;
+  /** Null for embargoed issues — the public API strips it so subscribers keep
+   *  their head start on current issues. See `is_embargoed`. */
+  pdf_url: string | null;
   epub_url: string | null;
   mobi_url: string | null;
   cover_image_url: string | null;
@@ -19,6 +21,11 @@ export interface ApiIssue {
   read_count: number;
   download_count: number;
   is_published: boolean;
+  /** True while the issue is inside the 5-year rolling embargo window. */
+  is_embargoed: boolean;
+  /** Human-readable month/year for when the embargo lifts (e.g. `"May 2031"`).
+   *  Null once the issue is publicly available. */
+  embargo_lift_label: string | null;
   created_at: string;
   updated_at: string;
   magazines: {
@@ -115,10 +122,16 @@ export interface FullTextSearchResult {
   year: number;
   month: number;
   page_number: number;
+  /** For embargoed issues this is a synthesized "Available {Month YYYY}"
+   *  placeholder — never an OCR excerpt, so embargoed content doesn't leak
+   *  through search. */
   snippet: string;
   rank: number;
   cover_image_url: string | null;
-  pdf_url: string;
+  /** Null when the issue is embargoed — the snippet replaces the read affordance. */
+  pdf_url: string | null;
+  is_embargoed: boolean;
+  embargo_lift_label: string | null;
 }
 
 export interface SearchResponse {
@@ -163,6 +176,8 @@ export function normalizeIssue(issue: ApiIssue) {
     readCount: issue.read_count,
     downloadCount: issue.download_count,
     isPublished: issue.is_published,
+    isEmbargoed: issue.is_embargoed,
+    embargoLiftLabel: issue.embargo_lift_label,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
     magazine: {

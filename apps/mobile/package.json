@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@aim-archive/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.49.4",
     "expo": "~52.0.0",
     "expo-file-system": "~18.0.0",
     "expo-router": "~4.0.0",

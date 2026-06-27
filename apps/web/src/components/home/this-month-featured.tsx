@@ -42,9 +42,12 @@ function useMediaQuery(query: string): boolean {
 
 interface ThisMonthFeaturedProps {
   magazines: ApiMagazine[];
-  /** Issues from the current + previous calendar months only.
-   *  Already filtered by the server query. */
+  /** Issues whose 5-year embargo has just lifted — typically dated (today.year
+   *  - 5, today.month) and the immediately previous month. Server-fetched and
+   *  embargo-filtered before reaching us. */
   issues: ApiIssue[];
+  /** Issue date of the "this month's release" featured edition (5 years
+   *  behind the wall clock under the rolling embargo). */
   currentYear: number;
   currentMonth: number; // 1-12
   prevYear: number;
@@ -208,7 +211,10 @@ export function ThisMonthFeatured({
         const img = new window.Image();
         img.src = issue.cover_image_url;
       }
-      if (!slowConn) {
+      // Embargoed issues never reach this carousel (the server fetch filters
+      // them upstream), but guard at runtime so a stale type assumption can't
+      // throw on `fetch(null)`.
+      if (!slowConn && issue.pdf_url) {
         const ctrl = new AbortController();
         controllers.push(ctrl);
         fetch(issue.pdf_url, { signal: ctrl.signal, cache: 'force-cache' }).catch(
@@ -233,12 +239,11 @@ export function ThisMonthFeatured({
       : 0;
   const currentIssue = visibleIssues[safeIndex];
 
-  const titleText = showPrevious
-    ? "This Month and Previous Month's Editions"
-    : "This Month's Editions";
+  // Title doesn't change with the toggle — the eyebrow carries the dates.
+  const titleText = 'Five Years Ago This Month';
   const eyebrowText = showPrevious
-    ? `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} & ${MONTH_NAMES[prevMonth as MonthIndex]} ${prevYear}`
-    : `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear}`;
+    ? `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} · ${MONTH_NAMES[prevMonth as MonthIndex]} ${prevYear}`
+    : `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} · NEWLY PUBLIC`;
 
   const showMagazineFilter = magazines.length > 1;
   const hasPrevContent = prevMonthIssues.length > 0;
@@ -272,7 +277,10 @@ export function ThisMonthFeatured({
             </motion.h2>
           </AnimatePresence>
         </div>
-        <p className="font-heading mt-2 text-sm text-gray-500 sm:text-base">
+        <p className="mt-2 text-sm text-gray-500 sm:text-base">
+          Editions whose embargo just lifted — now open to the public archive.
+        </p>
+        <p className="font-heading mt-1 text-sm text-gray-500 sm:text-base">
           An offering at Thy Lotus Feet.
         </p>
       </header>
@@ -593,15 +601,15 @@ function EmptyState({
   if (!showPrevious && hasPrevContent) {
     return (
       <EmptyCard
-        title="No new editions for this month yet."
-        subtitle="Previous month's editions are available."
+        title="Nothing newly released this month."
+        subtitle="Previous month's releases are still available."
         ctaLabel="Show Previous Month's Editions"
         onCta={onShowPrevious}
       />
     );
   }
   return (
-    <EmptyCard title="No recent editions yet — please check back soon." />
+    <EmptyCard title="No editions newly released in this window yet — check back next month." />
   );
 }
 
@@ -644,6 +652,11 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
   const sortedTopics = [...issue.topics]
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
     .slice(0, 3);
+
+  // Embargoed issues never reach the carousel (server fetch filters them),
+  // but if a `pdf_url` ever lands null here we'd hand react-pdf a broken
+  // input — so the carousel just won't render the slide.
+  if (!issue.pdf_url) return null;
 
   return (
     <article className="relative overflow-hidden border-y border-flame-200/60 bg-white shadow-[0_10px_36px_rgba(190,140,46,0.12)] sm:rounded-2xl sm:border">

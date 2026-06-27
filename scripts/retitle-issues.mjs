@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 import { fileURLToPath } from 'node:url';
 
@@ -37,13 +38,9 @@ const MONTH_NAMES = {
   9: 'September', 10: 'October', 11: 'November', 12: 'December',
 };
 
-// Resolve @supabase/supabase-js out of apps/web's node_modules so this script
-// works without adding the dep at the repo root.
-const supabasePkgUrl = new URL(
-  'apps/web/node_modules/@supabase/supabase-js/dist/index.mjs',
-  `file://${repoRoot.replace(/\\/g, '/')}/`
-);
-const { createClient } = await import(supabasePkgUrl);
+// Historical migration script: resolve Supabase from the migration package, not the web app runtime.
+const requireFromSupabasePackage = createRequire(path.join(repoRoot, 'packages/supabase/package.json'));
+const { createClient } = requireFromSupabasePackage('@supabase/supabase-js');
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 

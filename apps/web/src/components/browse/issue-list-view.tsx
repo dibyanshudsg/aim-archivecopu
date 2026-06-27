@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, Heart, Info, Share2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Heart, Info, Lock, Share2 } from 'lucide-react';
 import type { IssueWithMagazine } from '@aim-archive/shared';
 import { LANGUAGE_NAMES } from '@aim-archive/shared';
 import { useBookmarks } from '@/lib/bookmarks-store';
@@ -139,11 +139,15 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
       animate={{ opacity: 1, x: 0 }}
       whileHover={{ y: -2, transition: { duration: 0.18, ease: 'easeOut' } }}
       transition={{ delay, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      onClick={() =>
-        selectionEnabled
-          ? toggleSelection(issue.id)
-          : router.push(`/read/${issue.id}?from=browse`)
-      }
+      onClick={() => {
+        if (selectionEnabled) {
+          toggleSelection(issue.id);
+          return;
+        }
+        // Embargoed issues route to the detail page (where the embargo
+        // messaging lives) — opening the reader would just paint a broken PDF.
+        router.push(issue.isEmbargoed ? `/issue/${issue.id}` : `/read/${issue.id}?from=browse`);
+      }}
       className={cn(
         'relative cursor-pointer transition-shadow duration-200 hover:z-10 hover:shadow-lg',
         isSelected ? 'bg-flame-50/60' : 'hover:bg-flame-50/40',
@@ -174,9 +178,22 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
                 sizes="36px"
               />
             )}
+            {issue.isEmbargoed && (
+              <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-t from-black/60 to-transparent">
+                <Lock className="mb-0.5 h-3 w-3 text-white drop-shadow" />
+              </div>
+            )}
           </div>
           <div className="min-w-0">
-            <div className="truncate font-medium text-gray-900">{issue.title}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium text-gray-900">{issue.title}</span>
+              {issue.isEmbargoed && issue.embargoLiftLabel && (
+                <span className="hidden shrink-0 rounded-full border border-flame-200 bg-flame-50/70 px-1.5 py-0.5 text-[10px] font-semibold text-flame-700 lg:inline-flex">
+                  <Lock className="mr-0.5 inline h-2.5 w-2.5" />
+                  {issue.embargoLiftLabel}
+                </span>
+              )}
+            </div>
             {issue.theme && (
               <div className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[13px] font-bold leading-normal text-transparent">
                 {issue.theme}
@@ -269,9 +286,9 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
     >
       {!selectionEnabled && (
         <Link
-          href={`/read/${issue.id}?from=browse`}
+          href={issue.isEmbargoed ? `/issue/${issue.id}` : `/read/${issue.id}?from=browse`}
           className="absolute inset-0 z-0"
-          aria-label={`Read ${issue.title}`}
+          aria-label={issue.isEmbargoed ? `View ${issue.title}` : `Read ${issue.title}`}
         />
       )}
       {selectionEnabled && (
@@ -294,6 +311,11 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
           {issue.coverImageUrl && (
             <Image src={issue.coverImageUrl} alt="" fill className="object-cover" sizes="48px" />
           )}
+          {issue.isEmbargoed && (
+            <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-t from-black/60 to-transparent">
+              <Lock className="mb-0.5 h-3 w-3 text-white drop-shadow" />
+            </div>
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-gray-900">{issue.title}</div>
@@ -305,11 +327,18 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
           <div className="text-xs text-gray-500">
             {issue.magazine.name} · {LANGUAGE_NAMES[issue.magazine.language]}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
-            <span>{issue.pageCount}p</span>
-            <span>{formatFileSize(issue.fileSizeBytes)}</span>
-            <span>{issue.readCount.toLocaleString()} reads</span>
-          </div>
+          {issue.isEmbargoed ? (
+            <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-flame-200 bg-flame-50/70 px-1.5 py-0.5 text-[10px] font-semibold text-flame-700">
+              <Lock className="h-2.5 w-2.5" />
+              {issue.embargoLiftLabel ? `Available ${issue.embargoLiftLabel}` : 'Subscribers only'}
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
+              <span>{issue.pageCount}p</span>
+              <span>{formatFileSize(issue.fileSizeBytes)}</span>
+              <span>{issue.readCount.toLocaleString()} reads</span>
+            </div>
+          )}
         </div>
         <div
           className={cn(

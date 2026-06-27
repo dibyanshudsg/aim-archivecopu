@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowDownAZ, BookOpen, CalendarDays, Clock, LibraryBig } from 'lucide-react';
+import { ArrowDownAZ, BookOpen, CalendarDays, Clock, LibraryBig, BookDashed } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { pdfjs } from 'react-pdf';
 import type { ApiIssue } from '@/lib/api';
@@ -109,6 +109,13 @@ function IssueBook({
 
   useEffect(() => {
     if (!expanded || pdfDocRef.current || pdfLoadStartedRef.current) return;
+    // Embargoed issues never reach this bookshelf (server fetch filters them),
+    // but guard at runtime so a null `pdf_url` from a stale cache can't
+    // crash the page preview.
+    if (!issue.pdf_url) {
+      setPdfError(true);
+      return;
+    }
 
     pdfLoadStartedRef.current = true;
     setPdfLoading(true);
@@ -892,27 +899,17 @@ function IssueRow({ issues, offset = 0 }: { issues: ApiIssue[]; offset?: number 
   );
 }
 
-function ShelfSkeleton() {
+function EmptyShelf() {
   return (
-    <div className="space-y-5" aria-label="Loading issue shelf">
-      {[0, 1].map((row) => (
-        <div
-          key={row}
-          className="flex min-h-[230px] items-end justify-center gap-3 overflow-hidden px-1 pb-1 sm:min-h-[284px] sm:gap-4 lg:min-h-[334px]"
-        >
-          {[0, 1, 2, 3].map((item) => (
-            <div
-              key={item}
-              className="relative aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 sm:w-[165px] lg:w-[150px]"
-            >
-              <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
-              <div className="absolute inset-3 animate-pulse rounded-md bg-white/70" />
-              <div className="absolute inset-x-4 bottom-11 h-2 animate-pulse rounded-full bg-flame-100" />
-              <div className="absolute inset-x-6 bottom-7 h-2 animate-pulse rounded-full bg-gold-100" />
-            </div>
-          ))}
-        </div>
-      ))}
+    <div className="space-y-5" aria-label="Empty issue shelf">
+      <div className="flex min-h-[230px] items-end justify-center gap-3 px-1 pb-1 sm:min-h-[284px] sm:gap-4 lg:min-h-[334px]">
+        {[0, 1, 2, 3].map((item) => (
+          <div
+            key={item}
+            className="relative aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm border-2 border-dashed border-flame-200/80 bg-flame-50/30 sm:w-[165px] lg:w-[150px]"
+          />
+        ))}
+      </div>
       <Shelf />
     </div>
   );
@@ -1108,18 +1105,38 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
             </div>
           ) : (
             <div className="text-center">
-              <ShelfSkeleton />
-              <p className="mt-3 text-sm font-medium text-gray-500">
-                {filteredIssues.length === 0 && issues.length > 0
-                  ? 'No issues match this shelf filter yet.'
-                  : 'Preparing the archive shelf...'}
-              </p>
-              <Link
-                href="/browse"
-                className="mt-4 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.24)] transition-all hover:from-gold-600 hover:to-flame-600"
-              >
-                Browse archive
-              </Link>
+              <EmptyShelf />
+              <div className="mt-5 flex flex-col items-center gap-1.5">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600 ring-1 ring-flame-100">
+                  <BookDashed className="h-4 w-4" />
+                </span>
+                <p className="text-sm font-semibold text-gray-700">
+                  {filteredIssues.length === 0 && issues.length > 0
+                    ? 'No issues match this shelf filter yet.'
+                    : 'No issues on the shelf yet.'}
+                </p>
+                <p className="max-w-md text-xs text-gray-500">
+                  {filteredIssues.length === 0 && issues.length > 0
+                    ? 'Try a different magazine or clear the filter to see everything available.'
+                    : 'New editions will appear here as they are added to the archive.'}
+                </p>
+              </div>
+              {filteredIssues.length === 0 && issues.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setMagazineFilter('all')}
+                  className="mt-4 rounded-lg border border-flame-200 bg-white px-5 py-2.5 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+                >
+                  Show all magazines
+                </button>
+              ) : (
+                <Link
+                  href="/browse"
+                  className="mt-4 inline-block rounded-lg border border-flame-200 bg-white px-5 py-2.5 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+                >
+                  Browse the archive
+                </Link>
+              )}
             </div>
           )}
         </div>

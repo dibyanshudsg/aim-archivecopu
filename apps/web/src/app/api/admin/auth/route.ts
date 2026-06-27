@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { createSessionToken, ADMIN_COOKIE, SESSION_TTL_SECONDS } from '@/lib/admin-auth';
+import { getAdminByEmail } from '@/lib/db';
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 8;
 const attempts = new Map<string, { count: number; resetAt: number }>();
-
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
 
 function clientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
@@ -63,14 +56,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid credentials', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  const supabase = getAdminClient();
-  const { data: admin, error } = await supabase
-    .from('admins')
-    .select('id, email, name')
-    .eq('email', email)
-    .single();
+  const admin = await getAdminByEmail(email);
 
-  if (error || !admin) {
+  if (!admin) {
     return NextResponse.json({ error: 'Admin not found', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 

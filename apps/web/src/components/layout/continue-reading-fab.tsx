@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookMarked, X, Trash2 } from 'lucide-react';
 import { formatMonthYear } from '@/lib/utils';
+import { isEmbargoed } from '@/lib/embargo';
 import {
   clearReadingHistoryEntry,
   formatRelativeTime,
@@ -24,16 +25,22 @@ export function ContinueReadingFab() {
   const fabRef = useRef<HTMLButtonElement | null>(null);
 
   // Refresh the list whenever the panel opens (and once on mount, so the
-  // badge counter is correct from the start).
+  // badge counter is correct from the start). Drop locally-cached entries
+  // for issues that have slid back into the 5-year embargo window — the
+  // user wouldn't be able to resume them anyway.
   useEffect(() => {
-    setEntries(getRecentReads(MAX_ENTRIES));
+    setEntries(
+      getRecentReads(MAX_ENTRIES * 2).filter((e) => !isEmbargoed(e.year, e.month)).slice(0, MAX_ENTRIES),
+    );
   }, [open]);
 
   // Listen for storage changes from other tabs as well as our own writes.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key || !e.key.startsWith('aim-reader-state-')) return;
-      setEntries(getRecentReads(MAX_ENTRIES));
+      setEntries(
+        getRecentReads(MAX_ENTRIES * 2).filter((x) => !isEmbargoed(x.year, x.month)).slice(0, MAX_ENTRIES),
+      );
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);

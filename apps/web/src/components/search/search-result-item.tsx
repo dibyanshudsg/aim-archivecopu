@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Lock } from 'lucide-react';
 import type { FullTextSearchResult } from '@/lib/api';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
@@ -34,6 +34,8 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           coverUrl={result.cover_image_url}
           title={result.issue_title}
           pageNumber={result.page_number}
+          isEmbargoed={result.is_embargoed}
+          embargoLiftLabel={result.embargo_lift_label}
         />
 
         <div className="min-w-0 flex-1">
@@ -51,10 +53,13 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           </div>
 
           <p className="mt-0.5 text-xs text-gray-400">
-            {monthName} {result.year} — Page {result.page_number}
+            {monthName} {result.year}
+            {!result.is_embargoed && ` — Page ${result.page_number}`}
           </p>
 
-          {/* Snippet with highlighted matches */}
+          {/* Snippet with highlighted matches. Embargoed issues never carry an
+              OCR excerpt — only the metadata placeholder ("Theme: … · Topics: …
+              · Available {Month YYYY}") so page content never leaks. */}
           <p className="mt-2 text-sm leading-relaxed text-gray-600">
             {snippetParts.map((part, partIndex) => {
               if (part === '<mark>') {
@@ -76,14 +81,26 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           </p>
         </div>
 
-        {/* Read action */}
-        <Link
-          href={`/read/${result.issue_id}?page=${result.page_number}&from=search`}
-          className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          <BookOpen className="h-3.5 w-3.5" />
-          Read
-        </Link>
+        {/* Action — Read for public issues, View Details for embargoed ones
+            (which have no PDF to open yet). */}
+        {result.is_embargoed ? (
+          <Link
+            href={`/issue/${result.issue_id}`}
+            className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 px-3 text-xs font-semibold text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
+            title={result.embargo_lift_label ? `Available ${result.embargo_lift_label}` : 'Subscribers only'}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Details
+          </Link>
+        ) : (
+          <Link
+            href={`/read/${result.issue_id}?page=${result.page_number}&from=search`}
+            className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Read
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -104,11 +121,15 @@ function ResultThumbnail({
   coverUrl,
   title,
   pageNumber,
+  isEmbargoed,
+  embargoLiftLabel,
 }: {
   issueId: string;
   coverUrl: string | null;
   title: string;
   pageNumber: number;
+  isEmbargoed: boolean;
+  embargoLiftLabel: string | null;
 }) {
   const [show, setShow] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -170,10 +191,18 @@ function ResultThumbnail({
               cover
             </div>
           )}
-          {/* Page-number badge — keeps the at-a-glance scannability the
-              old page-icon pill provided, without occupying its own column. */}
+          {/* Page badge: embargoed results have no meaningful page number
+              (we never index their OCR for output), so swap the badge for a
+              lock chip with the embargo-lift month. */}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-black/0 px-1 py-1 text-center text-[9px] font-bold leading-none tracking-wide text-white">
-            P.{pageNumber}
+            {isEmbargoed ? (
+              <span className="inline-flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" />
+                {embargoLiftLabel ?? 'Locked'}
+              </span>
+            ) : (
+              <>P.{pageNumber}</>
+            )}
           </div>
         </div>
       </Link>

@@ -15,6 +15,12 @@ interface Magazine {
   language: string;
 }
 
+interface DuplicatePrefill {
+  magazine_id?: string;
+  topics?: string[];
+  description?: string;
+}
+
 export default function UploadIssuePage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -51,35 +57,44 @@ export default function UploadIssuePage() {
   });
 
   useEffect(() => {
-    fetch('/api/admin/magazines')
-      .then((r) => r.json())
-      .then((data) => {
-        setMagazines(data);
-        if (data.length > 0) setForm((f) => ({ ...f, magazine_id: data[0].id }));
+    let cancelled = false;
 
-        // Pick up "Duplicate issue" prefill — magazine, topics, description.
-        try {
-          const raw = sessionStorage.getItem('aim-prefill-issue');
-          if (!raw) return;
+    async function loadLookups() {
+      const [magazinesRes, topicsRes] = await Promise.all([
+        fetch('/api/admin/magazines'),
+        fetch('/api/admin/topics'),
+      ]);
+      const [magazineData, topicData] = await Promise.all([
+        magazinesRes.ok ? magazinesRes.json() : [],
+        topicsRes.ok ? topicsRes.json() : [],
+      ]);
+      if (cancelled) return;
+
+      setMagazines(magazineData);
+      setAllTopics(topicData);
+
+      // Pick up "Duplicate issue" prefill — magazine, topics, description.
+      let prefill: DuplicatePrefill | null = null;
+      try {
+        const raw = sessionStorage.getItem('aim-prefill-issue');
+        if (raw) {
           sessionStorage.removeItem('aim-prefill-issue');
-          const pre = JSON.parse(raw) as {
-            magazine_id?: string;
-            topics?: string[];
-            description?: string;
-          };
-          setForm((f) => ({
-            ...f,
-            magazine_id: pre.magazine_id ?? f.magazine_id,
-            topics: pre.topics ?? f.topics,
-            description: pre.description ?? f.description,
-          }));
-        } catch {}
-      });
-  }, []);
+          prefill = JSON.parse(raw) as DuplicatePrefill;
+        }
+      } catch {}
 
-  // Pull the master topics list (with usage counts) for the dropdown.
-  useEffect(() => {
-    refetchTopics();
+      setForm((f) => ({
+        ...f,
+        magazine_id: prefill?.magazine_id ?? (f.magazine_id || magazineData[0]?.id || ''),
+        topics: prefill?.topics ?? f.topics,
+        description: prefill?.description ?? f.description,
+      }));
+    }
+
+    loadLookups().catch(() => setError('Failed to load form options'));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Auto-generate title when magazine/month/year change

@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
+import { deleteAdminMagazineInDb, updateAdminMagazineInDb } from '@/lib/db';
 
 export async function PUT(
   request: NextRequest,
@@ -21,15 +17,8 @@ export async function PUT(
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }
 
-  const supabase = getClient();
-  const { data, error } = await supabase
-    .from('magazines')
-    .update(parsed.data)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const data = await updateAdminMagazineInDb(id, parsed.data);
+  if (!data) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
   return NextResponse.json(data);
 }
 
@@ -41,9 +30,6 @@ export async function DELETE(
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const supabase = getClient();
-
-  const { error } = await supabase.from('magazines').delete().eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await deleteAdminMagazineInDb(id);
   return NextResponse.json({ success: true });
 }

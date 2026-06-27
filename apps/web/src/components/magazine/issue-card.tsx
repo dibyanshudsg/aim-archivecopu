@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { BookOpen, Check, Download, Heart, Share2 } from 'lucide-react';
+import { BookOpen, Check, Download, Heart, Lock, Share2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { IssueWithMagazine } from '@aim-archive/shared';
 import { LANGUAGE_NAMES } from '@aim-archive/shared';
@@ -22,7 +22,11 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
   const { toggle, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(issue.id);
   const [copied, setCopied] = useState(false);
-  const readHref = `/read/${issue.id}?from=${source}`;
+  // Embargoed issues route to the detail page (where the "Available {Month}"
+  // message lives) instead of the reader, which can't load their PDF.
+  const readHref = issue.isEmbargoed
+    ? `/issue/${issue.id}`
+    : `/read/${issue.id}?from=${source}`;
 
   // Bulk selection — when enabled, the card becomes a toggle target instead
   // of a Link, and a checkbox overlay surfaces selection state.
@@ -106,6 +110,16 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
 
         <div className="absolute top-2 right-0 bottom-2 z-10 w-[3px] rounded-r-sm bg-gradient-to-l from-black/[0.14] to-transparent" />
         <div className="absolute inset-x-4 bottom-0 z-10 h-2 rounded-full bg-black/[0.08]" />
+
+        {/* Embargo lock badge — bottom-left of the cover. Same surface as the
+            theme accent so it reads as "this issue is protected, here's
+            when it opens". */}
+        {issue.isEmbargoed && (
+          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm backdrop-blur-sm">
+            <Lock className="h-2.5 w-2.5" />
+            <span>{issue.embargoLiftLabel ?? 'Subscribers'}</span>
+          </div>
+        )}
 
         {/* Cover action buttons — hidden in selection mode so taps don't
             trigger share/bookmark instead of toggling selection. */}
@@ -203,20 +217,35 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
             selectionEnabled && 'pointer-events-none opacity-0',
           )}
         >
-          <Link
-            href={readHref}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Read
-          </Link>
-          <Link
-            href={`/issue/${issue.id}`}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Details
-          </Link>
+          {issue.isEmbargoed ? (
+            // Embargoed: a single muted "Available {Month YYYY}" affordance
+            // that routes to the detail page. No Read button — there's
+            // nothing to read until the embargo lifts.
+            <Link
+              href={`/issue/${issue.id}`}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              {issue.embargoLiftLabel ? `Available ${issue.embargoLiftLabel}` : 'Subscribers only'}
+            </Link>
+          ) : (
+            <>
+              <Link
+                href={readHref}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Read
+              </Link>
+              <Link
+                href={`/issue/${issue.id}`}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Details
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </motion.div>

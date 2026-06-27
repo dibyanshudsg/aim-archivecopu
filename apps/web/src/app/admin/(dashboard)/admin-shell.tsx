@@ -129,6 +129,10 @@ function AdminDashboardFrame({
     document.body.style.userSelect = 'none';
   }
 
+  function prefetchAdminRoute(href: string) {
+    router.prefetch(href);
+  }
+
   useEffect(() => {
     try {
       if (sessionStorage.getItem(LOGIN_SUCCESS_KEY) !== '1') return;
@@ -195,6 +199,8 @@ function AdminDashboardFrame({
               <Link
                 key={item.href}
                 href={item.href}
+                onMouseEnter={() => prefetchAdminRoute(item.href)}
+                onFocus={() => prefetchAdminRoute(item.href)}
                 title={collapsed ? item.label : undefined}
                 className={cn(
                   'mb-1 flex items-center rounded-xl text-sm font-medium transition-colors',
@@ -300,6 +306,8 @@ function AdminDashboardFrame({
                     <Link
                       key={item.href}
                       href={item.href}
+                      onMouseEnter={() => prefetchAdminRoute(item.href)}
+                      onFocus={() => prefetchAdminRoute(item.href)}
                       onClick={() => setSidebarOpen(false)}
                       className={`mb-1 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium ${
                         active ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700' : 'text-gray-600'

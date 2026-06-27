@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
-import { createAdminClient } from '@/lib/supabase-server';
-import { upsertSiteSettings } from '@/lib/site-settings';
+import { upsertSiteSettingsInDb } from '@/lib/db';
 import { getAdminSiteSettings } from '@/lib/admin-data';
 import { formatZodError, siteSettingsSchema } from '@/lib/validations';
 
@@ -38,7 +37,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await upsertSiteSettings(createAdminClient(), parsed.data, admin.id);
+    await upsertSiteSettingsInDb(parsed.data, admin.id);
     return NextResponse.json(parsed.data);
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to save settings');

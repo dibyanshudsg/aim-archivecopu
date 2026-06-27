@@ -31,6 +31,7 @@ const ThisMonthFeatured = dynamic(
   },
 );
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import { isEmbargoed } from '@/lib/embargo';
 import {
   formatRelativeTime,
   getRecentReads,
@@ -97,7 +98,10 @@ function ContinueReadingShelf() {
   const [entries, setEntries] = useState<ReadingHistoryEntry[]>([]);
 
   useEffect(() => {
-    setEntries(getRecentReads(3));
+    // Drop locally-saved entries for issues that fell back into the 5-year
+    // embargo window — resuming them would just bounce the user off the
+    // reader's locked-state screen.
+    setEntries(getRecentReads(6).filter((e) => !isEmbargoed(e.year, e.month)).slice(0, 3));
   }, []);
 
   if (entries.length === 0) return null;

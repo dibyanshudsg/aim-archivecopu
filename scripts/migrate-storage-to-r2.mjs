@@ -5,8 +5,9 @@ import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const requireFromWeb = createRequire(resolve(ROOT, 'apps/web/package.json'));
+const requireFromSupabasePackage = createRequire(resolve(ROOT, 'packages/supabase/package.json'));
 const { S3Client, PutObjectCommand } = requireFromWeb('@aws-sdk/client-s3');
-const { createClient } = requireFromWeb('@supabase/supabase-js');
+const { createClient } = requireFromSupabasePackage('@supabase/supabase-js');
 
 loadEnvFile(resolve(ROOT, 'apps/web/.env.local'));
 

@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:prewarm": "node ../../scripts/prewarm-local.mjs",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint ."
   },
   "dependencies": {
     "@aim-archive/shared": "workspace:*",
-    "@aim-archive/supabase": "workspace:*",
     "@aws-sdk/client-s3": "^3.1045.0",
-    "@supabase/supabase-js": "^2.49.4",
+    "@libsql/client": "^0.17.3",
     "canvas": "^3.2.3",
     "framer-motion": "^12.6.3",
     "jszip": "^3.10.1",

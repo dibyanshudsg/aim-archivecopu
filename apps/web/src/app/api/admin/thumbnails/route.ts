@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { listIssuesMissingCoverFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { generateThumbnailFromUrl } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl } from '@/lib/r2-client';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
 
 /**
  * POST /api/admin/thumbnails
@@ -17,17 +13,10 @@ export async function POST() {
   const admin = await verifyAdmin();
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = getClient();
-
   // Find issues missing thumbnails
-  const { data: issues } = await supabase
-    .from('issues')
-    .select('id, title, pdf_url')
-    .is('cover_image_url', null)
-    .order('year', { ascending: false })
-    .order('month', { ascending: false });
+  const issues = await listIssuesMissingCoverFromDb();
 
-  if (!issues || issues.length === 0) {
+  if (issues.length === 0) {
     return NextResponse.json({
       processed: 0,
       remaining: 0,
@@ -47,10 +36,7 @@ export async function POST() {
 
     const thumbnailUrl = await generateThumbnailFromUrl(issue.pdf_url, storageKey);
 
-    await supabase
-      .from('issues')
-      .update({ cover_image_url: thumbnailUrl })
-      .eq('id', issue.id);
+    await updateIssueCoverInDb(issue.id, thumbnailUrl);
 
     return NextResponse.json({
       processed: 1,

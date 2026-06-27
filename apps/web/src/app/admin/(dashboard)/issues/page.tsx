@@ -1,11 +1,21 @@
 import { AdminIssuesClient } from './issues-client';
-import { listAdminIssues, listAdminMagazines } from '@/lib/admin-data';
+import { listAdminIssuesPage, listAdminMagazines } from '@/lib/admin-data';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminIssuesPage() {
-  const [initialIssues, magazines] = await Promise.all([
-    listAdminIssues(),
+  const [initialIssueResult, magazines] = await Promise.all([
+    listAdminIssuesPage({
+      page: 1,
+      pageSize: 25,
+      q: '',
+      magazineId: 'all',
+      year: 'all',
+      status: 'all',
+      topic: 'all',
+      sort: 'year',
+      dir: 'desc',
+    }),
     listAdminMagazines(),
   ]);
 
@@ -14,5 +24,5 @@ export default async function AdminIssuesPage() {
     name: magazine.name,
   }));
 
-  return <AdminIssuesClient initialIssues={initialIssues} initialMagazines={initialMagazines} />;
+  return <AdminIssuesClient initialIssueResult={initialIssueResult} initialMagazines={initialMagazines} />;
 }

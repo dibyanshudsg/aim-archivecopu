@@ -13,6 +13,7 @@ import {
   Calendar,
   Eye,
   HardDrive,
+  Lock,
 } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -136,49 +137,71 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
                 <MetaItem icon={Eye} label="Reads" value={issue.readCount.toLocaleString()} />
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href={`/read/${issue.id}`}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-8 py-3 text-base font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)]"
-                >
-                  <BookOpen className="h-5 w-5" />
-                  Read Online
-                </Link>
+              {issue.isEmbargoed ? (
+                <EmbargoNotice liftLabel={issue.embargoLiftLabel} />
+              ) : (
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link
+                    href={`/read/${issue.id}`}
+                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-8 py-3 text-base font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)]"
+                  >
+                    <BookOpen className="h-5 w-5" />
+                    Read Online
+                  </Link>
 
-                <a
-                  href={`/api/issues/${issue.id}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 px-6 py-3 text-base font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
-                >
-                  <Download className="h-5 w-5" />
-                  PDF
-                </a>
+                  <a
+                    href={`/api/issues/${issue.id}/download`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-xl border border-gray-200 px-6 py-3 text-base font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+                  >
+                    <Download className="h-5 w-5" />
+                    PDF
+                  </a>
 
-                <button
-                  onClick={() => toggle(issue.id)}
-                  className={`flex items-center gap-2 rounded-xl border px-6 py-3 text-base font-semibold transition-colors ${
-                    bookmarked
-                      ? 'border-red-200 bg-red-50 text-red-600'
-                      : 'border-gray-200 text-gray-700 hover:border-flame-300 hover:bg-flame-50'
-                  }`}
-                >
-                  <Heart className={`h-5 w-5 ${bookmarked ? 'fill-red-500' : ''}`} />
-                  {bookmarked ? 'Bookmarked' : 'Bookmark'}
-                </button>
-              </div>
-
-              <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50/50 p-5">
-                <h3 className="text-sm font-semibold text-gray-900">Available Formats</h3>
-                <div className="mt-3 flex gap-3">
-                  <FormatBadge format="PDF" available />
-                  <FormatBadge format="EPUB" available={!!issue.epubUrl} />
-                  <FormatBadge format="MOBI" available={!!issue.mobiUrl} />
+                  <button
+                    onClick={() => toggle(issue.id)}
+                    className={`flex items-center gap-2 rounded-xl border px-6 py-3 text-base font-semibold transition-colors ${
+                      bookmarked
+                        ? 'border-red-200 bg-red-50 text-red-600'
+                        : 'border-gray-200 text-gray-700 hover:border-flame-300 hover:bg-flame-50'
+                    }`}
+                  >
+                    <Heart className={`h-5 w-5 ${bookmarked ? 'fill-red-500' : ''}`} />
+                    {bookmarked ? 'Bookmarked' : 'Bookmark'}
+                  </button>
                 </div>
-                {!issue.epubUrl && (
-                  <p className="mt-2 text-xs text-gray-400">EPUB and MOBI formats coming soon</p>
-                )}
-              </div>
+              )}
+
+              {issue.isEmbargoed && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => toggle(issue.id)}
+                    className={`flex items-center gap-2 rounded-xl border px-6 py-3 text-sm font-semibold transition-colors ${
+                      bookmarked
+                        ? 'border-red-200 bg-red-50 text-red-600'
+                        : 'border-gray-200 text-gray-700 hover:border-flame-300 hover:bg-flame-50'
+                    }`}
+                  >
+                    <Heart className={`h-4 w-4 ${bookmarked ? 'fill-red-500' : ''}`} />
+                    {bookmarked ? 'Bookmarked' : 'Bookmark for later'}
+                  </button>
+                </div>
+              )}
+
+              {!issue.isEmbargoed && (
+                <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50/50 p-5">
+                  <h3 className="text-sm font-semibold text-gray-900">Available Formats</h3>
+                  <div className="mt-3 flex gap-3">
+                    <FormatBadge format="PDF" available />
+                    <FormatBadge format="EPUB" available={!!issue.epubUrl} />
+                    <FormatBadge format="MOBI" available={!!issue.mobiUrl} />
+                  </div>
+                  {!issue.epubUrl && (
+                    <p className="mt-2 text-xs text-gray-400">EPUB and MOBI formats coming soon</p>
+                  )}
+                </div>
+              )}
             </motion.div>
           </div>
         </div>
@@ -202,6 +225,28 @@ function MetaItem({
       <Icon className="h-4 w-4 text-flame-500" />
       <p className="mt-2 text-sm font-semibold text-gray-900">{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
+    </div>
+  );
+}
+
+function EmbargoNotice({ liftLabel }: { liftLabel: string | null }) {
+  return (
+    <div className="mt-8 overflow-hidden rounded-xl border border-flame-200 bg-gradient-to-br from-gold-50/80 to-flame-50/80 p-6 shadow-sm">
+      <div className="flex items-start gap-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-flame-600 shadow-sm ring-1 ring-flame-200">
+          <Lock className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="font-heading text-lg font-semibold text-gray-900">
+            {liftLabel ? `Available ${liftLabel}` : 'Available to subscribers'}
+          </h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+            This edition is reserved for our print subscribers while it&apos;s still in active
+            circulation. The archive opens it to everyone on a rolling 5-year window — the cover,
+            theme, and topics stay visible here so you can find it again when it goes public.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

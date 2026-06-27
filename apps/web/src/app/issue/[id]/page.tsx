@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
-import { createPublicClient } from '@/lib/supabase-server';
+import { getPublicIssueById } from '@/lib/db';
 import type { ApiIssue } from '@/lib/api';
 import { IssueDetailClient } from './issue-detail-client';
 
@@ -11,15 +11,7 @@ import { IssueDetailClient } from './issue-detail-client';
 export const revalidate = 60;
 
 async function fetchIssueServer(id: string): Promise<ApiIssue | null> {
-  const supabase = createPublicClient();
-  const { data, error } = await supabase
-    .from('issues')
-    .select('*, magazines!inner(id, name, language, description, cover_image_url)')
-    .eq('id', id)
-    .eq('is_published', true)
-    .single();
-  if (error || !data) return null;
-  return data as ApiIssue;
+  return getPublicIssueById(id);
 }
 
 export default async function IssueDetailPage({

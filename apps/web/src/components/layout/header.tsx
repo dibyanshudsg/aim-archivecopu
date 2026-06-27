@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookMarked } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { useSearchDropdown } from '@/lib/use-search-dropdown';
 import { cn } from '@/lib/utils';
@@ -19,8 +19,18 @@ const navLinks = [
   { href: '/bookmarks', label: 'Bookmarks' },
 ];
 
+const DEV_PUBLIC_WARM_TARGETS = [
+  '/api/issues?page=1&page_size=24',
+  '/api/magazines',
+  '/api/site-settings',
+  '/browse',
+  '/search',
+  '/bookmarks',
+];
+
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const router = useRouter();
   const bookmarkCount = useBookmarks((s) => s.bookmarkedIds.length);
   const pathname = usePathname();
   const dropdownIsOpen = useSearchDropdown((s) => s.isOpen);
@@ -60,6 +70,31 @@ export function Header() {
     setMobileMenuOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      for (const href of navLinks.map((link) => link.href)) {
+        router.prefetch(href);
+      }
+
+      for (const target of DEV_PUBLIC_WARM_TARGETS) {
+        if (cancelled) return;
+        try {
+          await fetch(target, { cache: 'force-cache' });
+        } catch {
+          // Local-only convenience; the visible route still handles failures.
+        }
+      }
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [router]);
+
   /** Active state — matches exact path or any sub-route (e.g. /browse/[id]
    *  highlights the Browse link too). The home link ("/") is exact-match
    *  only — otherwise it would match every route. */
@@ -67,6 +102,10 @@ export function Header() {
     if (!pathname) return false;
     if (href === '/') return pathname === '/';
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function prefetchRoute(href: string) {
+    router.prefetch(href);
   }
 
   return (
@@ -92,6 +131,8 @@ export function Header() {
               <Link
                 key={link.href}
                 href={link.href}
+                onMouseEnter={() => prefetchRoute(link.href)}
+                onFocus={() => prefetchRoute(link.href)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
@@ -127,6 +168,8 @@ export function Header() {
           )}
           <Link
             href="/bookmarks"
+            onMouseEnter={() => prefetchRoute('/bookmarks')}
+            onFocus={() => prefetchRoute('/bookmarks')}
             aria-current={isLinkActive('/bookmarks') ? 'page' : undefined}
             className={cn(
               'relative hidden h-10 w-10 items-center justify-center rounded-lg transition-colors md:flex',
@@ -222,6 +265,8 @@ export function Header() {
                   <Link
                     key={link.href}
                     href={link.href}
+                    onMouseEnter={() => prefetchRoute(link.href)}
+                    onFocus={() => prefetchRoute(link.href)}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'block rounded-lg px-4 py-3 text-base font-medium transition-colors',

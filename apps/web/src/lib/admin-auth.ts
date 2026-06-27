@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getAdminByIdAndEmail } from '@/lib/db';
 
 const ADMIN_COOKIE = 'aim-admin-session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -9,13 +9,6 @@ interface SessionPayload {
   id: string;
   email: string;
   exp: number;
-}
-
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
 }
 
 function getSessionSecret(): string {
@@ -63,14 +56,7 @@ export async function verifyAdmin(): Promise<{ id: string; email: string; name: 
     const parsed = parseSessionToken(session.value);
     if (!parsed) return null;
 
-    const supabase = getAdminClient();
-    const { data } = await supabase
-      .from('admins')
-      .select('id, email, name')
-      .eq('id', parsed.id)
-      .eq('email', parsed.email)
-      .single();
-    return data;
+    return getAdminByIdAndEmail(parsed.id, parsed.email);
   } catch {
     return null;
   }

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdmin } from '@/lib/admin-auth';
+import {
+  getAdminIssueFileRowFromDb,
+  updateIssueCoverInDb,
+  updateIssuePdfInDb,
+} from '@/lib/db';
 import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
-import { isSupabaseStorageUrl, storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
-
-function getClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
+import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
 
 /**
  * Replace the PDF for an existing issue. The new PDF is always written to
@@ -24,14 +24,9 @@ export async function POST(
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const supabase = getClient();
 
-  const { data: issue, error: fetchErr } = await supabase
-    .from('issues')
-    .select('id, pdf_url, cover_image_url')
-    .eq('id', id)
-    .single();
-  if (fetchErr || !issue) {
+  const issue = await getAdminIssueFileRowFromDb(id);
+  if (!issue) {
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
@@ -59,31 +54,16 @@ export async function POST(
     return NextResponse.json({ error: 'Upload failed: ' + message }, { status: 500 });
   }
 
-  // If the previous URL was on Supabase Storage, drop the now-orphaned file.
-  if (isSupabaseStorageUrl(issue.pdf_url)) {
-    try {
-      await supabase.storage.from('magazines').remove([storageKey]);
-    } catch (legacyCleanupErr) {
-      console.error('Legacy Supabase cleanup failed (non-blocking):', legacyCleanupErr);
-    }
-  }
-
   // Cache-bust so reader/clients pick up the new file
   const cacheBustedUrl = `${newPublicUrl}?v=${Date.now()}`;
 
-  const { error: updErr } = await supabase
-    .from('issues')
-    .update({ pdf_url: cacheBustedUrl, file_size_bytes: file.size })
-    .eq('id', id);
-  if (updErr) {
-    return NextResponse.json({ error: updErr.message }, { status: 500 });
-  }
+  await updateIssuePdfInDb(id, cacheBustedUrl, file.size);
 
   // Reindex OCR
   let pagesIndexed = 0;
   try {
     const pages = await extractPdfText(buffer);
-    pagesIndexed = await indexIssue(supabase, id, pages);
+    pagesIndexed = await indexIssue(id, pages);
   } catch (err) {
     console.error('Reindex after PDF replace failed (non-blocking):', err);
   }
@@ -96,10 +76,8 @@ export async function POST(
     try {
       thumbnailUrl = await generateAndUploadThumbnail(buffer, storageKey);
       if (thumbnailUrl) {
-        await supabase
-          .from('issues')
-          .update({ cover_image_url: `${thumbnailUrl}?v=${Date.now()}` })
-          .eq('id', id);
+        const cacheBustedThumb = `${thumbnailUrl}?v=${Date.now()}`;
+        await updateIssueCoverInDb(id, cacheBustedThumb);
       }
     } catch (thumbErr) {
       console.error('Thumbnail regeneration failed (non-blocking):', thumbErr);

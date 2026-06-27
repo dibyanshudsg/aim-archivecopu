@@ -53,6 +53,7 @@ AIM Issues/
 
 # Dev server / agent logs
 .codex-logs/
+.migration/
 
 # Misc
 *.tsbuildinfo

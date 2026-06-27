@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function getClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-}
+import { searchIssueMetadata, searchIssueText } from '@/lib/db';
+import { getEmbargoState } from '@/lib/embargo';
 
 interface MagazineRel {
   id: string;
@@ -25,7 +19,7 @@ interface IssueRow {
   year: number;
   month: number;
   cover_image_url: string | null;
-  pdf_url: string;
+  pdf_url: string | null;
   magazines: MagazineRel;
 }
 
@@ -40,7 +34,9 @@ interface FtsRow {
   snippet: string;
   rank: number;
   cover_image_url: string | null;
-  pdf_url: string;
+  pdf_url: string | null;
+  is_embargoed: boolean;
+  embargo_lift_label: string | null;
 }
 
 function escapeHtml(text: string): string {
@@ -82,6 +78,23 @@ function buildMetaSnippet(issue: IssueRow, query: string): string {
   return escapeHtml(issue.title);
 }
 
+/** Snippet shown in place of any OCR excerpt for embargoed issues. Leaks
+ *  metadata only (theme + topics) so the result is discoverable, but the
+ *  printed page contents never reach the public. */
+function buildEmbargoSnippet(
+  theme: string | null,
+  topics: string[] | null,
+  liftLabel: string | null,
+): string {
+  const parts: string[] = [];
+  if (theme) parts.push(`Theme: ${escapeHtml(theme)}`);
+  if (topics && topics.length > 0) {
+    parts.push(`Topics: ${topics.slice(0, 4).map(escapeHtml).join(', ')}`);
+  }
+  parts.push(liftLabel ? `Available ${escapeHtml(liftLabel)}` : 'Available to subscribers');
+  return parts.join(' · ');
+}
+
 export async function GET(request: NextRequest) {
   const { searchQuerySchema, parseSearchParams } = await import('@/lib/validations');
 
@@ -97,59 +110,47 @@ export async function GET(request: NextRequest) {
 
   const { q: query, magazine_id: magazineId, year_from: yearFrom, year_to: yearTo } = parsed.data;
 
-  const supabase = getClient();
-
-  // Run page-level OCR full-text search and issue-level metadata search in
-  // parallel. Theme/title/topic matches that aren't surfaced by OCR (because
-  // they don't appear on a printed page) still need to find their issue.
-  let metaQuery = supabase
-    .from('issues')
-    .select(
-      'id, title, theme, description, topics, year, month, cover_image_url, pdf_url, magazines!inner(id, name, language, description, cover_image_url)',
-    )
-    .eq('is_published', true)
-    .or(
-      `title.ilike.%${query}%,theme.ilike.%${query}%,description.ilike.%${query}%,topics.cs.{"${query}"}`,
-    );
-
-  if (magazineId) metaQuery = metaQuery.eq('magazine_id', magazineId);
-  if (yearFrom) metaQuery = metaQuery.gte('year', yearFrom);
-  if (yearTo) metaQuery = metaQuery.lte('year', yearTo);
-  metaQuery = metaQuery.order('year', { ascending: false }).order('month', { ascending: false }).limit(50);
-
-  const [ftsResp, metaResp] = await Promise.all([
-    supabase.rpc('search_issues', {
-      search_query: query,
-      filter_magazine_id: magazineId || null,
-      filter_year_from: yearFrom || null,
-      filter_year_to: yearTo || null,
-      result_limit: 50,
-      result_offset: 0,
+  const [ftsResults, metaIssues] = await Promise.all([
+    searchIssueText({
+      query,
+      magazineId: magazineId || undefined,
+      yearFrom: yearFrom || undefined,
+      yearTo: yearTo || undefined,
+      limit: 50,
     }),
-    metaQuery,
+    searchIssueMetadata({
+      query,
+      magazineId: magazineId || undefined,
+      yearFrom: yearFrom || undefined,
+      yearTo: yearTo || undefined,
+      limit: 50,
+    }),
   ]);
 
-  const ftsResults: FtsRow[] = !ftsResp.error && ftsResp.data ? (ftsResp.data as FtsRow[]) : [];
-  const metaIssues: IssueRow[] = (metaResp.data as IssueRow[] | null) ?? [];
-
-  // Dedupe — if an issue already has page-level FTS hits, drop its metadata
-  // entry; FTS snippets carry more context.
+  const now = new Date();
   const ftsIssueIds = new Set(ftsResults.map((r) => r.issue_id));
   const metaResults: FtsRow[] = metaIssues
     .filter((i) => !ftsIssueIds.has(i.id))
-    .map((i) => ({
-      issue_id: i.id,
-      issue_title: i.title,
-      magazine_name: i.magazines.name,
-      magazine_language: i.magazines.language,
-      year: i.year,
-      month: i.month,
-      page_number: 1,
-      snippet: buildMetaSnippet(i, query),
-      rank: 0,
-      cover_image_url: i.cover_image_url,
-      pdf_url: i.pdf_url,
-    }));
+    .map((i) => {
+      const state = getEmbargoState(i.year, i.month, now);
+      return {
+        issue_id: i.id,
+        issue_title: i.title,
+        magazine_name: i.magazines.name,
+        magazine_language: i.magazines.language,
+        year: i.year,
+        month: i.month,
+        page_number: 1,
+        snippet: state.isEmbargoed
+          ? buildEmbargoSnippet(i.theme, i.topics, state.embargoLiftLabel)
+          : buildMetaSnippet(i, query),
+        rank: 0,
+        cover_image_url: i.cover_image_url,
+        pdf_url: state.isEmbargoed ? null : i.pdf_url,
+        is_embargoed: state.isEmbargoed,
+        embargo_lift_label: state.embargoLiftLabel,
+      };
+    });
 
   const combined = [...ftsResults, ...metaResults];
 

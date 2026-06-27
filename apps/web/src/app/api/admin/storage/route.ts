@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { getAdminStorageData } from '@/lib/admin-data';
-import { deleteFromR2, storageKeyFromUrl } from '@/lib/r2-client';
-import { createAdminClient } from '@/lib/supabase-server';
+import { deleteFromR2 } from '@/lib/r2-client';
+import { clearIssueCoverByStorageKeyInDb } from '@/lib/db';
 
 /**
  * GET /api/admin/storage
@@ -56,13 +56,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Delete failed: ' + message }, { status: 500 });
   }
 
-  const db = createAdminClient();
-  const { data: issues } = await db.from('issues').select('id, cover_image_url');
-  for (const issue of issues ?? []) {
-    if (issue.cover_image_url && storageKeyFromUrl(issue.cover_image_url) === key) {
-      await db.from('issues').update({ cover_image_url: null }).eq('id', issue.id);
-    }
-  }
+  await clearIssueCoverByStorageKeyInDb(key);
 
   return NextResponse.json({ success: true });
 }
