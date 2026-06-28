@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const optionalFormDataString = (max?: number) =>
+  z.preprocess(
+    (value) => (value == null ? '' : value),
+    max === undefined ? z.string() : z.string().max(max),
+  );
+
 // Admin auth
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -28,11 +34,11 @@ export const issueUpdateSchema = z.object({
 export const issueUploadSchema = z.object({
   magazine_id: z.string().uuid('Invalid magazine ID'),
   title: z.string().min(1, 'Title is required').max(300),
-  theme: z.string().max(300).default(''),
+  theme: optionalFormDataString(300),
   year: z.coerce.number().int().min(1950).max(2100),
   month: z.coerce.number().int().min(1).max(12),
-  description: z.string().max(5000).default(''),
-  topics: z.string().default(''),
+  description: optionalFormDataString(5000),
+  topics: optionalFormDataString(),
 });
 
 // Public issues query params
