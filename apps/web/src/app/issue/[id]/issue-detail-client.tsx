@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -30,6 +30,8 @@ interface IssueDetailClientProps {
 export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
   const { toggle, isBookmarked } = useBookmarks();
   const issue = normalizeIssue(initialIssue);
+  const [derivedPageCount, setDerivedPageCount] = useState<number | null>(issue.pageCount ?? null);
+  const [pageCountLookupFailed, setPageCountLookupFailed] = useState(false);
 
   // Fire-and-forget read-count increment. The GET /api/issues/[id] route
   // bumps read_count as a side effect — we hit it in the background so the
@@ -38,8 +40,52 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
     fetchIssue(issue.id).catch(() => {});
   }, [issue.id]);
 
+  useEffect(() => {
+    if (issue.pageCount) {
+      setDerivedPageCount(issue.pageCount);
+      setPageCountLookupFailed(false);
+      return;
+    }
+    if (!issue.pdfUrl || issue.isEmbargoed) {
+      setDerivedPageCount(null);
+      return;
+    }
+
+    const pdfUrl = issue.pdfUrl;
+    let cancelled = false;
+    setDerivedPageCount(null);
+    setPageCountLookupFailed(false);
+
+    async function countPages() {
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+        }
+        const doc = await pdfjsLib.getDocument(pdfUrl).promise;
+        try {
+          if (!cancelled) setDerivedPageCount(doc.numPages);
+        } finally {
+          doc.destroy();
+        }
+      } catch {
+        if (!cancelled) setPageCountLookupFailed(true);
+      }
+    }
+
+    countPages();
+    return () => {
+      cancelled = true;
+    };
+  }, [issue.isEmbargoed, issue.pageCount, issue.pdfUrl]);
+
   const bookmarked = isBookmarked(issue.id);
   const monthName = MONTH_NAMES[issue.month as MonthIndex];
+  const pageCountValue = derivedPageCount
+    ? String(derivedPageCount)
+    : issue.pdfUrl && !issue.isEmbargoed && !pageCountLookupFailed
+      ? 'Loading'
+      : '—';
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -128,11 +174,15 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
                   ))}
               </div>
 
-              <p className="mt-6 leading-relaxed text-gray-600">{issue.description}</p>
+              {issue.description && (
+                <p className="mt-6 whitespace-pre-wrap text-justify leading-relaxed text-gray-600">
+                  {issue.description}
+                </p>
+              )}
 
               <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <MetaItem icon={Calendar} label="Published" value={`${monthName} ${issue.year}`} />
-                <MetaItem icon={FileText} label="Pages" value={issue.pageCount ? String(issue.pageCount) : '—'} />
+                <MetaItem icon={FileText} label="Pages" value={pageCountValue} />
                 <MetaItem icon={HardDrive} label="Size" value={formatFileSize(issue.fileSizeBytes)} />
                 <MetaItem icon={Eye} label="Reads" value={issue.readCount.toLocaleString()} />
               </div>

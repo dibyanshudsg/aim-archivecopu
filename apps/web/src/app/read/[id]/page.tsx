@@ -935,22 +935,35 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                 <ArrowLeft className="h-5 w-5" />
                 <span className="hidden text-xs font-semibold lg:inline">{backTarget.label}</span>
               </Link>
-              {issue.coverImageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={issue.coverImageUrl}
-                  alt=""
-                  className="h-10 w-[30px] shrink-0 rounded-sm object-cover shadow-sm"
-                />
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900">
-                  {issue.magazine?.name}
-                </p>
-                <p className="truncate text-xs text-gray-500">
-                  {formatMonthYear(issue.month, issue.year)}
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setInfoDrawerOpen(true)}
+                className="group flex min-w-0 items-center gap-2 rounded-xl border border-flame-100 bg-gradient-to-br from-white to-flame-50/40 px-2 py-1.5 text-left shadow-sm transition-all hover:border-flame-200 hover:from-gold-50 hover:to-flame-50 hover:shadow-[0_6px_18px_rgba(190,140,46,0.14)]"
+                aria-label={`View details for ${issue.title}`}
+                title="View details"
+              >
+                {issue.coverImageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={issue.coverImageUrl}
+                    alt=""
+                    className="h-10 w-[30px] shrink-0 rounded-sm object-cover shadow-sm ring-1 ring-flame-100"
+                  />
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-gray-900">
+                    {issue.magazine?.name}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <span className="truncate text-gray-500">
+                      {formatMonthYear(issue.month, issue.year)}
+                    </span>
+                    <span className="shrink-0 bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-semibold text-transparent">
+                      View Full Details
+                    </span>
+                  </span>
+                </span>
+              </button>
             </div>
 
             {/* Desktop center cluster — absolute centred over row 1. Hidden on
@@ -1509,10 +1522,10 @@ function IssueInfoDrawer({
             role="dialog"
             aria-modal="true"
             aria-labelledby="reader-info-title"
-            className="fixed inset-x-0 bottom-0 z-40 max-h-[86vh] overflow-hidden rounded-t-2xl border border-flame-100 bg-white shadow-2xl md:inset-y-3 md:right-3 md:left-auto md:flex md:w-[380px] md:max-w-[calc(100vw-1.5rem)] md:flex-col md:rounded-2xl"
-            initial={{ y: 32, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 32, opacity: 0 }}
+            className="fixed inset-y-0 left-0 z-40 flex w-[min(420px,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-r-2xl border border-flame-100 bg-white shadow-2xl md:inset-y-3 md:left-3 md:rounded-2xl"
+            initial={{ x: -40, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -40, opacity: 0 }}
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="flex items-center justify-between border-b border-flame-100 px-4 py-3">
@@ -1534,7 +1547,7 @@ function IssueInfoDrawer({
               </button>
             </div>
 
-            <div className="overflow-y-auto px-4 py-4">
+            <div className="flex-1 overflow-y-auto px-4 py-4">
               <div className="flex gap-4">
                 <div className="relative h-36 w-[108px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-50 shadow-sm">
                   <div className="absolute inset-y-0 left-0 z-10 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
@@ -1605,7 +1618,7 @@ function IssueInfoDrawer({
 
               {issue.description && (
                 <div className="mt-5 rounded-xl bg-gray-50 px-4 py-3">
-                  <p className="text-sm leading-relaxed text-gray-600">{issue.description}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-600">{issue.description}</p>
                 </div>
               )}
 
@@ -1616,7 +1629,7 @@ function IssueInfoDrawer({
                   className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
                 >
                   <Info className="h-4 w-4" />
-                  Full details
+                  View Full Details
                 </Link>
                 <a
                   href={`/api/issues/${issue.id}/download`}
