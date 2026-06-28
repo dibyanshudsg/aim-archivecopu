@@ -4,7 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowDownAZ, BookOpen, CalendarDays, Clock, LibraryBig, BookDashed } from 'lucide-react';
+import {
+  ArrowDownAZ,
+  BookOpen,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  LibraryBig,
+  BookDashed,
+  LockKeyhole,
+} from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { pdfjs } from 'react-pdf';
 import type { ApiIssue } from '@/lib/api';
@@ -42,9 +52,9 @@ const sortOptions = [
   { id: 'title', label: 'A-Z', shortLabel: 'A-Z', Icon: ArrowDownAZ },
 ] satisfies Array<{ id: SortMode; label: string; shortLabel: string; Icon: typeof Clock }>;
 const sortCopy = {
-  uploaded: { eyebrow: 'Recently uploaded', heading: 'Latest issues' },
-  'issue-date': { eyebrow: 'Sorted by issue date', heading: 'Latest issues' },
-  title: { eyebrow: 'Alphabetical view', heading: 'Issue index' },
+  uploaded: { eyebrow: 'Recently opened', heading: 'Now open in the archive' },
+  'issue-date': { eyebrow: 'Sorted by issue date', heading: 'Readable archive editions' },
+  title: { eyebrow: 'Alphabetical view', heading: 'Open issue index' },
 } satisfies Record<SortMode, { eyebrow: string; heading: string }>;
 
 function magazineShortName(name: string) {
@@ -57,6 +67,10 @@ function magazineShortName(name: string) {
 function fallbackTitle(issue: ApiIssue) {
   const [firstWord] = issue.magazines.name.split(/\s+/);
   return firstWord || issue.magazines.name;
+}
+
+function canPreviewIssue(issue: ApiIssue) {
+  return !issue.is_embargoed && !!issue.pdf_url;
 }
 
 function IssueBook({
@@ -75,6 +89,7 @@ function IssueBook({
   const router = useRouter();
   const accent = accents[index % accents.length];
   const monthYear = formatMonthYear(issue.month, issue.year);
+  const canPreview = canPreviewIssue(issue);
   const [spreadStart, setSpreadStart] = useState(1);
   const [numPages, setNumPages] = useState(issue.page_count ?? 0);
   const [turning, setTurning] = useState<TurningSheet | null>(null);
@@ -90,7 +105,7 @@ function IssueBook({
   const pdfLoadStartedRef = useRef(false);
   const pageImagesRef = useRef<Record<number, string>>({});
   const pageRenderPromisesRef = useRef<Partial<Record<number, Promise<boolean>>>>({});
-  const expanded = mode === 'open';
+  const expanded = canPreview && mode === 'open';
 
   function clearPageTurnTimers() {
     if (pageTurnDelayRef.current) clearTimeout(pageTurnDelayRef.current);
@@ -99,8 +114,8 @@ function IssueBook({
     pageTurnFinishRef.current = null;
   }
 
-  function navigateToReader() {
-    router.push(`/read/${issue.id}?from=shelf`);
+  function navigateToTarget() {
+    router.push(canPreview ? `/read/${issue.id}?from=shelf` : `/issue/${issue.id}`);
   }
 
   useEffect(() => {
@@ -109,9 +124,6 @@ function IssueBook({
 
   useEffect(() => {
     if (!expanded || pdfDocRef.current || pdfLoadStartedRef.current) return;
-    // Embargoed issues never reach this bookshelf (server fetch filters them),
-    // but guard at runtime so a null `pdf_url` from a stale cache can't
-    // crash the page preview.
     if (!issue.pdf_url) {
       setPdfError(true);
       return;
@@ -262,7 +274,7 @@ function IssueBook({
   return (
     <motion.div
       layout
-      className={`group relative shrink-0 cursor-pointer ${expanded ? 'z-40 w-[300px] sm:w-[390px] lg:w-[460px]' : 'z-10 w-[140px] sm:w-[165px] lg:w-[150px]'}`}
+      className={`group relative shrink-0 cursor-pointer ${expanded ? 'z-40 w-[300px] sm:w-[390px] lg:w-[460px]' : 'z-10 w-[152px] sm:w-[178px] lg:w-[176px]'}`}
       initial={{ y: 44, opacity: 0 }}
       animate={{ y: expanded ? -22 : 0, opacity: 1 }}
       transition={{
@@ -270,9 +282,12 @@ function IssueBook({
         y: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
         opacity: { duration: 0.45, delay: expanded ? 0 : 0.2 + index * 0.06 },
       }}
-      onMouseEnter={() => onIntentOpen(issue.id)}
+      onMouseEnter={() => {
+        if (canPreview) onIntentOpen(issue.id);
+      }}
       onMouseLeave={() => onLeave(issue.id)}
       onPointerDown={(event: React.PointerEvent) => {
+        if (!canPreview) return;
         if (event.pointerType === 'mouse') return;
         suppressClickRef.current = false;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -282,11 +297,13 @@ function IssueBook({
         }, LONG_PRESS_MS);
       }}
       onPointerUp={(event: React.PointerEvent) => {
+        if (!canPreview) return;
         if (event.pointerType === 'mouse') return;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         if (suppressClickRef.current) onLeave(issue.id);
       }}
       onPointerCancel={(event: React.PointerEvent) => {
+        if (!canPreview) return;
         if (event.pointerType === 'mouse') return;
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         onLeave(issue.id);
@@ -296,17 +313,17 @@ function IssueBook({
           suppressClickRef.current = false;
           return;
         }
-        navigateToReader();
+        navigateToTarget();
       }}
       onKeyDown={(event: React.KeyboardEvent) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          navigateToReader();
+          navigateToTarget();
         }
       }}
       role="link"
       tabIndex={0}
-      aria-label={`Read ${issue.title}`}
+      aria-label={canPreview ? `Read ${issue.title}` : `View details for ${issue.title}`}
     >
       {expanded ? (
         <InFlowBookPreview
@@ -339,9 +356,13 @@ function ClosedIssueCover({
   accent: string;
   monthYear: string;
 }) {
+  const locked = issue.is_embargoed;
+
   return (
     <motion.div
-      className="relative mx-auto aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-2xl sm:w-[165px] lg:w-[150px]"
+      className={`relative mx-auto aspect-[5/7] w-[152px] overflow-hidden rounded-r-md rounded-l-sm bg-gradient-to-br from-gold-50 to-flame-50 shadow-lg ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-2xl sm:w-[178px] lg:w-[176px] ${
+        locked ? 'ring-gold-200/80' : ''
+      }`}
       initial={false}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -366,8 +387,21 @@ function ClosedIssueCover({
         <p className="mt-1 text-[10px] font-medium text-white/75">{monthYear}</p>
       </div>
 
+      {locked && (
+        <div className="absolute top-10 left-2 z-30 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-gray-950/82 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm backdrop-blur-sm">
+          <LockKeyhole className="h-2.5 w-2.5" />
+          <span className="truncate">{issue.embargo_lift_label ?? 'Subscribers'}</span>
+        </div>
+      )}
+
+      {locked && (
+        <div className="absolute top-2 left-2 z-20 rounded-full border border-gold-200 bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-normal text-gold-800 shadow-sm">
+          Subscribers first
+        </div>
+      )}
+
       <div className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-flame-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-        <BookOpen className="h-4 w-4" />
+        {locked ? <LockKeyhole className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
       </div>
 
       <div className="absolute top-2 right-0 bottom-2 z-10 w-[3px] rounded-r-sm bg-gradient-to-l from-black/[0.12] to-transparent" />
@@ -829,6 +863,9 @@ function IssueRow({ issues, offset = 0 }: { issues: ApiIssue[]; offset?: number 
   }
 
   function intentOpen(id: string, immediate = false) {
+    const issue = issues.find((item) => item.id === id);
+    if (!issue || !canPreviewIssue(issue)) return;
+
     hoveredIdRef.current = id;
     clearHoverIntent();
 
@@ -879,8 +916,13 @@ function IssueRow({ issues, offset = 0 }: { issues: ApiIssue[]; offset?: number 
     <>
       <div className="flex min-h-[230px] items-end justify-center gap-3 px-1 pb-1 sm:min-h-[284px] sm:gap-4 lg:min-h-[334px]">
         {issues.map((issue, index) => {
+          const previewable = canPreviewIssue(issue);
           const mode: BookMode =
-            activeId === issue.id ? 'open' : closingId === issue.id ? 'closing' : 'closed';
+            previewable && activeId === issue.id
+              ? 'open'
+              : previewable && closingId === issue.id
+                ? 'closing'
+                : 'closed';
 
           return (
             <IssueBook
@@ -906,7 +948,7 @@ function EmptyShelf() {
         {[0, 1, 2, 3].map((item) => (
           <div
             key={item}
-            className="relative aspect-[3/4] w-[140px] overflow-hidden rounded-r-md rounded-l-sm border-2 border-dashed border-flame-200/80 bg-flame-50/30 sm:w-[165px] lg:w-[150px]"
+            className="relative aspect-[5/7] w-[152px] overflow-hidden rounded-r-md rounded-l-sm border-2 border-dashed border-flame-200/80 bg-flame-50/30 sm:w-[178px] lg:w-[176px]"
           />
         ))}
       </div>
@@ -933,11 +975,138 @@ function useIssuesPerRow() {
   return perRow;
 }
 
+function buildYearRange(minYear: number, maxYear: number): number[] {
+  const years: number[] = [];
+  for (let year = minYear; year <= maxYear; year += 1) years.push(year);
+  return years;
+}
+
+function YearNavigator({
+  selectedYear,
+  minYear,
+  maxYear,
+  readableCount,
+  lockedCount,
+  totalCount,
+  onChange,
+}: {
+  selectedYear: number;
+  minYear: number;
+  maxYear: number;
+  readableCount: number;
+  lockedCount: number;
+  totalCount: number;
+  onChange: (year: number) => void;
+}) {
+  const hasOnlyLocked = totalCount > 0 && lockedCount > 0 && readableCount === 0;
+  const hasMixedAccess = lockedCount > 0 && readableCount > 0;
+  const statusLabel =
+    totalCount === 0
+      ? 'No editions on this shelf yet'
+      : hasOnlyLocked
+        ? 'Subscriber editions'
+        : hasMixedAccess
+          ? 'Mixed access year'
+          : 'Public archive';
+  const countLabel =
+    totalCount === 0
+      ? 'Choose another year'
+      : hasOnlyLocked
+        ? `${lockedCount} cover${lockedCount === 1 ? '' : 's'} visible`
+        : `${readableCount} readable issue${readableCount === 1 ? '' : 's'}`;
+
+  return (
+    <div className="mb-8 flex flex-col items-center gap-3">
+      <div className="flex items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => onChange(selectedYear - 1)}
+          disabled={selectedYear <= minYear}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
+          aria-label="Previous year"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+
+        <div className="min-w-[220px] rounded-2xl border border-flame-100 bg-white/95 px-5 py-3 text-center shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white sm:min-w-[290px]">
+          <p className="text-[11px] font-semibold uppercase tracking-normal text-flame-600">
+            Selected year
+          </p>
+          <div className="mt-1 flex items-center justify-center gap-3">
+            <span className="font-heading text-4xl font-bold leading-none text-gray-950 sm:text-5xl">
+              {selectedYear}
+            </span>
+            {hasOnlyLocked && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gold-50 px-2.5 py-1 text-[11px] font-semibold text-gold-800 ring-1 ring-gold-200">
+                <LockKeyhole className="h-3 w-3" />
+                Covers only
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-xs font-semibold text-gray-700">{statusLabel}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{countLabel}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onChange(selectedYear + 1)}
+          disabled={selectedYear >= maxYear}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
+          aria-label="Next year"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {buildYearRange(minYear, maxYear).map((year) => (
+          <button
+            key={year}
+            type="button"
+            onClick={() => onChange(year)}
+            aria-pressed={selectedYear === year}
+            className={`h-2.5 rounded-full transition-all ${
+              selectedYear === year
+                ? 'w-7 bg-gradient-to-r from-gold-500 to-flame-500'
+                : 'w-2.5 bg-flame-100 hover:bg-flame-200'
+            }`}
+          >
+            <span className="sr-only">{year}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
   const [sortMode, setSortMode] = useState<SortMode>('uploaded');
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
   const issuesPerRow = useIssuesPerRow();
   const activeCopy = sortCopy[sortMode];
+  const currentYear = new Date().getFullYear();
+  const issueYears = useMemo(
+    () => Array.from(new Set(issues.map((issue) => issue.year))).sort((a, b) => a - b),
+    [issues],
+  );
+  const minYear = issueYears[0] ?? currentYear;
+  const maxYear = Math.max(currentYear, issueYears[issueYears.length - 1] ?? currentYear);
+  const defaultYear = useMemo(() => {
+    const readableYears = issues
+      .filter(canPreviewIssue)
+      .map((issue) => issue.year)
+      .sort((a, b) => b - a);
+    if (readableYears[0]) return readableYears[0];
+    return issueYears[issueYears.length - 1] ?? currentYear;
+  }, [currentYear, issueYears, issues]);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+
+  useEffect(() => {
+    if (selectedYear < minYear || selectedYear > maxYear) {
+      setSelectedYear(defaultYear);
+    }
+  }, [defaultYear, maxYear, minYear, selectedYear]);
+
   const magazineOptions = useMemo(() => {
     const byId = new Map<string, string>();
     issues.forEach((issue) => {
@@ -948,24 +1117,28 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
       .map(([id, name]) => ({ id, name, label: magazineShortName(name) }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [issues]);
+  const yearIssues = useMemo(
+    () => issues.filter((issue) => issue.year === selectedYear),
+    [issues, selectedYear],
+  );
   const filteredIssues = useMemo(() => {
-    if (magazineFilter === 'all') return issues;
-    return issues.filter((issue) => issue.magazines.id === magazineFilter);
-  }, [issues, magazineFilter]);
+    if (magazineFilter === 'all') return yearIssues;
+    return yearIssues.filter((issue) => issue.magazines.id === magazineFilter);
+  }, [magazineFilter, yearIssues]);
   const visibleIssues = useMemo(() => {
     const sorted = [...filteredIssues].sort((a, b) => {
       if (sortMode === 'issue-date') {
-        return b.year * 100 + b.month - (a.year * 100 + a.month);
+        return b.month - a.month || b.title.localeCompare(a.title);
       }
 
       if (sortMode === 'title') {
         return a.title.localeCompare(b.title);
       }
 
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return b.month - a.month || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-    return sorted.slice(0, 8);
+    return sorted.slice(0, 12);
   }, [filteredIssues, sortMode]);
   const issueRows = useMemo(() => {
     const chunks: ApiIssue[][] = [];
@@ -978,10 +1151,18 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
     magazineFilter === 'all'
       ? 'all magazines'
       : magazineOptions.find((option) => option.id === magazineFilter)?.name || 'selected magazine';
+  const readableCount = yearIssues.filter(canPreviewIssue).length;
+  const lockedCount = yearIssues.filter((issue) => issue.is_embargoed).length;
   const statusLine =
-    filteredIssues.length === 0
-      ? `No issues found for ${activeMagazineName}`
-      : `Showing ${visibleIssues.length} of ${filteredIssues.length} ${activeMagazineName} issue${filteredIssues.length === 1 ? '' : 's'}`;
+    yearIssues.length === 0
+      ? `No editions found for ${selectedYear}`
+      : filteredIssues.length === 0
+        ? `No ${activeMagazineName} editions found for ${selectedYear}`
+        : `Showing ${visibleIssues.length} of ${filteredIssues.length} ${activeMagazineName} edition${filteredIssues.length === 1 ? '' : 's'} for ${selectedYear}`;
+  const browseHref =
+    lockedCount > 0 && readableCount === 0
+      ? `/browse?availability=subscriber&year=${selectedYear}`
+      : `/browse?availability=all&year=${selectedYear}`;
 
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -1053,7 +1234,7 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
               )}
               <div
                 className="inline-flex max-w-full rounded-full border border-flame-100 bg-white/95 p-1 shadow-[0_10px_30px_rgba(120,84,28,0.10)] ring-1 ring-white"
-                aria-label="Sort latest issues"
+                aria-label="Sort readable archive issues"
               >
                 {sortOptions.map(({ id, label, shortLabel, Icon }) => {
                   const active = sortMode === id;
@@ -1086,18 +1267,28 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
               </div>
             </div>
             <Link
-              href="/browse"
+              href={browseHref}
               className="rounded-lg border border-flame-200 bg-white px-4 py-2 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
             >
               Browse all
             </Link>
           </div>
 
+          <YearNavigator
+            selectedYear={selectedYear}
+            minYear={minYear}
+            maxYear={maxYear}
+            readableCount={readableCount}
+            lockedCount={lockedCount}
+            totalCount={yearIssues.length}
+            onChange={setSelectedYear}
+          />
+
           {visibleIssues.length > 0 ? (
             <div className="space-y-5">
               {issueRows.map((rowIssues, rowIndex) => (
                 <IssueRow
-                  key={rowIndex}
+                  key={`${selectedYear}-${rowIndex}`}
                   issues={rowIssues}
                   offset={rowIndex * issuesPerRow}
                 />
@@ -1111,17 +1302,17 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
                   <BookDashed className="h-4 w-4" />
                 </span>
                 <p className="text-sm font-semibold text-gray-700">
-                  {filteredIssues.length === 0 && issues.length > 0
-                    ? 'No issues match this shelf filter yet.'
-                    : 'No issues on the shelf yet.'}
+                  {yearIssues.length === 0
+                    ? `No editions found for ${selectedYear}.`
+                    : 'No issues match this shelf filter yet.'}
                 </p>
                 <p className="max-w-md text-xs text-gray-500">
-                  {filteredIssues.length === 0 && issues.length > 0
-                    ? 'Try a different magazine or clear the filter to see everything available.'
-                    : 'New editions will appear here as they are added to the archive.'}
+                  {yearIssues.length === 0
+                    ? 'Use the year buttons to move to a year with available covers.'
+                    : 'Try a different magazine or clear the filter to see everything available.'}
                 </p>
               </div>
-              {filteredIssues.length === 0 && issues.length > 0 ? (
+              {yearIssues.length > 0 && filteredIssues.length === 0 ? (
                 <button
                   type="button"
                   onClick={() => setMagazineFilter('all')}

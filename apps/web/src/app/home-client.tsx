@@ -8,6 +8,7 @@ import { BookMarked, BookOpen, LibraryBig, Search, Download, Globe } from 'lucid
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
+import { LatestSubscriberEditions } from '@/components/home/latest-subscriber-editions';
 import { Flame } from '@/components/home/flame';
 
 // Dynamic-import the embedded carousel reader so react-pdf + pdfjs ship in
@@ -86,6 +87,7 @@ const features = [
 
 interface HomeClientProps {
   recentIssues: ApiIssue[];
+  latestSubscriberEditions: ApiIssue[];
   carouselMagazines: ApiMagazine[];
   carouselIssues: ApiIssue[];
   carouselCurrentYear: number;
@@ -199,6 +201,7 @@ function ContinueReadingShelf() {
 
 export function HomeClient({
   recentIssues,
+  latestSubscriberEditions,
   carouselMagazines,
   carouselIssues,
   carouselCurrentYear,
@@ -271,6 +274,8 @@ export function HomeClient({
             prevYear={carouselPrevYear}
             prevMonth={carouselPrevMonth}
           />
+
+          <LatestSubscriberEditions issues={latestSubscriberEditions} />
 
           {/* Dynamic Bookshelf */}
           <motion.div

@@ -1,17 +1,22 @@
 import {
+  listHomeShelfIssues,
+  listLatestEmbargoedIssues,
   listMagazines,
   listPublicIssuesForMonths,
-  listRecentPublicIssues,
 } from '@/lib/db';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { HomeClient } from './home-client';
 
 export const dynamic = 'force-dynamic';
 
-/** Latest 8 issues for the homepage bookshelf — excludes embargoed ones so
- *  the page-turn preview never points at a PDF the user can't actually open. */
-async function fetchRecentIssues(): Promise<ApiIssue[]> {
-  return listRecentPublicIssues(8, 32);
+/** Homepage year shelf metadata. Embargoed issues are included here so the
+ *  user can browse newer covers, but their PDF URLs stay stripped. */
+async function fetchShelfIssues(): Promise<ApiIssue[]> {
+  return listHomeShelfIssues();
+}
+
+async function fetchLatestSubscriberEditions(): Promise<ApiIssue[]> {
+  return listLatestEmbargoedIssues(4, 32);
 }
 
 interface CarouselData {
@@ -59,14 +64,16 @@ async function fetchCarouselData(): Promise<CarouselData> {
 }
 
 export default async function HomePage() {
-  const [recentIssues, carousel] = await Promise.all([
-    fetchRecentIssues(),
+  const [recentIssues, latestSubscriberEditions, carousel] = await Promise.all([
+    fetchShelfIssues(),
+    fetchLatestSubscriberEditions(),
     fetchCarouselData(),
   ]);
 
   return (
     <HomeClient
       recentIssues={recentIssues}
+      latestSubscriberEditions={latestSubscriberEditions}
       carouselMagazines={carousel.magazines}
       carouselIssues={carousel.issues}
       carouselCurrentYear={carousel.currentYear}
