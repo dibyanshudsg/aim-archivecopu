@@ -4,11 +4,13 @@ import { X } from 'lucide-react';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
 import type { ApiMagazine } from '@/lib/api';
 import type { BrowseFilters, FilterDimension } from '@/lib/use-browse-filters';
+import type { AvailabilityFilter } from '@/lib/public-issues';
 
 interface Props {
   filters: BrowseFilters;
   magazines: ApiMagazine[];
   onRemove: (dimension: FilterDimension, value: string | number) => void;
+  onRemoveAvailability?: () => void;
   onRemoveQuery?: () => void;
   onClearAll: () => void;
 }
@@ -23,6 +25,7 @@ export function ActiveFilterChips({
   filters,
   magazines,
   onRemove,
+  onRemoveAvailability,
   onRemoveQuery,
   onClearAll,
 }: Props) {
@@ -33,6 +36,15 @@ export function ActiveFilterChips({
             key: 'query',
             label: `Search: "${filters.query}"`,
             onRemove: onRemoveQuery,
+          },
+        ]
+      : []),
+    ...(filters.availability !== 'read' && onRemoveAvailability
+      ? [
+          {
+            key: 'availability',
+            label: `Availability: ${availabilityLabel(filters.availability)}`,
+            onRemove: onRemoveAvailability,
           },
         ]
       : []),
@@ -88,6 +100,12 @@ export function ActiveFilterChips({
       </button>
     </div>
   );
+}
+
+function availabilityLabel(value: AvailabilityFilter): string {
+  if (value === 'subscriber') return 'Subscriber editions';
+  if (value === 'all') return 'All editions';
+  return 'Read now';
 }
 
 function matchesMagazineFilter(magazine: ApiMagazine, value: string): boolean {

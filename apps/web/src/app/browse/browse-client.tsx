@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckSquare, Filter } from 'lucide-react';
+import { BookOpen, CheckSquare, Filter, Layers3, LockKeyhole } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { IssueCard } from '@/components/magazine/issue-card';
@@ -16,13 +16,57 @@ import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
 import { fetchIssues, fetchMagazines, normalizeIssue } from '@/lib/api';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { useBrowseFilters } from '@/lib/use-browse-filters';
-import type { BrowseFacets } from '@/lib/public-issues';
+import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
 import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
+
+const availabilityOptions = [
+  {
+    id: 'read',
+    label: 'Read now',
+    helper: 'Public PDFs',
+    Icon: BookOpen,
+  },
+  {
+    id: 'subscriber',
+    label: 'Subscriber editions',
+    helper: 'Current circulation',
+    Icon: LockKeyhole,
+  },
+  {
+    id: 'all',
+    label: 'All editions',
+    helper: 'Mixed view',
+    Icon: Layers3,
+  },
+] satisfies Array<{
+  id: AvailabilityFilter;
+  label: string;
+  helper: string;
+  Icon: typeof BookOpen;
+}>;
+
+const availabilityCopy: Record<AvailabilityFilter, { heading: string; subtitle: string; countLabel: string }> = {
+  read: {
+    heading: 'Browse Archive',
+    subtitle: 'Explore public archive editions available to read online.',
+    countLabel: 'readable',
+  },
+  subscriber: {
+    heading: 'Subscriber Editions',
+    subtitle: 'Current circulation editions are visible for discovery and open publicly after the rolling 5-year archive window.',
+    countLabel: 'subscriber',
+  },
+  all: {
+    heading: 'Browse Archive',
+    subtitle: 'Browse readable archive editions and current subscriber editions together.',
+    countLabel: 'archive',
+  },
+};
 
 interface BrowseClientProps {
   initialIssues: ApiIssue[];
@@ -56,6 +100,7 @@ function BrowseContent({
     setSort,
     setQuery,
     setPage,
+    setAvailability,
     clearAll,
     activeFilterCount,
     hasActiveFilters,
@@ -103,6 +148,7 @@ function BrowseContent({
         dir: filters.dir,
         page: filters.page,
         pageSize: PAGE_SIZE,
+        availability: filters.availability,
       }),
     ])
       .then(([m, i]) => {
@@ -120,6 +166,13 @@ function BrowseContent({
   const pageStart = (currentPage - 1) * PAGE_SIZE;
   const pageEnd = Math.min(pageStart + issues.length, total);
   const normalized = useMemo(() => issues.map(normalizeIssue), [issues]);
+  const copy = availabilityCopy[filters.availability];
+  const issueCountText =
+    total === 0
+      ? `No ${copy.countLabel} issues`
+      : total <= PAGE_SIZE
+        ? `${total} ${copy.countLabel} issue${total !== 1 ? 's' : ''}`
+        : `${pageStart + 1}-${pageEnd} of ${total} ${copy.countLabel} issues`;
 
   function handlePageChange(page: number) {
     setPage(page);
@@ -221,11 +274,19 @@ function BrowseContent({
 
       <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">Browse Archive</h1>
-          <p className="mt-2 text-lg text-gray-600">
-            Explore {total} issue{total !== 1 ? 's' : ''} across{' '}
-            {magazines.length} magazine{magazines.length !== 1 ? 's' : ''}
-          </p>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">{copy.heading}</h1>
+              <p className="mt-2 max-w-3xl text-lg leading-relaxed text-gray-600">{copy.subtitle}</p>
+              <p className="mt-2 text-sm font-medium text-gray-500">
+                {issueCountText} across {magazines.length} magazine{magazines.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <AvailabilityTabs
+              value={filters.availability}
+              onChange={setAvailability}
+            />
+          </div>
         </div>
       </section>
 
@@ -248,6 +309,7 @@ function BrowseContent({
               facets={facets}
               filters={filters}
               onToggle={toggleArray}
+              onAvailabilityChange={setAvailability}
               onClearAll={clearAll}
               hasActiveFilters={hasActiveFilters}
               onClose={() => setPanelOpen(false)}
@@ -283,6 +345,7 @@ function BrowseContent({
                 facets={facets}
                 filters={filters}
                 onToggle={toggleArray}
+                onAvailabilityChange={setAvailability}
                 onClearAll={clearAll}
                 hasActiveFilters={hasActiveFilters}
                 onClose={() => setPanelOpen(false)}
@@ -311,11 +374,7 @@ function BrowseContent({
 
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <span className="hidden text-sm text-gray-400 sm:inline">
-                {total === 0
-                  ? 'No issues'
-                  : total <= PAGE_SIZE
-                    ? `${total} issue${total !== 1 ? 's' : ''}`
-                    : `${pageStart + 1}-${pageEnd} of ${total} issues`}
+                {issueCountText}
               </span>
               <button
                 onClick={() => (selectionEnabled ? disableSelection() : enableSelection())}
@@ -338,6 +397,7 @@ function BrowseContent({
             filters={filters}
             magazines={magazines}
             onRemove={toggleArray}
+            onRemoveAvailability={() => setAvailability('read')}
             onRemoveQuery={() => setQuery('')}
             onClearAll={clearAll}
           />
@@ -383,6 +443,52 @@ function BrowseContent({
         onClose={closeDownloadModal}
       />
     </main>
+  );
+}
+
+function AvailabilityTabs({
+  value,
+  onChange,
+}: {
+  value: AvailabilityFilter;
+  onChange: (availability: AvailabilityFilter) => void;
+}) {
+  return (
+    <div className="w-full max-w-xl rounded-2xl border border-flame-100 bg-white/90 p-1.5 shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white lg:w-auto">
+      <div className="grid grid-cols-3 gap-1">
+        {availabilityOptions.map(({ id, label, helper, Icon }) => {
+          const active = value === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChange(id)}
+              aria-pressed={active}
+              className={`relative isolate flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl px-3 text-center transition-colors ${
+                active
+                  ? 'text-white'
+                  : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
+              }`}
+            >
+              {active && (
+                <motion.span
+                  layoutId="browse-availability-active"
+                  className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_10px_24px_rgba(190,140,46,0.24)]"
+                  transition={{ type: 'spring', stiffness: 430, damping: 34 }}
+                />
+              )}
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <Icon className={`h-4 w-4 ${active ? 'text-white' : 'text-flame-700/75'}`} />
+                <span className="truncate">{label}</span>
+              </span>
+              <span className={`hidden text-[11px] font-medium sm:block ${active ? 'text-white/80' : 'text-gray-400'}`}>
+                {helper}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

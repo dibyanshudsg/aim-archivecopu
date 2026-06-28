@@ -2,6 +2,8 @@ import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { listPublicIssues as listTursoPublicIssues } from '@/lib/db';
 import type { SortColumn } from '@/lib/use-browse-filters';
 
+export type AvailabilityFilter = 'read' | 'subscriber' | 'all';
+
 export interface BrowseFacetOption<T extends string | number> {
   value: T;
   label: string;
@@ -17,6 +19,7 @@ export interface BrowseFacets {
 }
 
 export interface PublicIssueListInput {
+  availability: AvailabilityFilter;
   years: number[];
   months: number[];
   magazines: string[];
@@ -53,6 +56,7 @@ export function parsePublicIssueListInput(
 
   const pageSize = clamp(toInt(get('page_size')) ?? DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   return {
+    availability: parseAvailability(get('availability')),
     years: parseIntList(get('year')),
     months: parseIntList(get('month')).filter((m) => m >= 1 && m <= 12),
     magazines: parseStringList(get('magazine') ?? get('magazine_id')),
@@ -68,6 +72,11 @@ export function parsePublicIssueListInput(
 
 export async function listPublicIssues(input: PublicIssueListInput): Promise<PublicIssueListResult> {
   return listTursoPublicIssues(input);
+}
+
+function parseAvailability(value: string | undefined): AvailabilityFilter {
+  if (value === 'subscriber' || value === 'all') return value;
+  return 'read';
 }
 
 function parseStringList(value: string | undefined): string[] {

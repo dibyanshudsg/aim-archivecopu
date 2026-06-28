@@ -3,11 +3,13 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 import type { ApiIssue } from './api';
+import type { AvailabilityFilter } from './public-issues';
 
 export type FilterDimension = 'years' | 'months' | 'magazines' | 'languages' | 'subjects';
 export type SortColumn = 'title' | 'magazine' | 'language' | 'pages' | 'size' | 'reads';
 
 export interface BrowseFilters {
+  availability: AvailabilityFilter;
   years: number[];
   months: number[];
   magazines: string[];
@@ -35,6 +37,7 @@ export function useBrowseFilters() {
 
   const filters = useMemo<BrowseFilters>(
     () => ({
+      availability: parseAvailability(searchParams.get('availability')),
       years: parseIntArr(searchParams.get('year')),
       months: parseIntArr(searchParams.get('month')),
       magazines: parseStrArr(searchParams.get('magazine')),
@@ -78,6 +81,17 @@ export function useBrowseFilters() {
       const params = new URLSearchParams(searchParams.toString());
       if (view === 'grid') params.delete('view');
       else params.set('view', 'list');
+      writeParams(params);
+    },
+    [searchParams, writeParams],
+  );
+
+  const setAvailability = useCallback(
+    (availability: AvailabilityFilter) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (availability === 'read') params.delete('availability');
+      else params.set('availability', availability);
+      params.delete('page');
       writeParams(params);
     },
     [searchParams, writeParams],
@@ -143,11 +157,13 @@ export function useBrowseFilters() {
     filters.magazines.length +
     filters.languages.length +
     filters.subjects.length +
-    (filters.query.length > 0 ? 1 : 0);
+    (filters.query.length > 0 ? 1 : 0) +
+    (filters.availability !== 'read' ? 1 : 0);
 
   return {
     filters,
     toggleArray,
+    setAvailability,
     setView,
     setSort,
     setQuery,
@@ -156,6 +172,11 @@ export function useBrowseFilters() {
     activeFilterCount,
     hasActiveFilters: activeFilterCount > 0,
   };
+}
+
+function parseAvailability(value: string | null): AvailabilityFilter {
+  if (value === 'subscriber' || value === 'all') return value;
+  return 'read';
 }
 
 function parseIntArr(v: string | null): number[] {

@@ -53,7 +53,9 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
         'group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow duration-200 hover:shadow-2xl',
         isSelected
           ? 'border-flame-500 ring-2 ring-flame-500'
-          : 'border-gray-100 hover:border-flame-300',
+          : issue.isEmbargoed
+            ? 'border-gold-200 bg-gradient-to-b from-white to-gold-50/35 hover:border-flame-300'
+            : 'border-gray-100 hover:border-flame-300',
       )}
     >
       {/* Whole-card click target → open reader. Disabled in selection mode
@@ -118,6 +120,11 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
           <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm backdrop-blur-sm">
             <Lock className="h-2.5 w-2.5" />
             <span>{issue.embargoLiftLabel ?? 'Subscribers'}</span>
+          </div>
+        )}
+        {issue.isEmbargoed && !selectionEnabled && (
+          <div className="absolute top-3 left-3 z-10 rounded-full border border-gold-200 bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-normal text-gold-800 shadow-sm">
+            Subscribers first
           </div>
         )}
 
@@ -218,15 +225,14 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
           )}
         >
           {issue.isEmbargoed ? (
-            // Embargoed: a single muted "Available {Month YYYY}" affordance
-            // that routes to the detail page. No Read button — there's
-            // nothing to read until the embargo lifts.
+            // Embargoed: route to details only. The date chip on the cover
+            // carries the availability promise; this button is the action.
             <Link
               href={`/issue/${issue.id}`}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
             >
               <Lock className="h-3.5 w-3.5" />
-              {issue.embargoLiftLabel ? `Available ${issue.embargoLiftLabel}` : 'Subscribers only'}
+              View Details
             </Link>
           ) : (
             <>

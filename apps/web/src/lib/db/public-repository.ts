@@ -1,5 +1,5 @@
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
-import { applyEmbargoToIssueRow } from '@/lib/embargo';
+import { EMBARGO_MONTHS, applyEmbargoToIssueRow } from '@/lib/embargo';
 import type { BrowseFacets, PublicIssueListInput, PublicIssueListResult } from '@/lib/public-issues';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
 import { getDb, isSupabaseHostedUrl, nowIso } from './client';
@@ -51,6 +51,54 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
       .map((issue) => applyEmbargoToIssueRow(issue, now))
       .filter((issue) => !issue.is_embargoed)
       .slice(0, limit);
+  });
+}
+
+export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Promise<ApiIssue[]> {
+  return issueArrayCache.get(`embargoed:${limit}:${overfetch}`, async () => {
+    const result = await getDb().execute({
+      sql: `
+        SELECT ${issueSelectSql()}
+        FROM issues i
+        JOIN magazines m ON m.id = i.magazine_id
+        WHERE i.is_published = 1
+          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        ORDER BY i.year DESC, i.month DESC, m.created_at ASC
+        LIMIT ?
+      `,
+      args: [overfetch],
+    });
+
+    const now = new Date();
+    return result.rows
+      .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
+      .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
+      .map((issue) => applyEmbargoToIssueRow(issue, now))
+      .filter((issue) => issue.is_embargoed)
+      .slice(0, limit);
+  });
+}
+
+export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
+  return issueArrayCache.get(`home-shelf:${limit}`, async () => {
+    const result = await getDb().execute({
+      sql: `
+        SELECT ${issueSelectSql()}
+        FROM issues i
+        JOIN magazines m ON m.id = i.magazine_id
+        WHERE i.is_published = 1
+          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        ORDER BY i.year DESC, i.month DESC, m.created_at ASC
+        LIMIT ?
+      `,
+      args: [limit],
+    });
+
+    const now = new Date();
+    return result.rows
+      .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
+      .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
+      .map((issue) => applyEmbargoToIssueRow(issue, now));
   });
 }
 
@@ -262,6 +310,11 @@ function buildIssueWhere(
     "i.pdf_url NOT LIKE '%.supabase.co/%'",
   ];
   const args: SqlArg[] = [];
+  const availability = availabilityWhere(input.availability);
+  if (availability) {
+    clauses.push(availability.sql);
+    args.push(...availability.args);
+  }
 
   if (exclude !== 'years' && input.years.length > 0) addIn(clauses, args, 'i.year', input.years);
   if (exclude !== 'months' && input.months.length > 0) addIn(clauses, args, 'i.month', input.months);
@@ -286,6 +339,27 @@ function buildIssueWhere(
   }
 
   return { sql: `WHERE ${clauses.join(' AND ')}`, args };
+}
+
+function availabilityWhere(availability: PublicIssueListInput['availability']): SqlPart | null {
+  if (availability === 'all') return null;
+
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth() - EMBARGO_MONTHS, 1);
+  const cutoffYear = cutoff.getFullYear();
+  const cutoffMonth = cutoff.getMonth() + 1;
+
+  if (availability === 'subscriber') {
+    return {
+      sql: '(i.year > ? OR (i.year = ? AND i.month > ?))',
+      args: [cutoffYear, cutoffYear, cutoffMonth],
+    };
+  }
+
+  return {
+    sql: '(i.year < ? OR (i.year = ? AND i.month <= ?))',
+    args: [cutoffYear, cutoffYear, cutoffMonth],
+  };
 }
 
 function addIn(clauses: string[], args: SqlArg[], column: string, values: Array<string | number>) {

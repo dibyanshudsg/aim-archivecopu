@@ -11,6 +11,7 @@ export const revalidate = 60;
 
 async function fetchAllIssuesServer(): Promise<ApiIssue[]> {
   const result = await listPublicIssues({
+    availability: 'all',
     years: [],
     months: [],
     magazines: [],

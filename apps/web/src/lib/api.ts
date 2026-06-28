@@ -84,8 +84,12 @@ export async function fetchIssues(params?: {
   dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+  availability?: 'read' | 'subscriber' | 'all';
 }): Promise<PaginatedIssues> {
   const searchParams = new URLSearchParams();
+  if (params?.availability && params.availability !== 'read') {
+    searchParams.set('availability', params.availability);
+  }
   if (params?.magazineId) searchParams.set('magazine_id', params.magazineId);
   if (params?.year) searchParams.set('year', params.year);
   if (params?.month) searchParams.set('month', params.month);
