@@ -1,5 +1,5 @@
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
-import { EMBARGO_MONTHS, applyEmbargoToIssueRow } from '@/lib/embargo';
+import { applyEmbargoToIssueRow, readableCutoffIssueMonth } from '@/lib/embargo';
 import type { BrowseFacets, PublicIssueListInput, PublicIssueListResult } from '@/lib/public-issues';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
 import { getDb, isSupabaseHostedUrl, nowIso } from './client';
@@ -21,6 +21,11 @@ export function clearPublicRepositoryCaches(): void {
   issueCache.clear();
 }
 
+function embargoWindowCacheKey(): string {
+  const cutoff = readableCutoffIssueMonth();
+  return `${cutoff.year}-${cutoff.month}`;
+}
+
 export async function listMagazines(options: { orderBy?: 'name' | 'created_at' } = {}): Promise<ApiMagazine[]> {
   const orderBy = options.orderBy === 'created_at' ? 'created_at' : 'name';
   return magazineCache.get(orderBy, async () => {
@@ -30,7 +35,7 @@ export async function listMagazines(options: { orderBy?: 'name' | 'created_at' }
 }
 
 export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise<ApiIssue[]> {
-  return issueArrayCache.get(`recent:${limit}:${overfetch}`, async () => {
+  return issueArrayCache.get(`recent:${limit}:${overfetch}:${embargoWindowCacheKey()}`, async () => {
     const result = await getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
@@ -55,7 +60,7 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
 }
 
 export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Promise<ApiIssue[]> {
-  return issueArrayCache.get(`embargoed:${limit}:${overfetch}`, async () => {
+  return issueArrayCache.get(`embargoed:${limit}:${overfetch}:${embargoWindowCacheKey()}`, async () => {
     const result = await getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
@@ -80,7 +85,7 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
 }
 
 export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
-  return issueArrayCache.get(`home-shelf:${limit}`, async () => {
+  return issueArrayCache.get(`home-shelf:${limit}:${embargoWindowCacheKey()}`, async () => {
     const result = await getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
@@ -104,7 +109,7 @@ export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
 
 export async function listPublicIssuesForMonths(months: Array<{ year: number; month: number }>): Promise<ApiIssue[]> {
   if (months.length === 0) return [];
-  return issueArrayCache.get(`months:${JSON.stringify(months)}`, async () => {
+  return issueArrayCache.get(`months:${JSON.stringify(months)}:${embargoWindowCacheKey()}`, async () => {
     const clauses = months.map(() => '(i.year = ? AND i.month = ?)').join(' OR ');
     const args = months.flatMap((item) => [item.year, item.month]);
 
@@ -130,7 +135,7 @@ export async function listPublicIssuesForMonths(months: Array<{ year: number; mo
 }
 
 export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
-  return issueCache.get(id, async () => {
+  return issueCache.get(`${id}:${embargoWindowCacheKey()}`, async () => {
     const result = await getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
@@ -237,7 +242,7 @@ async function incrementIssueCounter(id: string, column: 'read_count' | 'downloa
 }
 
 export async function listPublicIssues(input: PublicIssueListInput): Promise<PublicIssueListResult> {
-  return publicListCache.get(JSON.stringify(input), () => listPublicIssuesUncached(input));
+  return publicListCache.get(`${JSON.stringify(input)}:${embargoWindowCacheKey()}`, () => listPublicIssuesUncached(input));
 }
 
 async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<PublicIssueListResult> {
@@ -344,10 +349,9 @@ function buildIssueWhere(
 function availabilityWhere(availability: PublicIssueListInput['availability']): SqlPart | null {
   if (availability === 'all') return null;
 
-  const now = new Date();
-  const cutoff = new Date(now.getFullYear(), now.getMonth() - EMBARGO_MONTHS, 1);
-  const cutoffYear = cutoff.getFullYear();
-  const cutoffMonth = cutoff.getMonth() + 1;
+  const cutoff = readableCutoffIssueMonth();
+  const cutoffYear = cutoff.year;
+  const cutoffMonth = cutoff.month;
 
   if (availability === 'subscriber') {
     return {

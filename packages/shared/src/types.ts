@@ -39,6 +39,11 @@ export interface Issue {
   /** Human-readable month/year for when the embargo lifts (e.g.
    *  `"May 2031"`). Null once the issue is publicly available. */
   embargoLiftLabel: string | null;
+  /** Exact global unlock instant. Null once the issue is publicly available. */
+  embargoLiftAt: string | null;
+  /** Server timestamp used by clients to schedule auto-refresh without
+   *  trusting the visitor's device clock. */
+  serverNow: string;
   createdAt: string;
   updatedAt: string;
 }

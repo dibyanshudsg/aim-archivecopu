@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -11,9 +11,12 @@ import {
   ArrowLeft,
   FileText,
   Calendar,
+  CalendarClock,
   Eye,
+  Globe2,
   HardDrive,
   Lock,
+  RefreshCw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -22,23 +25,82 @@ import { LANGUAGE_NAMES, MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex, Language } from '@aim-archive/shared';
 import { formatFileSize } from '@/lib/utils';
 import { useBookmarks } from '@/lib/bookmarks-store';
+import { EMBARGO_TIME_ZONE, EMBARGO_TIME_ZONE_LABEL } from '@/lib/embargo';
 
 interface IssueDetailClientProps {
   initialIssue: ApiIssue;
 }
 
+const MAX_UNLOCK_TIMER_DELAY_MS = 2_147_000_000;
+
 export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
   const { toggle, isBookmarked } = useBookmarks();
-  const issue = normalizeIssue(initialIssue);
+  const [apiIssue, setApiIssue] = useState(initialIssue);
+  const [unlockRefreshing, setUnlockRefreshing] = useState(false);
+  const issue = normalizeIssue(apiIssue);
   const [derivedPageCount, setDerivedPageCount] = useState<number | null>(issue.pageCount ?? null);
   const [pageCountLookupFailed, setPageCountLookupFailed] = useState(false);
 
-  // Fire-and-forget read-count increment. The GET /api/issues/[id] route
-  // bumps read_count as a side effect — we hit it in the background so the
-  // server-rendered page paints instantly while analytics still count.
   useEffect(() => {
-    fetchIssue(issue.id).catch(() => {});
+    setApiIssue(initialIssue);
+  }, [initialIssue]);
+
+  // This refresh corrects stale ISR HTML and also bumps read_count for issues
+  // that are already public. The API itself refuses to count embargoed reads.
+  useEffect(() => {
+    let cancelled = false;
+    fetchIssue(issue.id, { cache: 'no-store' })
+      .then((data) => {
+        if (!cancelled && data) setApiIssue(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [issue.id]);
+
+  useEffect(() => {
+    if (!issue.isEmbargoed || !issue.embargoLiftAt) return;
+
+    const liftAtMs = Date.parse(issue.embargoLiftAt);
+    const serverNowMs = Date.parse(issue.serverNow);
+    if (!Number.isFinite(liftAtMs) || !Number.isFinite(serverNowMs)) return;
+
+    let cancelled = false;
+    let timeout: number | null = null;
+    const receivedAt = performance.now();
+
+    async function refreshUnlockedIssue() {
+      setUnlockRefreshing(true);
+      try {
+        const data = await fetchIssue(issue.id, { cache: 'no-store' });
+        if (!cancelled && data) setApiIssue(data);
+      } finally {
+        if (!cancelled) setUnlockRefreshing(false);
+      }
+    }
+
+    function schedule() {
+      const elapsedSinceServerResponse = performance.now() - receivedAt;
+      const remaining = liftAtMs - serverNowMs - elapsedSinceServerResponse;
+      const delay = Math.min(Math.max(remaining, 0), MAX_UNLOCK_TIMER_DELAY_MS);
+
+      timeout = window.setTimeout(() => {
+        if (cancelled) return;
+        if (remaining > MAX_UNLOCK_TIMER_DELAY_MS) {
+          schedule();
+          return;
+        }
+        void refreshUnlockedIssue();
+      }, delay);
+    }
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [issue.embargoLiftAt, issue.id, issue.isEmbargoed, issue.serverNow]);
 
   useEffect(() => {
     if (issue.pageCount) {
@@ -188,7 +250,11 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
               </div>
 
               {issue.isEmbargoed ? (
-                <EmbargoNotice liftLabel={issue.embargoLiftLabel} />
+                <EmbargoNotice
+                  liftLabel={issue.embargoLiftLabel}
+                  liftAt={issue.embargoLiftAt}
+                  refreshing={unlockRefreshing}
+                />
               ) : (
                 <div className="mt-8 flex flex-wrap gap-3">
                   <Link
@@ -279,7 +345,18 @@ function MetaItem({
   );
 }
 
-function EmbargoNotice({ liftLabel }: { liftLabel: string | null }) {
+function EmbargoNotice({
+  liftLabel,
+  liftAt,
+  refreshing,
+}: {
+  liftLabel: string | null;
+  liftAt: string | null;
+  refreshing: boolean;
+}) {
+  const indiaUnlockLabel = useMemo(() => formatUnlockInstant(liftAt, EMBARGO_TIME_ZONE, 'en-IN'), [liftAt]);
+  const localUnlockLabel = useMemo(() => formatUnlockInstant(liftAt), [liftAt]);
+
   return (
     <div className="mt-8 overflow-hidden rounded-xl border border-flame-200 bg-gradient-to-br from-gold-50/80 to-flame-50/80 p-6 shadow-sm">
       <div className="flex items-start gap-4">
@@ -295,10 +372,71 @@ function EmbargoNotice({ liftLabel }: { liftLabel: string | null }) {
             circulation. The archive opens it to everyone on a rolling 5-year window — the cover,
             theme, and topics stay visible here so you can find it again when it goes public.
           </p>
+
+          {liftAt && (
+            <>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <UnlockMeta
+                  icon={CalendarClock}
+                  label="Archive unlock"
+                  value={indiaUnlockLabel ?? `${liftLabel} at 12:00 AM ${EMBARGO_TIME_ZONE_LABEL}`}
+                />
+                <UnlockMeta
+                  icon={Globe2}
+                  label="Your local time"
+                  value={localUnlockLabel ?? 'At the same global moment'}
+                />
+              </div>
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-flame-100 bg-white/75 px-3 py-2 text-xs font-semibold text-flame-700 shadow-sm">
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>
+                  {refreshing
+                    ? 'Unlocking reading access...'
+                    : 'This page will switch to reading access when the release time arrives.'}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function UnlockMeta({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-flame-100 bg-white/70 p-3 shadow-sm">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-normal text-flame-700">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className="mt-1 text-sm font-semibold leading-snug text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function formatUnlockInstant(value: string | null, timeZone?: string, locale?: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
 }
 
 function FormatBadge({ format, available }: { format: string; available: boolean }) {

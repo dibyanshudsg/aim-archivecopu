@@ -70,6 +70,8 @@ export function rowToIssue(row: IssueJoinedRow): ApiIssue {
     is_published: Boolean(row.is_published),
     is_embargoed: false,
     embargo_lift_label: null,
+    embargo_lift_at: null,
+    server_now: new Date().toISOString(),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     magazines: {

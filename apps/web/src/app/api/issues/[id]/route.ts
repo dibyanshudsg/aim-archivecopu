@@ -18,5 +18,9 @@ export async function GET(
       console.error('Failed to increment read count:', incrementError);
     }
   }
-  return NextResponse.json(issue);
+  return NextResponse.json(issue, {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
 }

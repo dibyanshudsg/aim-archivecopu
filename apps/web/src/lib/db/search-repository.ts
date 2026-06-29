@@ -238,6 +238,7 @@ function decorateSearchRows(rows: SearchRow[]): FullTextSearchResult[] {
       pdf_url: state.isEmbargoed ? null : row.pdf_url,
       is_embargoed: state.isEmbargoed,
       embargo_lift_label: state.embargoLiftLabel,
+      embargo_lift_at: state.embargoLiftAt,
     });
   }
 

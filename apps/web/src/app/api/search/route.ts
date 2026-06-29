@@ -37,6 +37,7 @@ interface FtsRow {
   pdf_url: string | null;
   is_embargoed: boolean;
   embargo_lift_label: string | null;
+  embargo_lift_at: string | null;
 }
 
 function escapeHtml(text: string): string {
@@ -149,6 +150,7 @@ export async function GET(request: NextRequest) {
         pdf_url: state.isEmbargoed ? null : i.pdf_url,
         is_embargoed: state.isEmbargoed,
         embargo_lift_label: state.embargoLiftLabel,
+        embargo_lift_at: state.embargoLiftAt,
       };
     });
 

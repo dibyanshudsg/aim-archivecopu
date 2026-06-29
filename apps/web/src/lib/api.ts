@@ -26,6 +26,11 @@ export interface ApiIssue {
   /** Human-readable month/year for when the embargo lifts (e.g. `"May 2031"`).
    *  Null once the issue is publicly available. */
   embargo_lift_label: string | null;
+  /** Exact global unlock instant. Null once the issue is publicly available. */
+  embargo_lift_at: string | null;
+  /** Server timestamp used to schedule client-side auto-refresh without
+   *  trusting the visitor's device clock. */
+  server_now: string;
   created_at: string;
   updated_at: string;
   magazines: {
@@ -85,6 +90,7 @@ export async function fetchIssues(params?: {
   page?: number;
   pageSize?: number;
   availability?: 'read' | 'subscriber' | 'all';
+  signal?: AbortSignal;
 }): Promise<PaginatedIssues> {
   const searchParams = new URLSearchParams();
   if (params?.availability && params.availability !== 'read') {
@@ -106,13 +112,13 @@ export async function fetchIssues(params?: {
   if (params?.page) searchParams.set('page', String(params.page));
   if (params?.pageSize) searchParams.set('page_size', String(params.pageSize));
 
-  const res = await fetch(`${BASE_URL}/api/issues?${searchParams}`);
+  const res = await fetch(`${BASE_URL}/api/issues?${searchParams}`, { signal: params?.signal });
   if (!res.ok) throw new Error('Failed to fetch issues');
   return res.json();
 }
 
-export async function fetchIssue(id: string): Promise<ApiIssue | null> {
-  const res = await fetch(`${BASE_URL}/api/issues/${id}`);
+export async function fetchIssue(id: string, init?: RequestInit): Promise<ApiIssue | null> {
+  const res = await fetch(`${BASE_URL}/api/issues/${id}`, init);
   if (!res.ok) return null;
   return res.json();
 }
@@ -136,6 +142,7 @@ export interface FullTextSearchResult {
   pdf_url: string | null;
   is_embargoed: boolean;
   embargo_lift_label: string | null;
+  embargo_lift_at: string | null;
 }
 
 export interface SearchResponse {
@@ -182,6 +189,8 @@ export function normalizeIssue(issue: ApiIssue) {
     isPublished: issue.is_published,
     isEmbargoed: issue.is_embargoed,
     embargoLiftLabel: issue.embargo_lift_label,
+    embargoLiftAt: issue.embargo_lift_at,
+    serverNow: issue.server_now,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
     magazine: {
