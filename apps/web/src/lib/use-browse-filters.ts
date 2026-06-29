@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ApiIssue } from './api';
 import type { AvailabilityFilter } from './public-issues';
 
@@ -22,37 +22,19 @@ export interface BrowseFilters {
   page: number;
 }
 
-const ARRAY_KEYS: Record<FilterDimension, string> = {
-  years: 'year',
-  months: 'month',
-  magazines: 'magazine',
-  languages: 'language',
-  subjects: 'subject',
-};
-
 export function useBrowseFilters() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const filters = useMemo<BrowseFilters>(
-    () => ({
-      availability: parseAvailability(searchParams.get('availability')),
-      years: parseIntArr(searchParams.get('year')),
-      months: parseIntArr(searchParams.get('month')),
-      magazines: parseStrArr(searchParams.get('magazine')),
-      languages: parseStrArr(searchParams.get('language')),
-      subjects: parseStrArr(searchParams.get('subject')),
-      query: (searchParams.get('q') ?? '').trim(),
-      view: searchParams.get('view') === 'list' ? 'list' : 'grid',
-      sort: (searchParams.get('sort') as SortColumn | null) ?? null,
-      dir: searchParams.get('dir') === 'asc' ? 'asc' : 'desc',
-      page: Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1),
-    }),
-    [searchParams],
-  );
+  const [filters, setFilters] = useState<BrowseFilters>(() => parseFilters(searchParams));
 
-  const writeParams = useCallback(
-    (next: URLSearchParams) => {
+  useEffect(() => {
+    setFilters(parseFilters(searchParams));
+  }, [searchParams]);
+
+  const writeFilters = useCallback(
+    (nextFilters: BrowseFilters) => {
+      const next = filtersToSearchParams(nextFilters);
       const qs = next.toString();
       const href = qs ? `${pathname}?${qs}` : pathname;
       const current = `${window.location.pathname}${window.location.search}`;
@@ -62,97 +44,82 @@ export function useBrowseFilters() {
     [pathname],
   );
 
+  const commitFilters = useCallback(
+    (nextFilters: BrowseFilters) => {
+      setFilters(nextFilters);
+      writeFilters(nextFilters);
+    },
+    [writeFilters],
+  );
+
   const toggleArray = useCallback(
     (dimension: FilterDimension, value: string | number) => {
-      const params = new URLSearchParams(searchParams.toString());
       const current = filters[dimension] as Array<string | number>;
       const next = current.includes(value)
         ? current.filter((v) => v !== value)
         : [...current, value];
-      const key = ARRAY_KEYS[dimension];
-      if (next.length === 0) params.delete(key);
-      else params.set(key, next.join(','));
-      params.delete('page'); // reset to page 1 when filters change
-      writeParams(params);
+      commitFilters({ ...filters, [dimension]: next, page: 1 });
     },
-    [filters, searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const setView = useCallback(
     (view: 'grid' | 'list') => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (view === 'grid') params.delete('view');
-      else params.set('view', 'list');
-      writeParams(params);
+      commitFilters({ ...filters, view });
     },
-    [searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const setAvailability = useCallback(
     (availability: AvailabilityFilter) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (availability === 'read') params.delete('availability');
-      else params.set('availability', availability);
-      params.delete('page');
-      writeParams(params);
+      if (availability === filters.availability) return;
+      commitFilters({ ...filters, availability, page: 1 });
     },
-    [searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const setSort = useCallback(
     (col: SortColumn) => {
-      const params = new URLSearchParams(searchParams.toString());
+      let nextSort: SortColumn | null = col;
+      let nextDir: 'asc' | 'desc' = 'desc';
       if (filters.sort === col) {
         const newDir = filters.dir === 'desc' ? 'asc' : null;
         if (newDir === 'asc') {
-          params.set('sort', col);
-          params.set('dir', 'asc');
+          nextDir = 'asc';
         } else {
-          params.delete('sort');
-          params.delete('dir');
+          nextSort = null;
+          nextDir = 'desc';
         }
-      } else {
-        params.set('sort', col);
-        params.delete('dir');
       }
-      params.delete('page'); // sort change resets to page 1
-      writeParams(params);
+      commitFilters({ ...filters, sort: nextSort, dir: nextDir, page: 1 });
     },
-    [filters.sort, filters.dir, searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const setQuery = useCallback(
     (value: string) => {
-      if (value.trim() === filters.query) return;
-      const params = new URLSearchParams(searchParams.toString());
       const trimmed = value.trim();
-      if (trimmed.length === 0) params.delete('q');
-      else params.set('q', trimmed);
-      params.delete('page');
-      writeParams(params);
+      if (trimmed === filters.query) return;
+      commitFilters({ ...filters, query: trimmed, page: 1 });
     },
-    [filters.query, searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const setPage = useCallback(
     (page: number) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (page <= 1) params.delete('page');
-      else params.set('page', String(page));
-      writeParams(params);
+      commitFilters({ ...filters, page: Math.max(1, page) });
     },
-    [searchParams, writeParams],
+    [commitFilters, filters],
   );
 
   const clearAll = useCallback(() => {
-    const params = new URLSearchParams();
-    if (filters.view === 'list') params.set('view', 'list');
-    if (filters.sort) {
-      params.set('sort', filters.sort);
-      if (filters.dir === 'asc') params.set('dir', 'asc');
-    }
-    writeParams(params);
-  }, [filters.view, filters.sort, filters.dir, writeParams]);
+    commitFilters({
+      ...EMPTY_FILTERS,
+      view: filters.view,
+      sort: filters.sort,
+      dir: filters.dir,
+    });
+  }, [commitFilters, filters.dir, filters.sort, filters.view]);
 
   const activeFilterCount =
     filters.years.length +
@@ -175,6 +142,60 @@ export function useBrowseFilters() {
     activeFilterCount,
     hasActiveFilters: activeFilterCount > 0,
   };
+}
+
+const EMPTY_FILTERS: BrowseFilters = {
+  availability: 'read',
+  years: [],
+  months: [],
+  magazines: [],
+  languages: [],
+  subjects: [],
+  query: '',
+  view: 'grid',
+  sort: null,
+  dir: 'desc',
+  page: 1,
+};
+
+function parseFilters(params: { get(name: string): string | null }): BrowseFilters {
+  return {
+    availability: parseAvailability(params.get('availability')),
+    years: parseIntArr(params.get('year')),
+    months: parseIntArr(params.get('month')),
+    magazines: parseStrArr(params.get('magazine')),
+    languages: parseStrArr(params.get('language')),
+    subjects: parseStrArr(params.get('subject')),
+    query: (params.get('q') ?? '').trim(),
+    view: params.get('view') === 'list' ? 'list' : 'grid',
+    sort: (params.get('sort') as SortColumn | null) ?? null,
+    dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
+    page: Math.max(1, parseInt(params.get('page') ?? '1', 10) || 1),
+  };
+}
+
+function filtersToSearchParams(filters: BrowseFilters): URLSearchParams {
+  const params = new URLSearchParams();
+
+  if (filters.availability !== 'read') params.set('availability', filters.availability);
+  setArrayParam(params, 'year', filters.years);
+  setArrayParam(params, 'month', filters.months);
+  setArrayParam(params, 'magazine', filters.magazines);
+  setArrayParam(params, 'language', filters.languages);
+  setArrayParam(params, 'subject', filters.subjects);
+  if (filters.query.length > 0) params.set('q', filters.query);
+  if (filters.view === 'list') params.set('view', 'list');
+  if (filters.sort) {
+    params.set('sort', filters.sort);
+    if (filters.dir === 'asc') params.set('dir', 'asc');
+  }
+  if (filters.page > 1) params.set('page', String(filters.page));
+
+  return params;
+}
+
+function setArrayParam(params: URLSearchParams, key: string, values: Array<string | number>) {
+  if (values.length > 0) params.set(key, values.join(','));
 }
 
 function parseAvailability(value: string | null): AvailabilityFilter {
