@@ -7,6 +7,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ArrowUpDown,
+  CalendarDays,
+  Check,
   Plus,
   Trash2,
   Eye,
@@ -26,6 +29,7 @@ import {
   RotateCw,
   ExternalLink,
   FileUp,
+  Clock3,
 } from 'lucide-react';
 import { cn, formatFileSize } from '@/lib/utils';
 import { MONTH_NAMES } from '@aim-archive/shared';
@@ -43,8 +47,77 @@ type SortField = 'title' | 'year' | 'read_count' | 'download_count' | 'file_size
 type SortDir = 'asc' | 'desc';
 type StatusFilter = 'all' | 'published' | 'draft';
 
+interface SortOption {
+  field: SortField;
+  dir: SortDir;
+  label: string;
+  helper: string;
+}
+
 const PAGE_SIZE = 25;
 const DESCRIPTION_PREVIEW_LENGTH = 110;
+const SORT_OPTIONS: SortOption[] = [
+  {
+    field: 'updated_at',
+    dir: 'desc',
+    label: 'Modified: newest first',
+    helper: 'Recently edited issues at the top',
+  },
+  {
+    field: 'updated_at',
+    dir: 'asc',
+    label: 'Modified: oldest first',
+    helper: 'Oldest edits first',
+  },
+  {
+    field: 'year',
+    dir: 'desc',
+    label: 'Issue date: newest first',
+    helper: 'Latest year and month first',
+  },
+  {
+    field: 'year',
+    dir: 'asc',
+    label: 'Issue date: oldest first',
+    helper: 'Earliest year and month first',
+  },
+  {
+    field: 'title',
+    dir: 'asc',
+    label: 'Magazine title: A-Z',
+    helper: 'Alphabetical by issue title',
+  },
+  {
+    field: 'title',
+    dir: 'desc',
+    label: 'Magazine title: Z-A',
+    helper: 'Reverse alphabetical title order',
+  },
+  {
+    field: 'read_count',
+    dir: 'desc',
+    label: 'Most reads',
+    helper: 'Highest read count first',
+  },
+  {
+    field: 'download_count',
+    dir: 'desc',
+    label: 'Most downloads',
+    helper: 'Highest download count first',
+  },
+  {
+    field: 'file_size_bytes',
+    dir: 'desc',
+    label: 'Largest file',
+    helper: 'Biggest PDFs first',
+  },
+  {
+    field: 'file_size_bytes',
+    dir: 'asc',
+    label: 'Smallest file',
+    helper: 'Smallest PDFs first',
+  },
+];
 
 export function AdminIssuesClient({
   initialIssueResult,
@@ -161,6 +234,12 @@ export function AdminIssuesClient({
       setSortField(field);
       setSortDir('desc');
     }
+  }
+
+  function applySort(field: SortField, dir: SortDir) {
+    setPage(1);
+    setSortField(field);
+    setSortDir(dir);
   }
 
   async function handleDelete(issue: Issue) {
@@ -473,6 +552,12 @@ export function AdminIssuesClient({
             </option>
           ))}
         </select>
+
+        <SortMenu
+          currentField={sortField}
+          currentDir={sortDir}
+          onChange={applySort}
+        />
 
         <span className="ml-auto text-sm text-gray-400">
           {totalIssues} matching issue{totalIssues === 1 ? '' : 's'}
@@ -834,6 +919,135 @@ function buildAdminIssuesUrl(input: {
   if (input.status !== 'all') params.set('status', input.status);
   if (input.topic !== 'all') params.set('topic', input.topic);
   return `/api/admin/issues?${params.toString()}`;
+}
+
+function SortMenu({
+  currentField,
+  currentDir,
+  onChange,
+}: {
+  currentField: SortField;
+  currentDir: SortDir;
+  onChange: (field: SortField, dir: SortDir) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const activeOption = getSortOption(currentField, currentDir);
+  const ActiveIcon =
+    currentField === 'updated_at' ? Clock3 : currentField === 'year' ? CalendarDays : ArrowUpDown;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative w-full sm:w-auto">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          'flex h-[42px] w-full items-center justify-between gap-3 rounded-xl border bg-white px-3.5 text-left text-sm shadow-sm transition-all sm:min-w-[230px]',
+          open
+            ? 'border-flame-300 ring-2 ring-flame-100'
+            : 'border-gray-200 hover:border-flame-200 hover:bg-flame-50/30',
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600 ring-1 ring-flame-100">
+            <ActiveIcon className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-gray-900">Sort</span>
+            <span className="block truncate text-[11px] text-gray-500">{activeOption.label}</span>
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-gray-400 transition-transform',
+            open && 'rotate-180 text-flame-600',
+          )}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="absolute right-0 z-40 mt-2 w-full min-w-[280px] overflow-hidden rounded-2xl border border-flame-100 bg-white shadow-[0_20px_60px_rgba(120,84,28,0.16)] ring-1 ring-white sm:w-[320px]"
+            role="menu"
+            aria-label="Sort issues"
+          >
+            <div className="border-b border-gray-100 bg-gradient-to-r from-gold-50/80 to-flame-50/70 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <ArrowUpDown className="h-4 w-4 text-flame-600" />
+                Sort issues
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">Choose how the issue list is ordered.</p>
+            </div>
+            <div className="max-h-[min(430px,calc(100vh-220px))] overflow-y-auto p-1.5">
+              {SORT_OPTIONS.map((option) => {
+                const active = option.field === currentField && option.dir === currentDir;
+                return (
+                  <button
+                    key={`${option.field}-${option.dir}`}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => {
+                      onChange(option.field, option.dir);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
+                      active ? 'bg-flame-50 text-flame-800' : 'text-gray-700 hover:bg-gray-50',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition-colors',
+                        active
+                          ? 'bg-white text-flame-600 ring-flame-200'
+                          : 'bg-gray-50 text-gray-300 ring-gray-100 group-hover:text-flame-500',
+                      )}
+                    >
+                      {active ? <Check className="h-4 w-4" /> : <ArrowUpDown className="h-3.5 w-3.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block truncate text-xs text-gray-500">{option.helper}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function getSortOption(field: SortField, dir: SortDir): SortOption {
+  return SORT_OPTIONS.find((option) => option.field === field && option.dir === dir) ?? SORT_OPTIONS[0];
 }
 
 function SortHeader({
