@@ -19,6 +19,7 @@ import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { LANGUAGE_NAMES, MONTH_NAMES } from '@aim-archive/shared';
 import type { Language, MonthIndex } from '@aim-archive/shared';
 import { useBookmarks } from '@/lib/bookmarks-store';
+import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { cn, formatFileSize } from '@/lib/utils';
 
 // Configure react-pdf worker (idempotent — same setup as the reader page).
@@ -704,7 +705,8 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
 
         <div className="mt-5 flex items-center justify-center gap-2">
           <Link
-            href={`/read/${issue.id}?from=shelf`}
+            href={readerPath(issue.id)}
+            onClick={() => rememberReaderSource(issue.id, 'shelf')}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.24)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_12px_28px_rgba(229,86,31,0.28)]"
           >
             <BookOpen className="h-4 w-4" />

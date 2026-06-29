@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BookOpen, Lock } from 'lucide-react';
 import type { FullTextSearchResult } from '@/lib/api';
+import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 
@@ -94,7 +95,8 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
           </Link>
         ) : (
           <Link
-            href={`/read/${result.issue_id}?page=${result.page_number}&from=search`}
+            href={readerPath(result.issue_id, result.page_number)}
+            onClick={() => rememberReaderSource(result.issue_id, 'search')}
             className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
           >
             <BookOpen className="h-3.5 w-3.5" />

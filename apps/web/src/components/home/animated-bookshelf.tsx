@@ -18,6 +18,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { pdfjs } from 'react-pdf';
 import type { ApiIssue } from '@/lib/api';
+import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { formatMonthYear } from '@/lib/utils';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -115,7 +116,12 @@ function IssueBook({
   }
 
   function navigateToTarget() {
-    router.push(canPreview ? `/read/${issue.id}?from=shelf` : `/issue/${issue.id}`);
+    if (canPreview) {
+      rememberReaderSource(issue.id, 'shelf');
+      router.push(readerPath(issue.id));
+    } else {
+      router.push(`/issue/${issue.id}`);
+    }
   }
 
   useEffect(() => {

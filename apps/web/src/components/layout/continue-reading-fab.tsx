@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BookMarked, X, Trash2 } from 'lucide-react';
 import { formatMonthYear } from '@/lib/utils';
 import { isEmbargoed } from '@/lib/embargo';
+import { readerPath, rememberDirectResume, rememberReaderSource } from '@/lib/reader-url';
 import {
   clearReadingHistoryEntry,
   formatRelativeTime,
@@ -74,7 +75,9 @@ export function ContinueReadingFab() {
 
   function openIssue(entry: ReadingHistoryEntry) {
     setOpen(false);
-    router.push(`/read/${entry.issueId}?page=${entry.page}&resume=1`);
+    rememberReaderSource(entry.issueId, 'shelf');
+    rememberDirectResume(entry.issueId);
+    router.push(readerPath(entry.issueId, entry.page));
   }
 
   function removeEntry(e: React.MouseEvent, issueId: string) {

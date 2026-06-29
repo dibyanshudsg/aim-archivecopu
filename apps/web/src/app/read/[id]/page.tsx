@@ -36,13 +36,18 @@ import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import { shareIssue, sharePage } from '@/lib/share-issue';
 import { ReaderPageScrubber } from '@/components/reader/page-scrubber';
 import { CopyDisclaimerToast } from '@/components/reader/copy-disclaimer-toast';
+import {
+  consumeDirectResume,
+  consumeReaderSource,
+  isReaderSource,
+  type ReaderSource,
+} from '@/lib/reader-url';
 import type { IssueWithMagazine } from '@aim-archive/shared';
 
 // PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 type PdfDocLike = import('pdfjs-dist').PDFDocumentProxy;
-type ReaderSource = 'issue' | 'shelf' | 'browse' | 'search' | 'bookmarks';
 
 export default function ReaderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -147,7 +152,11 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
       .finally(() => setPageLoading(false));
   }, [id]);
 
+  const directResumeRef = useRef(false);
+
   // Read ?page= from URL once on mount (avoids useSearchParams Suspense).
+  // Source/resume are navigation state, so old query params are consumed and
+  // stripped while new same-tab navigations use sessionStorage.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -156,10 +165,26 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     if (Number.isFinite(n) && n >= 1) setCurrentPage(n);
 
     const from = params.get('from');
-    if (from === 'shelf' || from === 'browse' || from === 'search' || from === 'bookmarks') {
+    const rememberedSource = consumeReaderSource(id);
+    if (isReaderSource(from)) {
       setReaderSource(from);
+    } else if (rememberedSource) {
+      setReaderSource(rememberedSource);
     }
-  }, []);
+
+    directResumeRef.current = params.get('resume') === '1' || consumeDirectResume(id);
+
+    if (params.has('from') || params.has('resume')) {
+      params.delete('from');
+      params.delete('resume');
+      const qs = params.toString();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`,
+      );
+    }
+  }, [id]);
 
   // Restore global view-mode preferences once on mount. We set `hydrated` at
   // the end so the matching write effects below don't fire with the default
@@ -266,6 +291,8 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    params.delete('from');
+    params.delete('resume');
     if (currentPage > 1) params.set('page', String(currentPage));
     else params.delete('page');
     const qs = params.toString();
@@ -532,11 +559,10 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
       return;
     }
     const t = setTimeout(() => {
-      // ?resume=1 means the user came in from the Continue-Reading FAB and
+      // Direct resume means the user came in from the Continue-Reading FAB and
       // explicitly chose to resume. Skip the toast and jump straight to the
       // saved scroll position.
-      const resumeNow =
-        new URLSearchParams(window.location.search).get('resume') === '1';
+      const resumeNow = directResumeRef.current;
 
       let saved:
         | {
@@ -570,15 +596,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         programmaticScrollTimer.current = setTimeout(() => {
           isProgrammaticScroll.current = false;
         }, 300);
-        // Strip ?resume=1 so a refresh won't keep auto-scrolling.
-        const params = new URLSearchParams(window.location.search);
-        params.delete('resume');
-        const qs = params.toString();
-        window.history.replaceState(
-          null,
-          '',
-          `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`,
-        );
+        directResumeRef.current = false;
       } else {
         scrollToPage(currentPage);
         if (canResumeExact) {

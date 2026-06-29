@@ -14,6 +14,7 @@ import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import type { SortColumn } from '@/lib/use-browse-filters';
 import { cn } from '@/lib/utils';
 import { shareIssue } from '@/lib/share-issue';
+import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 
 interface Props {
   issues: IssueWithMagazine[];
@@ -146,7 +147,12 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
         }
         // Embargoed issues route to the detail page (where the embargo
         // messaging lives) — opening the reader would just paint a broken PDF.
-        router.push(issue.isEmbargoed ? `/issue/${issue.id}` : `/read/${issue.id}?from=browse`);
+        if (issue.isEmbargoed) {
+          router.push(`/issue/${issue.id}`);
+        } else {
+          rememberReaderSource(issue.id, 'browse');
+          router.push(readerPath(issue.id));
+        }
       }}
       className={cn(
         'relative cursor-pointer transition-shadow duration-200 hover:z-10 hover:shadow-lg',
@@ -286,7 +292,10 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
     >
       {!selectionEnabled && (
         <Link
-          href={issue.isEmbargoed ? `/issue/${issue.id}` : `/read/${issue.id}?from=browse`}
+          href={issue.isEmbargoed ? `/issue/${issue.id}` : readerPath(issue.id)}
+          onClick={() => {
+            if (!issue.isEmbargoed) rememberReaderSource(issue.id, 'browse');
+          }}
           className="absolute inset-0 z-0"
           aria-label={issue.isEmbargoed ? `View ${issue.title}` : `Read ${issue.title}`}
         />

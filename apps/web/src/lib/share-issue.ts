@@ -1,5 +1,6 @@
 import { MONTH_NAMES, type MonthIndex } from '@aim-archive/shared';
 import type { IssueWithMagazine } from '@aim-archive/shared';
+import { readerPath } from '@/lib/reader-url';
 
 export type ShareResult = 'shared' | 'copied' | 'failed';
 
@@ -79,7 +80,7 @@ export async function sharePage(
 ): Promise<ShareResult> {
   if (typeof window === 'undefined') return 'failed';
 
-  const url = `${window.location.origin}/read/${issue.id}?page=${pageNumber}`;
+  const url = `${window.location.origin}${readerPath(issue.id, pageNumber)}`;
   const monthYear = `${MONTH_NAMES[issue.month as MonthIndex]} ${issue.year}`;
   const title = `${issue.magazine.name} — ${monthYear} · Page ${pageNumber}`;
   const text = `Page ${pageNumber} of the ${monthYear} issue of ${issue.magazine.name}, from the Sri Aurobindo Society's digital archive. 🌻\n\n🌐 Link: ${url}`;

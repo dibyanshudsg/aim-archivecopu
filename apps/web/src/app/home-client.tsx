@@ -38,6 +38,7 @@ import {
   getRecentReads,
   type ReadingHistoryEntry,
 } from '@/lib/reading-history';
+import { readerPath, rememberDirectResume, rememberReaderSource } from '@/lib/reader-url';
 import { formatMonthYear } from '@/lib/utils';
 
 // Slide-up entrance — no opacity gate. Opacity transitions block LCP measurement
@@ -143,7 +144,11 @@ function ContinueReadingShelf() {
             return (
               <Link
                 key={entry.issueId}
-                href={`/read/${entry.issueId}?page=${entry.page}&resume=1&from=shelf`}
+                href={readerPath(entry.issueId, entry.page)}
+                onClick={() => {
+                  rememberReaderSource(entry.issueId, 'shelf');
+                  rememberDirectResume(entry.issueId);
+                }}
                 className="group flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 bg-white p-3 text-left transition-all hover:border-flame-200 hover:bg-flame-50/40 hover:shadow-sm active:border-flame-200 active:bg-flame-50/40 active:shadow-sm"
               >
                 <div className="relative h-20 w-[60px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-50 shadow-sm">

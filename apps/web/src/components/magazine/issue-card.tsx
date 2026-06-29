@@ -11,6 +11,7 @@ import { formatFileSize, formatMonthYear, cn } from '@/lib/utils';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { shareIssue } from '@/lib/share-issue';
+import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 
 interface IssueCardProps {
   issue: IssueWithMagazine;
@@ -26,7 +27,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
   // message lives) instead of the reader, which can't load their PDF.
   const readHref = issue.isEmbargoed
     ? `/issue/${issue.id}`
-    : `/read/${issue.id}?from=${source}`;
+    : readerPath(issue.id);
 
   // Bulk selection — when enabled, the card becomes a toggle target instead
   // of a Link, and a checkbox overlay surfaces selection state.
@@ -63,6 +64,9 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
       {!selectionEnabled && (
         <Link
           href={readHref}
+          onClick={() => {
+            if (!issue.isEmbargoed) rememberReaderSource(issue.id, source);
+          }}
           aria-label={`Read ${issue.title}`}
           className="absolute inset-0 z-0"
         />
@@ -238,6 +242,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
             <>
               <Link
                 href={readHref}
+                onClick={() => rememberReaderSource(issue.id, source)}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
               >
                 <BookOpen className="h-3.5 w-3.5" />
