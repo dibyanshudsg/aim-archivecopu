@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 import type { ApiIssue } from './api';
 import type { AvailabilityFilter } from './public-issues';
@@ -31,7 +31,6 @@ const ARRAY_KEYS: Record<FilterDimension, string> = {
 };
 
 export function useBrowseFilters() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -55,9 +54,12 @@ export function useBrowseFilters() {
   const writeParams = useCallback(
     (next: URLSearchParams) => {
       const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const href = qs ? `${pathname}?${qs}` : pathname;
+      const current = `${window.location.pathname}${window.location.search}`;
+      if (href === current) return;
+      window.history.replaceState(window.history.state, '', href);
     },
-    [router, pathname],
+    [pathname],
   );
 
   const toggleArray = useCallback(
@@ -121,6 +123,7 @@ export function useBrowseFilters() {
 
   const setQuery = useCallback(
     (value: string) => {
+      if (value.trim() === filters.query) return;
       const params = new URLSearchParams(searchParams.toString());
       const trimmed = value.trim();
       if (trimmed.length === 0) params.delete('q');
@@ -128,7 +131,7 @@ export function useBrowseFilters() {
       params.delete('page');
       writeParams(params);
     },
-    [searchParams, writeParams],
+    [filters.query, searchParams, writeParams],
   );
 
   const setPage = useCallback(

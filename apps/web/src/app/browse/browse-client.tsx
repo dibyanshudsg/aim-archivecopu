@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, CheckSquare, Filter, Layers3, LockKeyhole } from 'lucide-react';
 import { Header } from '@/components/layout/header';
@@ -13,9 +13,10 @@ import { IssueListView } from '@/components/browse/issue-list-view';
 import { Pagination } from '@/components/browse/pagination';
 import { BulkActionBar } from '@/components/browse/bulk-action-bar';
 import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
-import { fetchIssues, fetchMagazines, normalizeIssue } from '@/lib/api';
+import { fetchIssues, normalizeIssue } from '@/lib/api';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { useBrowseFilters } from '@/lib/use-browse-filters';
+import type { BrowseFilters } from '@/lib/use-browse-filters';
 import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
@@ -23,6 +24,13 @@ import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
+
+interface BrowseCacheEntry {
+  issues: ApiIssue[];
+  total: number;
+  totalPages: number;
+  facets: BrowseFacets;
+}
 
 const availabilityOptions = [
   {
@@ -107,9 +115,22 @@ function BrowseContent({
   } = useBrowseFilters();
 
   const gridTopRef = useRef<HTMLDivElement>(null);
+  const currentCacheKey = useMemo(() => browseCacheKey(filters), [filters]);
+  const responseCacheRef = useRef(new Map<string, BrowseCacheEntry>());
+  const inFlightPrefetchRef = useRef(new Set<string>());
+  const cacheSeededRef = useRef(false);
+  if (!cacheSeededRef.current) {
+    responseCacheRef.current.set(currentCacheKey, {
+      issues: initialIssues,
+      total: initialTotal,
+      totalPages: initialTotalPages,
+      facets: initialFacets,
+    });
+    cacheSeededRef.current = true;
+  }
 
   // Seeded from the server render — first paint shows real cards, no skeleton.
-  const [magazines, setMagazines] = useState<ApiMagazine[]>(initialMagazines);
+  const [magazines] = useState<ApiMagazine[]>(initialMagazines);
   const [issues, setIssues] = useState<ApiIssue[]>(initialIssues);
   const [total, setTotal] = useState(initialTotal);
   const [totalPages, setTotalPages] = useState(initialTotalPages);
@@ -134,10 +155,19 @@ function BrowseContent({
       return;
     }
 
+    const cached = responseCacheRef.current.get(currentCacheKey);
+    if (cached) {
+      setIssues(cached.issues);
+      setTotal(cached.total);
+      setTotalPages(cached.totalPages);
+      setFacets(cached.facets);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
     setLoading(true);
-    Promise.all([
-      fetchMagazines(),
-      fetchIssues({
+    fetchIssues({
         years: filters.years,
         months: filters.months,
         magazines: filters.magazines,
@@ -149,18 +179,77 @@ function BrowseContent({
         page: filters.page,
         pageSize: PAGE_SIZE,
         availability: filters.availability,
-      }),
-    ])
-      .then(([m, i]) => {
-        setMagazines(m);
-        setIssues(i.data);
-        setTotal(i.total);
-        setTotalPages(i.totalPages);
-        if (i.facets) setFacets(i.facets);
+        signal: controller.signal,
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [filters]);
+      .then((result) => {
+        const entry = {
+          issues: result.data,
+          total: result.total,
+          totalPages: result.totalPages,
+          facets: result.facets ?? initialFacets,
+        };
+        responseCacheRef.current.set(currentCacheKey, entry);
+        setIssues(entry.issues);
+        setTotal(entry.total);
+        setTotalPages(entry.totalPages);
+        setFacets(entry.facets);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        console.error(error);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [currentCacheKey, filters, initialFacets]);
+
+  const prefetchAvailability = useCallback(
+    (availability: AvailabilityFilter) => {
+      if (availability === filters.availability || !shouldPrefetchAvailability(filters)) return;
+      const key = browseCacheKey(filters, { availability, page: 1 });
+      if (responseCacheRef.current.has(key) || inFlightPrefetchRef.current.has(key)) return;
+
+      inFlightPrefetchRef.current.add(key);
+      fetchIssues({
+        years: filters.years,
+        months: filters.months,
+        magazines: filters.magazines,
+        languages: filters.languages,
+        subjects: filters.subjects,
+        query: filters.query,
+        sort: filters.sort,
+        dir: filters.dir,
+        page: 1,
+        pageSize: PAGE_SIZE,
+        availability,
+      })
+        .then((result) => {
+          responseCacheRef.current.set(key, {
+            issues: result.data,
+            total: result.total,
+            totalPages: result.totalPages,
+            facets: result.facets ?? initialFacets,
+          });
+        })
+        .catch(() => {
+          /* best-effort warm cache */
+        })
+        .finally(() => {
+          inFlightPrefetchRef.current.delete(key);
+        });
+    },
+    [filters, initialFacets],
+  );
+
+  useEffect(() => {
+    if (!shouldPrefetchAvailability(filters)) return;
+    const timeout = window.setTimeout(() => {
+      availabilityOptions.forEach((option) => prefetchAvailability(option.id));
+    }, 700);
+    return () => window.clearTimeout(timeout);
+  }, [filters, prefetchAvailability]);
 
   const currentPage = Math.min(filters.page, totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -285,6 +374,7 @@ function BrowseContent({
             <AvailabilityTabs
               value={filters.availability}
               onChange={setAvailability}
+              onPrefetch={prefetchAvailability}
             />
           </div>
         </div>
@@ -449,22 +539,26 @@ function BrowseContent({
 function AvailabilityTabs({
   value,
   onChange,
+  onPrefetch,
 }: {
   value: AvailabilityFilter;
   onChange: (availability: AvailabilityFilter) => void;
+  onPrefetch: (availability: AvailabilityFilter) => void;
 }) {
   return (
     <div className="w-full max-w-xl rounded-2xl border border-flame-100 bg-white/90 p-1.5 shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white lg:w-auto">
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
         {availabilityOptions.map(({ id, label, helper, Icon }) => {
           const active = value === id;
           return (
             <button
               key={id}
               type="button"
+              onPointerEnter={() => onPrefetch(id)}
+              onFocus={() => onPrefetch(id)}
               onClick={() => onChange(id)}
               aria-pressed={active}
-              className={`relative isolate flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl px-3 text-center transition-colors ${
+              className={`relative isolate flex min-h-[48px] min-w-0 items-center justify-start gap-2 overflow-hidden rounded-xl px-3 text-left transition-colors sm:min-h-[58px] sm:flex-col sm:justify-center sm:gap-0.5 sm:px-3 sm:text-center ${
                 active
                   ? 'text-white'
                   : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
@@ -477,9 +571,18 @@ function AvailabilityTabs({
                   transition={{ type: 'spring', stiffness: 430, damping: 34 }}
                 />
               )}
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <Icon className={`h-4 w-4 ${active ? 'text-white' : 'text-flame-700/75'}`} />
-                <span className="truncate">{label}</span>
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-auto sm:w-auto sm:rounded-none ${
+                  active ? 'bg-white/15 text-white sm:bg-transparent' : 'bg-flame-50 text-flame-700/75 sm:bg-transparent'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1 sm:flex-none">
+                <span className="block text-sm font-semibold leading-snug sm:inline">{label}</span>
+                <span className={`block text-[11px] font-medium sm:hidden ${active ? 'text-white/80' : 'text-gray-400'}`}>
+                  {helper}
+                </span>
               </span>
               <span className={`hidden text-[11px] font-medium sm:block ${active ? 'text-white/80' : 'text-gray-400'}`}>
                 {helper}
@@ -489,6 +592,37 @@ function AvailabilityTabs({
         })}
       </div>
     </div>
+  );
+}
+
+function browseCacheKey(
+  filters: BrowseFilters,
+  overrides: Partial<Pick<BrowseFilters, 'availability' | 'page'>> = {},
+) {
+  return JSON.stringify({
+    availability: overrides.availability ?? filters.availability,
+    years: filters.years,
+    months: filters.months,
+    magazines: filters.magazines,
+    languages: filters.languages,
+    subjects: filters.subjects,
+    query: filters.query,
+    sort: filters.sort,
+    dir: filters.dir,
+    page: overrides.page ?? filters.page,
+  });
+}
+
+function shouldPrefetchAvailability(filters: BrowseFilters) {
+  return (
+    filters.page === 1 &&
+    filters.query.length === 0 &&
+    !filters.sort &&
+    filters.years.length === 0 &&
+    filters.months.length === 0 &&
+    filters.magazines.length === 0 &&
+    filters.languages.length === 0 &&
+    filters.subjects.length === 0
   );
 }
 

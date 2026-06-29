@@ -12,17 +12,26 @@ export function HeaderSearchDropdown() {
   const { filters, setQuery } = useBrowseFilters();
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const syncingFromUrlRef = useRef(false);
 
-  // Local input state owns the value so the controlled input never drops
-  // keystrokes during the URL roundtrip. Every keystroke also writes to the
-  // URL — filtering applies instantly because applyFilters is pure-JS over the
-  // already-loaded list, and the URL update doesn't reset the input (it's
-  // bound to localQuery, not filters.query).
+  // Local input state owns the value so typing never waits on the URL/API
+  // roundtrip. The URL update is debounced below.
   const [localQuery, setLocalQuery] = useState(filters.query);
   // Sync local ← URL when the URL changes externally (e.g. chip removed).
   useEffect(() => {
+    syncingFromUrlRef.current = true;
     setLocalQuery(filters.query);
   }, [filters.query]);
+
+  useEffect(() => {
+    if (syncingFromUrlRef.current) {
+      syncingFromUrlRef.current = false;
+      return;
+    }
+    if (localQuery.trim() === filters.query) return;
+    const timeout = window.setTimeout(() => setQuery(localQuery), 300);
+    return () => window.clearTimeout(timeout);
+  }, [filters.query, localQuery, setQuery]);
 
   // Auto-focus the input on open + close on Escape.
   useEffect(() => {
@@ -59,7 +68,6 @@ export function HeaderSearchDropdown() {
                   value={localQuery}
                   onChange={(e) => {
                     setLocalQuery(e.target.value);
-                    setQuery(e.target.value);
                   }}
                   placeholder="Search issues, topics, magazines…"
                   // Suppress the global flame focus ring — the animated gold
