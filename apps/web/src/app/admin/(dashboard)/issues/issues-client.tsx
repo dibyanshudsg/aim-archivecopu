@@ -30,7 +30,12 @@ import {
   ExternalLink,
   FileUp,
   Clock3,
+  BookCopy,
+  CircleDot,
+  ListFilter,
+  Tag,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn, formatFileSize } from '@/lib/utils';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
@@ -52,6 +57,12 @@ interface SortOption {
   dir: SortDir;
   label: string;
   helper: string;
+}
+
+interface AdminFilterOption {
+  value: string;
+  label: string;
+  helper?: string;
 }
 
 const PAGE_SIZE = 25;
@@ -163,6 +174,72 @@ export function AdminIssuesClient({
 
   const pageStart = (page - 1) * PAGE_SIZE;
   const pageIssues = issues;
+  const selectedMagazineName = useMemo(
+    () => magazines.find((magazine) => magazine.id === filterMagazine)?.name ?? null,
+    [filterMagazine, magazines],
+  );
+  const activeFilterChips = useMemo(
+    () =>
+      [
+        search.trim()
+          ? {
+              key: 'search',
+              label: 'Search',
+              value: search.trim(),
+              onRemove: () => {
+                setSearch('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterMagazine !== 'all' && selectedMagazineName
+          ? {
+              key: 'magazine',
+              label: 'Magazine',
+              value: selectedMagazineName,
+              onRemove: () => {
+                setFilterMagazine('all');
+                setPage(1);
+              },
+            }
+          : null,
+        filterYear !== 'all'
+          ? {
+              key: 'year',
+              label: 'Year',
+              value: filterYear,
+              onRemove: () => {
+                setFilterYear('all');
+                setPage(1);
+              },
+            }
+          : null,
+        filterStatus !== 'all'
+          ? {
+              key: 'status',
+              label: 'Status',
+              value: filterStatus === 'published' ? 'Published' : 'Draft',
+              onRemove: () => {
+                setFilterStatus('all');
+                setPage(1);
+              },
+            }
+          : null,
+        filterTopic !== 'all'
+          ? {
+              key: 'topic',
+              label: 'Topic',
+              value: filterTopic,
+              onRemove: () => {
+                setFilterTopic('all');
+                setPage(1);
+              },
+            }
+          : null,
+      ].filter((chip): chip is { key: string; label: string; value: string; onRemove: () => void } => Boolean(chip)),
+    [filterMagazine, filterStatus, filterTopic, filterYear, search, selectedMagazineName],
+  );
+  const hasActiveFilters = activeFilterChips.length > 0;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -240,6 +317,15 @@ export function AdminIssuesClient({
     setPage(1);
     setSortField(field);
     setSortDir(dir);
+  }
+
+  function clearAllFilters() {
+    setSearch('');
+    setFilterMagazine('all');
+    setFilterYear('all');
+    setFilterStatus('all');
+    setFilterTopic('all');
+    setPage(1);
   }
 
   async function handleDelete(issue: Issue) {
@@ -433,13 +519,15 @@ export function AdminIssuesClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Issues</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold tracking-wide text-gray-900">Issues</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={exportCsv}
             disabled={totalIssues === 0}
-            className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 sm:flex"
+            className="hidden h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50/40 hover:text-flame-700 disabled:opacity-50 sm:flex"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Export CSV
@@ -448,7 +536,7 @@ export function AdminIssuesClient({
             href="/admin/issues/bulk"
             onMouseEnter={() => router.prefetch('/admin/issues/bulk')}
             onFocus={() => router.prefetch('/admin/issues/bulk')}
-            className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:flex"
+            className="hidden h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50/40 hover:text-flame-700 sm:flex"
           >
             <Upload className="h-4 w-4" />
             Bulk Upload
@@ -457,7 +545,7 @@ export function AdminIssuesClient({
             href="/admin/issues/new"
             onMouseEnter={() => router.prefetch('/admin/issues/new')}
             onFocus={() => router.prefetch('/admin/issues/new')}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
+            className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-4 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
           >
             <Plus className="h-4 w-4" />
             Upload Issue
@@ -466,102 +554,158 @@ export function AdminIssuesClient({
       </div>
 
       {/* Search & Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search issues..."
-            className="w-full rounded-xl border border-gray-200 py-2.5 pr-9 pl-10 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
-          />
-          {search && (
-            <button
-              onClick={() => {
-                setSearch('');
+      <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-[0_12px_34px_rgba(15,23,42,0.04)] ring-1 ring-white">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
                 setPage(1);
               }}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+              placeholder="Search by magazine title, theme, topic, or description..."
+              className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50/60 pr-10 pl-11 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:border-flame-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-flame-100"
+            />
+            {search && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setPage(1);
+                }}
+                className="absolute top-1/2 right-3 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex h-12 shrink-0 items-center gap-3 rounded-xl border border-gray-100 bg-gradient-to-r from-gray-50 to-white px-4 text-sm text-gray-500">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-flame-600 ring-1 ring-flame-100">
+              <ListFilter className="h-3.5 w-3.5" />
+            </span>
+            <span>
+              <span className="font-semibold text-gray-900">{totalIssues}</span>{' '}
+              matching issue{totalIssues === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
-        <select
-          value={filterMagazine}
-          onChange={(e) => {
-            setFilterMagazine(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
-        >
-          <option value="all">All Magazines</option>
-          {magazines.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(190px,1fr)_minmax(150px,0.7fr)_minmax(160px,0.75fr)_minmax(220px,1.2fr)_minmax(235px,1fr)]">
+          <AdminFilterMenu
+            icon={BookCopy}
+            label="Magazine"
+            title="Filter by magazine"
+            value={filterMagazine}
+            onChange={(value) => {
+              setFilterMagazine(value);
+              setPage(1);
+            }}
+            options={[
+              { value: 'all', label: 'All Magazines', helper: 'Every magazine collection' },
+              ...magazines.map((magazine) => ({
+                value: magazine.id,
+                label: magazine.name,
+                helper: 'Only issues from this magazine',
+              })),
+            ]}
+          />
 
-        <select
-          value={filterYear}
-          onChange={(e) => {
-            setFilterYear(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
-        >
-          <option value="all">All Years</option>
-          {years.map((y) => (
-            <option key={y} value={String(y)}>
-              {y}
-            </option>
-          ))}
-        </select>
+          <AdminFilterMenu
+            icon={CalendarDays}
+            label="Year"
+            title="Filter by year"
+            value={filterYear}
+            onChange={(value) => {
+              setFilterYear(value);
+              setPage(1);
+            }}
+            options={[
+              { value: 'all', label: 'All Years', helper: 'Every publication year' },
+              ...years.map((year) => ({
+                value: String(year),
+                label: String(year),
+                helper: `Issues published in ${year}`,
+              })),
+            ]}
+          />
 
-        <select
-          value={filterStatus}
-          onChange={(e) => {
-            setFilterStatus(e.target.value as StatusFilter);
-            setPage(1);
-          }}
-          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
-        >
-          <option value="all">All Status</option>
-          <option value="published">Published</option>
-          <option value="draft">Draft</option>
-        </select>
+          <AdminFilterMenu
+            icon={CircleDot}
+            label="Status"
+            title="Filter by status"
+            value={filterStatus}
+            onChange={(value) => {
+              setFilterStatus(value as StatusFilter);
+              setPage(1);
+            }}
+            options={[
+              { value: 'all', label: 'All Status', helper: 'Published and draft issues' },
+              { value: 'published', label: 'Published', helper: 'Visible in the public archive' },
+              { value: 'draft', label: 'Draft', helper: 'Hidden from public readers' },
+            ]}
+          />
 
-        <select
-          value={filterTopic}
-          onChange={(e) => {
-            setFilterTopic(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm"
-        >
-          <option value="all">All Topics</option>
-          {allTopics.map((t) => (
-            <option key={t.name} value={t.name}>
-              {t.name} ({t.count})
-            </option>
-          ))}
-        </select>
+          <AdminFilterMenu
+            icon={Tag}
+            label="Topic"
+            title="Filter by topic"
+            value={filterTopic}
+            onChange={(value) => {
+              setFilterTopic(value);
+              setPage(1);
+            }}
+            options={[
+              { value: 'all', label: 'All Topics', helper: 'Every indexed topic tag' },
+              ...allTopics.map((topic) => ({
+                value: topic.name,
+                label: `${topic.name} (${topic.count})`,
+                helper: `${topic.count} issue${topic.count === 1 ? '' : 's'} tagged`,
+              })),
+            ]}
+          />
 
-        <SortMenu
-          currentField={sortField}
-          currentDir={sortDir}
-          onChange={applySort}
-        />
+          <SortMenu
+            currentField={sortField}
+            currentDir={sortDir}
+            onChange={applySort}
+          />
+        </div>
 
-        <span className="ml-auto text-sm text-gray-400">
-          {totalIssues} matching issue{totalIssues === 1 ? '' : 's'}
-        </span>
+        <AnimatePresence initial={false}>
+          {hasActiveFilters && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+              className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3"
+            >
+              {activeFilterChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.onRemove}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-flame-100 bg-gradient-to-r from-gold-50 to-flame-50 px-3 py-1.5 text-xs font-medium text-flame-800 transition-colors hover:border-flame-200 hover:from-gold-100 hover:to-flame-100"
+                  title={`Remove ${chip.label}: ${chip.value}`}
+                >
+                  <span className="text-flame-500">{chip.label}:</span>
+                  <span className="max-w-[14rem] truncate">{chip.value}</span>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="ml-1 text-xs font-medium text-gray-400 transition-colors hover:text-flame-700"
+              >
+                Clear all
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Bulk actions toolbar */}
@@ -921,6 +1065,135 @@ function buildAdminIssuesUrl(input: {
   return `/api/admin/issues?${params.toString()}`;
 }
 
+function AdminFilterMenu({
+  icon: Icon,
+  label,
+  title,
+  value,
+  options,
+  onChange,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  value: string;
+  options: AdminFilterOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const activeOption = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          'flex h-12 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition-all',
+          open
+            ? 'border-flame-300 bg-white ring-2 ring-flame-100'
+            : 'border-gray-200 bg-gray-50/60 hover:border-flame-200 hover:bg-flame-50/30',
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-flame-600 ring-1 ring-flame-100">
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{label}</span>
+            <span className="block truncate text-sm font-semibold text-gray-900">{activeOption?.label ?? label}</span>
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-gray-400 transition-transform',
+            open && 'rotate-180 text-flame-600',
+          )}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="absolute left-0 z-40 mt-2 w-full min-w-[260px] overflow-hidden rounded-2xl border border-flame-100 bg-white shadow-[0_20px_60px_rgba(120,84,28,0.16)] ring-1 ring-white sm:min-w-[300px]"
+            role="menu"
+            aria-label={title}
+          >
+            <div className="border-b border-gray-100 bg-gradient-to-r from-gold-50/80 to-flame-50/70 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <Icon className="h-4 w-4 text-flame-600" />
+                {title}
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">Choose which issues stay visible in the list.</p>
+            </div>
+            <div className="max-h-[min(360px,calc(100vh-220px))] overflow-y-auto p-1.5">
+              {options.map((option) => {
+                const active = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
+                      active ? 'bg-flame-50 text-flame-800' : 'text-gray-700 hover:bg-gray-50',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition-colors',
+                        active
+                          ? 'bg-white text-flame-600 ring-flame-200'
+                          : 'bg-gray-50 text-gray-300 ring-gray-100 group-hover:text-flame-500',
+                      )}
+                    >
+                      {active ? <Check className="h-4 w-4" /> : <Icon className="h-3.5 w-3.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{option.label}</span>
+                      {option.helper && <span className="block truncate text-xs text-gray-500">{option.helper}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function SortMenu({
   currentField,
   currentDir,
@@ -955,26 +1228,26 @@ function SortMenu({
   }, [open]);
 
   return (
-    <div ref={menuRef} className="relative w-full sm:w-auto">
+    <div ref={menuRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          'flex h-[42px] w-full items-center justify-between gap-3 rounded-xl border bg-white px-3.5 text-left text-sm shadow-sm transition-all sm:min-w-[230px]',
+          'flex h-12 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition-all',
           open
-            ? 'border-flame-300 ring-2 ring-flame-100'
-            : 'border-gray-200 hover:border-flame-200 hover:bg-flame-50/30',
+            ? 'border-flame-300 bg-white ring-2 ring-flame-100'
+            : 'border-gray-200 bg-gray-50/60 hover:border-flame-200 hover:bg-flame-50/30',
         )}
       >
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600 ring-1 ring-flame-100">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-flame-600 ring-1 ring-flame-100">
             <ActiveIcon className="h-3.5 w-3.5" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-medium text-gray-900">Sort</span>
-            <span className="block truncate text-[11px] text-gray-500">{activeOption.label}</span>
+            <span className="block text-[10px] font-semibold tracking-wide text-gray-400 uppercase">Sort</span>
+            <span className="block truncate text-sm font-semibold text-gray-900">{activeOption.label}</span>
           </span>
         </span>
         <ChevronDown

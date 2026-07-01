@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, CheckSquare, Filter, Layers3, LockKeyhole } from 'lucide-react';
+import { ArrowUp, BookOpen, CheckSquare, Filter, Layers3, LockKeyhole } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { IssueCard } from '@/components/magazine/issue-card';
@@ -24,6 +24,13 @@ import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
+const BROWSE_GRID_COLUMNS = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5';
+const BROWSE_GRID_FULL_SPAN = 'col-span-2 sm:col-span-3 md:col-span-3 lg:col-span-4 xl:col-span-4 2xl:col-span-5';
+
+type NormalizedIssue = ReturnType<typeof normalizeIssue>;
+type BrowseGridItem =
+  | { type: 'year'; year: number; key: string }
+  | { type: 'issue'; issue: NormalizedIssue; index: number };
 
 interface BrowseCacheEntry {
   issues: ApiIssue[];
@@ -136,16 +143,44 @@ function BrowseContent({
   const [totalPages, setTotalPages] = useState(initialTotalPages);
   const [facets, setFacets] = useState(initialFacets);
   const [loading, setLoading] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const showScrollTopRef = useRef(false);
   const firstFetchRef = useRef(true);
 
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(PANEL_STORAGE_KEY) : null;
     if (stored !== null) setPanelOpen(stored === 'true');
+    else if (window.matchMedia('(max-width: 767px)').matches) setPanelOpen(false);
   }, []);
   useEffect(() => {
     if (typeof window !== 'undefined') localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
   }, [panelOpen]);
+
+  useEffect(() => {
+    let frame = 0;
+
+    const updateScrollTopVisibility = () => {
+      frame = 0;
+      const nextVisible = window.scrollY > 520;
+      if (nextVisible === showScrollTopRef.current) return;
+      showScrollTopRef.current = nextVisible;
+      setShowScrollTop(nextVisible);
+    };
+
+    const handleScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateScrollTopVisibility);
+    };
+
+    updateScrollTopVisibility();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   // The server component seeds first paint for the current URL. Later URL
   // changes fetch a real paginated slice instead of filtering a 100-row cache.
@@ -255,6 +290,11 @@ function BrowseContent({
   const pageStart = (currentPage - 1) * PAGE_SIZE;
   const pageEnd = Math.min(pageStart + issues.length, total);
   const normalized = useMemo(() => issues.map(normalizeIssue), [issues]);
+  const showYearSeparators = filters.sort === null;
+  const gridItems = useMemo(
+    () => buildYearSeparatedGridItems(normalized, showYearSeparators),
+    [normalized, showYearSeparators],
+  );
   const copy = availabilityCopy[filters.availability];
   const issueCountText =
     total === 0
@@ -269,6 +309,10 @@ function BrowseContent({
       const top = gridTopRef.current.getBoundingClientRect().top + window.scrollY - 80;
       window.scrollTo({ top, behavior: 'smooth' });
     }
+  }
+
+  function handleScrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // Bulk selection / download state. Selection mode is reset whenever this
@@ -504,9 +548,13 @@ function BrowseContent({
               onSort={setSort}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
-              {normalized.map((issue, i) => (
-                <IssueCard key={issue.id} issue={issue} index={i} />
+            <div className={`grid ${BROWSE_GRID_COLUMNS} gap-4`}>
+              {gridItems.map((item) => (
+                item.type === 'year' ? (
+                  <YearSeparator key={item.key} year={item.year} />
+                ) : (
+                  <IssueCard key={item.issue.id} issue={item.issue} index={item.index} />
+                )
               ))}
             </div>
           )}
@@ -532,7 +580,55 @@ function BrowseContent({
         onCancel={cancelDownload}
         onClose={closeDownloadModal}
       />
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 18, scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 30, mass: 0.7 }}
+            onClick={handleScrollToTop}
+            aria-label="Scroll to top"
+            title="Scroll to top"
+            className="fixed right-6 bottom-24 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_12px_30px_rgba(190,140,46,0.28)] ring-1 ring-flame-600/20 transition-colors hover:from-gold-600 hover:to-flame-600 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          >
+            <ArrowUp className="h-6 w-6" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </main>
+  );
+}
+
+function buildYearSeparatedGridItems(issues: NormalizedIssue[], showSeparators: boolean): BrowseGridItem[] {
+  const items: BrowseGridItem[] = [];
+  let previousYear: number | null = null;
+
+  issues.forEach((issue, index) => {
+    if (showSeparators && issue.year !== previousYear) {
+      items.push({ type: 'year', year: issue.year, key: `year-${issue.year}-${index}` });
+      previousYear = issue.year;
+    }
+
+    items.push({ type: 'issue', issue, index });
+  });
+
+  return items;
+}
+
+function YearSeparator({ year }: { year: number }) {
+  return (
+    <div className={`${BROWSE_GRID_FULL_SPAN} py-2 sm:py-3`} aria-label={`Issues from ${year}`}>
+      <div className="flex items-center gap-4">
+        <span className="h-[2px] flex-1 rounded-full bg-gradient-to-r from-transparent via-gold-300 to-flame-300 shadow-[0_1px_0_rgba(255,255,255,0.9)]" />
+        <span className="relative inline-flex h-8 min-w-20 items-center justify-center rounded-full border border-flame-100 bg-white px-4 text-sm font-semibold tracking-wide text-flame-800 shadow-[0_8px_24px_rgba(120,84,28,0.08)] ring-1 ring-white">
+          <span className="absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-gold-300 to-transparent" />
+          {year}
+        </span>
+        <span className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent via-gold-300 to-flame-300 shadow-[0_1px_0_rgba(255,255,255,0.9)]" />
+      </div>
+    </div>
   );
 }
 
@@ -546,7 +642,7 @@ function AvailabilityTabs({
   onPrefetch: (availability: AvailabilityFilter) => void;
 }) {
   return (
-    <div className="w-full max-w-xl rounded-2xl border border-flame-100 bg-white/90 p-1.5 shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white lg:w-auto">
+    <div className="w-full max-w-xl rounded-2xl border border-flame-100 bg-white/90 p-1.5 shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white sm:w-[492px] sm:shrink-0">
       <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
         {availabilityOptions.map(({ id, label, helper, Icon }) => {
           const active = value === id;
@@ -558,7 +654,7 @@ function AvailabilityTabs({
               onFocus={() => onPrefetch(id)}
               onClick={() => onChange(id)}
               aria-pressed={active}
-              className={`relative isolate flex min-h-[48px] min-w-0 items-center justify-start gap-2 overflow-hidden rounded-xl px-3 text-left transition-colors sm:min-h-[58px] sm:flex-col sm:justify-center sm:gap-0.5 sm:px-3 sm:text-center ${
+              className={`relative isolate flex h-[52px] min-w-0 items-center justify-start gap-2 overflow-hidden rounded-xl px-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:h-[58px] sm:flex-col sm:justify-center sm:gap-0.5 sm:px-2 sm:text-center ${
                 active
                   ? 'text-white'
                   : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
@@ -579,12 +675,14 @@ function AvailabilityTabs({
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1 sm:flex-none">
-                <span className="block text-sm font-semibold leading-snug sm:inline">{label}</span>
+                <span className="block truncate text-sm font-semibold leading-snug sm:inline sm:whitespace-nowrap sm:text-[13px]">
+                  {label}
+                </span>
                 <span className={`block text-[11px] font-medium sm:hidden ${active ? 'text-white/80' : 'text-gray-400'}`}>
                   {helper}
                 </span>
               </span>
-              <span className={`hidden text-[11px] font-medium sm:block ${active ? 'text-white/80' : 'text-gray-400'}`}>
+              <span className={`hidden whitespace-nowrap text-[11px] font-medium leading-none sm:block ${active ? 'text-white/80' : 'text-gray-400'}`}>
                 {helper}
               </span>
             </button>
@@ -637,7 +735,7 @@ function LoadingState({ view }: { view: 'grid' | 'list' }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className={`grid ${BROWSE_GRID_COLUMNS} gap-4`}>
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="animate-pulse rounded-2xl border border-gray-100 bg-white">
           <div className="aspect-[3/4] rounded-t-2xl bg-gray-100" />
