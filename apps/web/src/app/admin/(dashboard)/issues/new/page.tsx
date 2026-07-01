@@ -22,6 +22,9 @@ interface DuplicatePrefill {
   description?: string;
 }
 
+const MAX_PDF_BYTES = 100 * 1024 * 1024;
+const MAX_COVER_BYTES = 4 * 1024 * 1024;
+
 export default function UploadIssuePage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -109,12 +112,17 @@ export default function UploadIssuePage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError('');
-    } else {
+    if (!f) return;
+    if (f.type !== 'application/pdf') {
       setError('Please select a PDF file');
+      return;
     }
+    if (f.size > MAX_PDF_BYTES) {
+      setError('PDF must be under 100MB');
+      return;
+    }
+    setFile(f);
+    setError('');
   }
 
   function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -122,6 +130,10 @@ export default function UploadIssuePage() {
     if (!f) return;
     if (!f.type.startsWith('image/')) {
       setError('Cover must be an image file (JPG, PNG, WebP)');
+      return;
+    }
+    if (f.size > MAX_COVER_BYTES) {
+      setError('Cover image must be under 4MB');
       return;
     }
     setError('');
@@ -194,6 +206,7 @@ export default function UploadIssuePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) { setError('Please select a PDF file'); return; }
+    if (file.size > MAX_PDF_BYTES) { setError('PDF must be under 100MB'); return; }
 
     setUploading(true);
     setProgress('Starting upload…');
@@ -201,7 +214,6 @@ export default function UploadIssuePage() {
     setError('');
 
     const formData = new FormData();
-    formData.append('pdf', file);
     formData.append('magazine_id', form.magazine_id);
     formData.append('title', form.title);
     formData.append('theme', form.theme);
@@ -224,6 +236,12 @@ export default function UploadIssuePage() {
     }
 
     if (effectiveCoverFile) {
+      if (effectiveCoverFile.size > MAX_COVER_BYTES) {
+        setError('Cover image must be under 4MB');
+        setUploading(false);
+        setProgressStep(null);
+        return;
+      }
       formData.append('cover', effectiveCoverFile);
       if (coverSource) formData.append('cover_source', coverSource);
       formData.append('cover_orientation', coverOrientation);
@@ -231,17 +249,62 @@ export default function UploadIssuePage() {
 
     // Map server step → user-facing label + % so the bar fills as events arrive.
     const STEP_MAP: Record<string, { label: string; pct: number }> = {
-      'uploading-pdf': { label: 'Uploading PDF to storage', pct: 30 },
-      'processing-cover': { label: 'Processing cover image', pct: 65 },
+      'uploading-pdf': { label: 'Uploading PDF to storage', pct: 35 },
+      'verifying-pdf': { label: 'Verifying uploaded PDF', pct: 55 },
+      'processing-cover': { label: 'Processing cover image', pct: 72 },
       'creating-record': { label: 'Saving issue', pct: 90 },
     };
 
     try {
+      setProgress('Preparing secure upload…');
+      setProgressStep({ label: 'Preparing secure upload', pct: 20 });
+      const presignRes = await fetch('/api/admin/upload/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          magazine_id: form.magazine_id,
+          year: form.year,
+          filename: file.name,
+          content_type: file.type,
+          size: file.size,
+        }),
+      });
+      if (!presignRes.ok) {
+        const data = await presignRes.json().catch(() => ({}));
+        setError(data.error || 'Could not prepare upload');
+        return;
+      }
+      const presigned = (await presignRes.json()) as {
+        uploadUrl: string;
+        publicUrl: string;
+        storageKey: string;
+      };
+
+      setProgress('Uploading PDF to storage…');
+      setProgressStep({ label: 'Uploading PDF to storage', pct: 35 });
+      const directUploadRes = await fetch(presigned.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: file,
+      });
+      if (!directUploadRes.ok) {
+        setError(`Storage upload failed (${directUploadRes.status})`);
+        return;
+      }
+
+      formData.append('pdf_url', presigned.publicUrl);
+      formData.append('storage_key', presigned.storageKey);
+      formData.append('file_size_bytes', String(file.size));
+
       const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
 
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || 'Upload failed');
+        setError(
+          res.status === 413
+            ? 'Upload is too large for the server request. Try a smaller cover image.'
+            : data.error || 'Upload failed',
+        );
         return;
       }
 
@@ -298,8 +361,12 @@ export default function UploadIssuePage() {
       }
 
       router.push('/admin/issues');
-    } catch {
-      setError('Upload failed. Please try again.');
+    } catch (err) {
+      setError(
+        err instanceof TypeError
+          ? 'Upload failed. Check R2 CORS settings for direct browser uploads.'
+          : 'Upload failed. Please try again.',
+      );
     } finally {
       setUploading(false);
       setProgressStep(null);
@@ -348,7 +415,7 @@ export default function UploadIssuePage() {
               <>
                 <Upload className="h-8 w-8 text-gray-400" />
                 <p className="mt-2 text-sm font-medium text-gray-600">Click to select PDF</p>
-                <p className="text-xs text-gray-400">Max 50MB</p>
+                <p className="text-xs text-gray-400">Max 100MB</p>
               </>
             )}
           </div>
@@ -374,7 +441,7 @@ export default function UploadIssuePage() {
             >
               <Upload className="h-7 w-7 text-gray-400" />
               <p className="mt-2 text-sm font-medium text-gray-600">Click to select cover image</p>
-              <p className="text-xs text-gray-400">JPG / PNG · combined front+back spread is fine</p>
+              <p className="text-xs text-gray-400">JPG / PNG · max 4MB · combined front+back spread is fine</p>
             </div>
           ) : (
             <div className="space-y-3 rounded-2xl border border-flame-200 bg-gradient-to-br from-gold-50/50 to-flame-50/50 p-4">

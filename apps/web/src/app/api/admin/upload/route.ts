@@ -5,7 +5,7 @@ import { extractPdfText } from '@/lib/pdf-extract';
 import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
-import { uploadToR2 } from '@/lib/r2-client';
+import { isR2Url, keyFromPublicUrl, uploadToR2 } from '@/lib/r2-client';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 export const runtime = 'nodejs';
@@ -32,12 +32,22 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get('pdf') as File | null;
+  const directPdfUrl = String(formData.get('pdf_url') ?? '');
+  const directStorageKey = String(formData.get('storage_key') ?? '');
+  const directFileSize = Number(formData.get('file_size_bytes'));
 
-  if (!file || file.type !== 'application/pdf') {
+  const hasDirectPdf = Boolean(directPdfUrl && directStorageKey && Number.isFinite(directFileSize));
+  if ((!file || file.type !== 'application/pdf') && !hasDirectPdf) {
     return NextResponse.json({ error: 'A valid PDF file is required', code: 'VALIDATION' }, { status: 400 });
   }
-  if (file.size > 100 * 1024 * 1024) {
+  if (file && file.size > 100 * 1024 * 1024) {
     return NextResponse.json({ error: 'PDF must be under 100MB', code: 'VALIDATION' }, { status: 400 });
+  }
+  if (hasDirectPdf && (directFileSize <= 0 || directFileSize > 100 * 1024 * 1024)) {
+    return NextResponse.json({ error: 'PDF must be under 100MB', code: 'VALIDATION' }, { status: 400 });
+  }
+  if (hasDirectPdf && (!isR2Url(directPdfUrl) || keyFromPublicUrl(directPdfUrl) !== directStorageKey)) {
+    return NextResponse.json({ error: 'Invalid uploaded PDF URL', code: 'VALIDATION' }, { status: 400 });
   }
 
   const parsed = issueUploadSchema.safeParse({
@@ -61,8 +71,11 @@ export async function POST(request: NextRequest) {
   const magazineName = await getMagazineNameFromDb(magazineId);
   if (!magazineName) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
 
-  const storageKey = `${magazineName.replace(/ /g, '-').toLowerCase()}-${year}/${file.name.replace(/ /g, '-')}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const storageKey =
+    hasDirectPdf && directStorageKey
+      ? directStorageKey
+      : `${magazineName.replace(/ /g, '-').toLowerCase()}-${year}/${file!.name.replace(/ /g, '-')}`;
+  const initialBuffer = file ? Buffer.from(await file.arrayBuffer()) : null;
 
   const coverFile = formData.get('cover') as File | null;
   const coverSource = formData.get('cover_source');
@@ -78,17 +91,39 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        // Step 1: Upload PDF to R2 (~3-5s)
-        send({ type: 'status', step: 'uploading-pdf', message: 'Uploading PDF to storage…' });
-        let pdfPublicUrl: string;
-        try {
-          pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
-        } catch (uploadErr) {
-          const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
-          send({ type: 'error', message: 'Upload failed: ' + message });
+        let buffer = initialBuffer;
+        let pdfPublicUrl = directPdfUrl;
+
+        if (file && buffer) {
+          // Step 1: Upload PDF to R2 (~3-5s)
+          send({ type: 'status', step: 'uploading-pdf', message: 'Uploading PDF to storage…' });
+          try {
+            pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
+          } catch (uploadErr) {
+            const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
+            send({ type: 'error', message: 'Upload failed: ' + message });
+            controller.close();
+            return;
+          }
+        } else {
+          send({ type: 'status', step: 'verifying-pdf', message: 'Verifying uploaded PDF…' });
+          try {
+            const pdfResponse = await fetch(directPdfUrl, { cache: 'no-store' });
+            if (!pdfResponse.ok) throw new Error(`storage returned ${pdfResponse.status}`);
+            buffer = Buffer.from(await pdfResponse.arrayBuffer());
+          } catch (downloadErr) {
+            const message = downloadErr instanceof Error ? downloadErr.message : 'Unknown error';
+            send({ type: 'error', message: 'Uploaded PDF could not be verified: ' + message });
+            controller.close();
+            return;
+          }
+        }
+        if (!buffer) {
+          send({ type: 'error', message: 'Uploaded PDF could not be read' });
           controller.close();
           return;
         }
+        const pdfBuffer = buffer;
 
         // Step 2: Cover image (crop uploaded image or render page 1) (~2-5s)
         send({ type: 'status', step: 'processing-cover', message: 'Processing cover image…' });
@@ -109,7 +144,7 @@ export async function POST(request: NextRequest) {
         }
         if (!coverImageUrl) {
           try {
-            coverImageUrl = await generateAndUploadThumbnail(buffer, storageKey);
+            coverImageUrl = await generateAndUploadThumbnail(pdfBuffer, storageKey);
           } catch (thumbErr) {
             console.error('Thumbnail generation failed (non-blocking):', thumbErr);
           }
@@ -127,7 +162,7 @@ export async function POST(request: NextRequest) {
           topics,
           pdf_url: pdfPublicUrl,
           cover_image_url: coverImageUrl,
-          file_size_bytes: file.size,
+          file_size_bytes: file?.size ?? directFileSize,
           is_published: true,
         });
         refreshPublicArchiveCaches(String(issue.id));
@@ -137,7 +172,7 @@ export async function POST(request: NextRequest) {
         // the after() callback (Vercel Hobby max duration).
         after(async () => {
           try {
-            const pages = await extractPdfText(buffer);
+            const pages = await extractPdfText(pdfBuffer);
             await indexIssue(String(issue.id), pages);
           } catch (extractErr) {
             console.error('PDF text extraction failed (can be retried via reindex):', extractErr);

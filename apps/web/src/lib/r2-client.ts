@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import { createHash, createHmac } from 'node:crypto';
 
 /**
  * Cloudflare R2 client. R2 speaks the S3 API so we use @aws-sdk/client-s3
@@ -62,6 +63,79 @@ export function r2PublicUrl(key: string): string {
     .map((seg) => encodeURIComponent(seg))
     .join('/');
   return `${r2PublicBaseUrl()}/${encoded}`;
+}
+
+function encodeRfc3986(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function hmac(key: Buffer | string, value: string): Buffer {
+  return createHmac('sha256', key).update(value).digest();
+}
+
+function hmacHex(key: Buffer | string, value: string): string {
+  return createHmac('sha256', key).update(value).digest('hex');
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function signingKey(secret: string, date: string, region: string, service: string): Buffer {
+  const kDate = hmac(`AWS4${secret}`, date);
+  const kRegion = hmac(kDate, region);
+  const kService = hmac(kRegion, service);
+  return hmac(kService, 'aws4_request');
+}
+
+/**
+ * Create a short-lived browser PUT URL for direct uploads to R2. This keeps
+ * large PDFs out of Vercel's 4.5MB request-body path.
+ */
+export function createR2PresignedPutUrl(key: string, expiresInSeconds = 900): string {
+  const accountId = env('R2_ACCOUNT_ID');
+  const accessKeyId = env('R2_ACCESS_KEY_ID');
+  const secretAccessKey = env('R2_SECRET_ACCESS_KEY');
+  const bucket = r2Bucket();
+  const region = 'auto';
+  const service = 's3';
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const credential = `${accessKeyId}/${credentialScope}`;
+  const canonicalUri = `/${[bucket, ...key.split('/')].map(encodeRfc3986).join('/')}`;
+  const queryParams: Array<[string, string]> = [
+    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', credential],
+    ['X-Amz-Date', amzDate],
+    ['X-Amz-Expires', String(expiresInSeconds)],
+    ['X-Amz-SignedHeaders', 'host'],
+  ];
+  const canonicalQuery = queryParams
+    .map(([name, value]) => `${encodeRfc3986(name)}=${encodeRfc3986(value)}`)
+    .sort()
+    .join('&');
+  const canonicalRequest = [
+    'PUT',
+    canonicalUri,
+    canonicalQuery,
+    `host:${host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join('\n');
+  const signature = hmacHex(signingKey(secretAccessKey, dateStamp, region, service), stringToSign);
+
+  return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
 
 /**
