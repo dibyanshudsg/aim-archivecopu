@@ -21,6 +21,7 @@ export const magazineSchema = z.object({
 
 // Issue update
 export const issueUpdateSchema = z.object({
+  magazine_id: z.string().uuid('Invalid magazine ID'),
   title: z.string().min(1, 'Title is required').max(300),
   theme: z.string().max(300).nullable().optional(),
   description: z.string().max(5000).nullable().optional(),

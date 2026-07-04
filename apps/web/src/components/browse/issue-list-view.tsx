@@ -30,10 +30,10 @@ export function IssueListView({ issues, sort, dir, onSort }: Props) {
         <table className="w-full text-sm">
           <thead className="border-b border-gray-100 bg-gradient-to-r from-gold-50/50 to-flame-50/50 text-xs font-medium tracking-wider text-gray-600 uppercase">
             <tr>
-              <SortHeader col="title" label="Title" current={sort} dir={dir} onSort={onSort} />
+              <SortHeader col="title" label="Theme / Title" current={sort} dir={dir} onSort={onSort} />
               <SortHeader col="language" label="Language" current={sort} dir={dir} onSort={onSort} />
               <th className="px-4 py-3 text-left">Topic Tags</th>
-              <SortHeader col="pages" label="Pages" current={sort} dir={dir} onSort={onSort} align="right" />
+              <th className="px-4 py-3 text-right">Pages</th>
               <SortHeader col="size" label="Size" current={sort} dir={dir} onSort={onSort} align="right" />
               <SortHeader col="reads" label="Reads" current={sort} dir={dir} onSort={onSort} align="right" />
               <th className="px-3 py-3"></th>

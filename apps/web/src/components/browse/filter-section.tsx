@@ -15,8 +15,9 @@ interface FilterSectionProps<T extends string | number> {
   options: FilterOption<T>[];
   selected: T[];
   onToggle: (value: T) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   initialLimit?: number;
-  defaultOpen?: boolean;
 }
 
 export function FilterSection<T extends string | number>({
@@ -24,10 +25,10 @@ export function FilterSection<T extends string | number>({
   options,
   selected,
   onToggle,
+  open,
+  onOpenChange,
   initialLimit = 8,
-  defaultOpen = true,
 }: FilterSectionProps<T>) {
-  const [open, setOpen] = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? options : options.slice(0, initialLimit);
   const hasMore = options.length > initialLimit;
@@ -36,7 +37,7 @@ export function FilterSection<T extends string | number>({
   return (
     <div className="border-b border-gray-100">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => onOpenChange(!open)}
         className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors hover:bg-flame-50/60"
       >
         <span className="flex items-center gap-2">

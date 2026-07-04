@@ -1,9 +1,15 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { BookOpen, Layers3, LockKeyhole, X } from 'lucide-react';
 import type { BrowseFilters, FilterDimension } from '@/lib/use-browse-filters';
 import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { FilterSection } from './filter-section';
+
+type FilterSectionId = 'years' | 'months' | 'magazines' | 'languages' | 'subjects';
+type OpenSections = Partial<Record<FilterSectionId, boolean>>;
+
+const FILTER_SECTION_STORAGE_KEY = 'aim-archive:browse-filter-sections:v1';
 
 interface Props {
   facets: BrowseFacets;
@@ -24,6 +30,44 @@ export function FilterPanel({
   hasActiveFilters,
   onClose,
 }: Props) {
+  const [openSections, setOpenSections] = useState<OpenSections>({});
+  const [sectionsLoaded, setSectionsLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(FILTER_SECTION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as OpenSections;
+        setOpenSections({
+          years: Boolean(parsed.years),
+          months: Boolean(parsed.months),
+          magazines: Boolean(parsed.magazines),
+          languages: Boolean(parsed.languages),
+          subjects: Boolean(parsed.subjects),
+        });
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(FILTER_SECTION_STORAGE_KEY);
+      } catch {}
+    } finally {
+      setSectionsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sectionsLoaded) return;
+    try {
+      window.localStorage.setItem(FILTER_SECTION_STORAGE_KEY, JSON.stringify(openSections));
+    } catch {}
+  }, [openSections, sectionsLoaded]);
+
+  const setSectionOpen = (section: FilterSectionId, open: boolean) => {
+    setOpenSections((current) => {
+      return { ...current, [section]: open };
+    });
+  };
+
   return (
     <div className="flex h-full w-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
@@ -108,30 +152,40 @@ export function FilterPanel({
           options={facets.years}
           selected={filters.years}
           onToggle={(v) => onToggle('years', v)}
+          open={openSections.years ?? false}
+          onOpenChange={(open) => setSectionOpen('years', open)}
         />
         <FilterSection
           title="Month"
           options={facets.months}
           selected={filters.months}
           onToggle={(v) => onToggle('months', v)}
+          open={openSections.months ?? false}
+          onOpenChange={(open) => setSectionOpen('months', open)}
         />
         <FilterSection
           title="Magazine"
           options={facets.magazines}
           selected={filters.magazines}
           onToggle={(v) => onToggle('magazines', v)}
+          open={openSections.magazines ?? false}
+          onOpenChange={(open) => setSectionOpen('magazines', open)}
         />
         <FilterSection
           title="Language"
           options={facets.languages}
           selected={filters.languages}
           onToggle={(v) => onToggle('languages', v)}
+          open={openSections.languages ?? false}
+          onOpenChange={(open) => setSectionOpen('languages', open)}
         />
         <FilterSection
           title="Subjects"
           options={facets.subjects}
           selected={filters.subjects}
           onToggle={(v) => onToggle('subjects', v)}
+          open={openSections.subjects ?? false}
+          onOpenChange={(open) => setSectionOpen('subjects', open)}
         />
       </div>
     </div>

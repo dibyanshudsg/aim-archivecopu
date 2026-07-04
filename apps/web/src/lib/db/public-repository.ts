@@ -378,8 +378,10 @@ function placeholders(count: number): string {
 function buildOrderBy(input: PublicIssueListInput): string {
   const dir = input.dir === 'asc' ? 'ASC' : 'DESC';
   switch (input.sort) {
+    case 'date':
+      return `ORDER BY i.year ${dir}, i.month ${dir}, i.title ASC`;
     case 'title':
-      return `ORDER BY i.title ${dir}, i.year DESC, i.month DESC`;
+      return `ORDER BY lower(COALESCE(NULLIF(i.theme, ''), i.title)) ${dir}, i.year DESC, i.month DESC`;
     case 'magazine':
       return `ORDER BY m.name ${dir}, i.year DESC, i.month DESC`;
     case 'language':

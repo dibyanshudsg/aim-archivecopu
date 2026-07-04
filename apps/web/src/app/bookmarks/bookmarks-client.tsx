@@ -231,7 +231,7 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
                   {normalized.map((issue, i) => (
                     <IssueCard key={issue.id} issue={issue} index={i} source="bookmarks" />
                   ))}

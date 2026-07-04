@@ -147,6 +147,7 @@ export function AdminIssuesClient({
   const [allTopics, setAllTopics] = useState<ManagedTopic[]>(initialIssueResult.facets.topics);
   const [magazines] = useState<Magazine[]>(initialMagazines);
   const [loading, setLoading] = useState(false);
+  const [relativeNowMs, setRelativeNowMs] = useState<number | null>(null);
   const didMountRef = useRef(false);
 
   // Filters
@@ -248,6 +249,12 @@ export function AdminIssuesClient({
     }, 250);
     return () => window.clearTimeout(timeout);
   }, [router]);
+
+  useEffect(() => {
+    setRelativeNowMs(Date.now());
+    const interval = window.setInterval(() => setRelativeNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const loadData = useCallback(async (nextPage = page, signal?: AbortSignal) => {
     setLoading(true);
@@ -859,7 +866,7 @@ export function AdminIssuesClient({
                           {formatFileSize(issue.file_size_bytes)}
                         </td>
                         <td className="hidden px-3 py-4 text-gray-500 xl:table-cell">
-                          {issue.updated_at ? formatRelative(issue.updated_at) : '—'}
+                          {issue.updated_at ? formatUpdatedAt(issue.updated_at, relativeNowMs) : '—'}
                         </td>
                   </tr>
                   {/* Actions row — visually paired with the main row above */}
@@ -1354,10 +1361,14 @@ function SortHeader({
   );
 }
 
-function formatRelative(iso: string): string {
+function formatUpdatedAt(iso: string, nowMs: number | null): string {
+  if (nowMs == null) return iso.slice(0, 10);
+  return formatRelative(iso, nowMs);
+}
+
+function formatRelative(iso: string, nowMs: number): string {
   const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diff = Math.max(0, now - then);
+  const diff = Math.max(0, nowMs - then);
   const sec = Math.floor(diff / 1000);
   if (sec < 60) return `${sec}s ago`;
   const min = Math.floor(sec / 60);

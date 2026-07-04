@@ -6,7 +6,7 @@ import type { ApiIssue } from './api';
 import type { AvailabilityFilter } from './public-issues';
 
 export type FilterDimension = 'years' | 'months' | 'magazines' | 'languages' | 'subjects';
-export type SortColumn = 'title' | 'magazine' | 'language' | 'pages' | 'size' | 'reads';
+export type SortColumn = 'date' | 'title' | 'magazine' | 'language' | 'pages' | 'size' | 'reads';
 
 export interface BrowseFilters {
   availability: AvailabilityFilter;
@@ -96,6 +96,14 @@ export function useBrowseFilters() {
     [commitFilters, filters],
   );
 
+  const setSortChoice = useCallback(
+    (sort: SortColumn | null, dir: 'asc' | 'desc' = 'desc') => {
+      if (filters.sort === sort && filters.dir === dir) return;
+      commitFilters({ ...filters, sort, dir, page: 1 });
+    },
+    [commitFilters, filters],
+  );
+
   const setQuery = useCallback(
     (value: string) => {
       const trimmed = value.trim();
@@ -136,6 +144,7 @@ export function useBrowseFilters() {
     setAvailability,
     setView,
     setSort,
+    setSortChoice,
     setQuery,
     setPage,
     clearAll,
@@ -168,7 +177,7 @@ function parseFilters(params: { get(name: string): string | null }): BrowseFilte
     subjects: parseStrArr(params.get('subject')),
     query: (params.get('q') ?? '').trim(),
     view: params.get('view') === 'list' ? 'list' : 'grid',
-    sort: (params.get('sort') as SortColumn | null) ?? null,
+    sort: parseSort(params.get('sort')),
     dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
     page: Math.max(1, parseInt(params.get('page') ?? '1', 10) || 1),
   };
@@ -201,6 +210,21 @@ function setArrayParam(params: URLSearchParams, key: string, values: Array<strin
 function parseAvailability(value: string | null): AvailabilityFilter {
   if (value === 'subscriber' || value === 'all') return value;
   return 'read';
+}
+
+function parseSort(value: string | null): SortColumn | null {
+  if (
+    value === 'date' ||
+    value === 'title' ||
+    value === 'magazine' ||
+    value === 'language' ||
+    value === 'pages' ||
+    value === 'size' ||
+    value === 'reads'
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function parseIntArr(v: string | null): number[] {
@@ -289,8 +313,12 @@ export function sortIssues(
     let bv: string | number = '';
     switch (sort) {
       case 'title':
-        av = a.title;
-        bv = b.title;
+        av = a.theme || a.title;
+        bv = b.theme || b.title;
+        break;
+      case 'date':
+        av = a.year * 100 + a.month;
+        bv = b.year * 100 + b.month;
         break;
       case 'magazine':
         av = a.magazines.name;

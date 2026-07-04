@@ -777,7 +777,7 @@ function SlideReader({
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [width, setWidth] = useState(420);
+  const [width, setWidth] = useState<number | null>(null);
   /** 1 = next-page motion, -1 = prev-page motion. */
   const [pageDirection, setPageDirection] = useState(1);
   /** Flips true the first time react-pdf signals page 1 has finished
@@ -802,7 +802,7 @@ function SlideReader({
   useLayoutEffect(() => {
     if (bookCardRef.current) {
       const w = bookCardRef.current.clientWidth;
-      if (w > 0) setWidth(w);
+      if (w > 0) setWidth(Math.round(w));
     }
   }, []);
 
@@ -810,7 +810,10 @@ function SlideReader({
     if (!bookCardRef.current) return;
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
-      if (w && w > 0) setWidth(Math.round(w));
+      if (w && w > 0) {
+        const next = Math.round(w);
+        setWidth((current) => (current === next ? current : next));
+      }
     });
     ro.observe(bookCardRef.current);
     return () => ro.disconnect();
@@ -850,9 +853,12 @@ function SlideReader({
   const canGoNext = numPages ? page < numPages : true;
 
   const SPREAD_GAP_PX = 8;
-  const perPageWidth = isSpread
-    ? Math.max(120, Math.floor((width - SPREAD_GAP_PX) / 2))
-    : width;
+  const measuredWidth = width ?? 0;
+  const perPageWidth = measuredWidth
+    ? isSpread
+      ? Math.max(120, Math.floor((measuredWidth - SPREAD_GAP_PX) / 2))
+      : measuredWidth
+    : 0;
 
   // Force the PDF canvas to render at minimum 2× the CSS resolution so text
   // stays crisp on Retina, 4K, and browser-zoomed displays.
@@ -877,7 +883,7 @@ function SlideReader({
   }
   const canZoomIn = zoom < ZOOM_STEPS[ZOOM_STEPS.length - 1];
   const canZoomOut = zoom > ZOOM_STEPS[0];
-  const renderedPageWidth = Math.round(perPageWidth * zoom);
+  const renderedPageWidth = perPageWidth ? Math.round(perPageWidth * zoom) : 0;
 
   // Reset zoom whenever the slide changes (new issue) so the next reader
   // doesn't inherit the previous user's zoom level. Same trigger resets the
@@ -978,6 +984,8 @@ function SlideReader({
                 title={fallbackTitle}
               />
             </div>
+          ) : renderedPageWidth === 0 ? (
+            <div className="h-full w-full" aria-hidden />
           ) : (
             <Document
               file={file}
@@ -985,23 +993,16 @@ function SlideReader({
               onLoadError={() => setLoadError(true)}
               onSourceError={() => setLoadError(true)}
               loading={
-                fallbackCoverUrl && renderedPageWidth > 0 ? (
+                fallbackCoverUrl ? (
                   /* Pre-rendered cover JPEG (~100 KB, neighbour-preloaded so
-                     it's cache-warm on slide change) shown in place of a
-                     spinner while the full PDF (~25 MB) is being fetched.
-                     The cover IS page 1, so when react-pdf finishes the
-                     swap is visually identical. */
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Image
-                      src={fallbackCoverUrl}
-                      alt={fallbackTitle}
-                      width={renderedPageWidth}
-                      height={Math.round(renderedPageWidth * 1.4)}
-                      sizes="(max-width: 1024px) 100vw, 50vw"
-                      priority
-                      className="h-auto max-h-full w-auto object-contain"
-                    />
-                  </div>
+                     it's cache-warm on slide change) shown in the same
+                     single/spread geometry as the final PDF. */
+                  <PdfLoadingSpread
+                    coverUrl={fallbackCoverUrl}
+                    title={fallbackTitle}
+                    pageWidth={renderedPageWidth}
+                    isSpread={isSpread}
+                  />
                 ) : (
                   <PageTurnSkeleton width={renderedPageWidth} />
                 )
@@ -1043,14 +1044,12 @@ function SlideReader({
                       if (page === 1) setPage1Rendered(true);
                     }}
                     loading={
-                      page === 1 && fallbackCoverUrl && renderedPageWidth > 0 ? (
-                        <Image
-                          src={fallbackCoverUrl}
-                          alt={fallbackTitle}
-                          width={renderedPageWidth}
-                          height={Math.round(renderedPageWidth * 1.4)}
-                          sizes="(max-width: 1024px) 100vw, 50vw"
-                          priority
+                      page === 1 && fallbackCoverUrl ? (
+                        <PdfCoverImage
+                          coverUrl={fallbackCoverUrl}
+                          title={fallbackTitle}
+                          pageWidth={renderedPageWidth}
+                          decorative={false}
                           className="object-contain"
                         />
                       ) : (
@@ -1092,14 +1091,12 @@ function SlideReader({
               }}
               transition={{ duration: 0.22, ease: 'easeOut' }}
             >
-              <Image
-                src={fallbackCoverUrl}
-                alt=""
-                width={renderedPageWidth}
-                height={Math.round(renderedPageWidth * 1.4)}
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-                className="h-auto max-h-full w-auto object-contain"
+              <PdfLoadingSpread
+                coverUrl={fallbackCoverUrl}
+                title={fallbackTitle}
+                pageWidth={renderedPageWidth}
+                isSpread={isSpread}
+                decorative
               />
             </motion.div>
           )}
@@ -1209,6 +1206,66 @@ function SlideReader({
         </div>
       )}
     </div>
+  );
+}
+
+function PdfLoadingSpread({
+  coverUrl,
+  title,
+  pageWidth,
+  isSpread,
+  decorative = false,
+}: {
+  coverUrl: string;
+  title: string;
+  pageWidth: number;
+  isSpread: boolean;
+  decorative?: boolean;
+}) {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div
+        className={cn(
+          'flex max-h-full items-center justify-center',
+          isSpread ? 'gap-2' : 'gap-0',
+        )}
+      >
+        <PdfCoverImage
+          coverUrl={coverUrl}
+          title={title}
+          pageWidth={pageWidth}
+          decorative={decorative}
+        />
+        {isSpread && <PageTurnSkeleton width={pageWidth} />}
+      </div>
+    </div>
+  );
+}
+
+function PdfCoverImage({
+  coverUrl,
+  title,
+  pageWidth,
+  decorative,
+  className,
+}: {
+  coverUrl: string;
+  title: string;
+  pageWidth: number;
+  decorative: boolean;
+  className?: string;
+}) {
+  const safeWidth = Math.max(160, pageWidth || 320);
+  return (
+    <Image
+      src={coverUrl}
+      alt={decorative ? '' : title}
+      width={safeWidth}
+      height={Math.round(safeWidth * 1.4)}
+      sizes="(max-width: 1024px) 100vw, 50vw"
+      priority
+      className={cn('h-auto max-h-full w-auto object-contain', className)}
+    />
   );
 }
 

@@ -57,8 +57,8 @@ export function parsePublicIssueListInput(
   const pageSize = clamp(toInt(get('page_size')) ?? DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   return {
     availability: parseAvailability(get('availability')),
-    years: parseIntList(get('year')),
-    months: parseIntList(get('month')).filter((m) => m >= 1 && m <= 12),
+    years: parseIntList(get('year'), 1950, 2100),
+    months: parseIntList(get('month'), 1, 12),
     magazines: parseStringList(get('magazine') ?? get('magazine_id')),
     languages: parseStringList(get('language')),
     subjects: parseStringList(get('subject') ?? get('topic')),
@@ -88,14 +88,22 @@ function parseStringList(value: string | undefined): string[] {
     .slice(0, 50);
 }
 
-function parseIntList(value: string | undefined): number[] {
+function parseIntList(value: string | undefined, min: number, max: number): number[] {
   return parseStringList(value)
     .map((v) => Number(v))
-    .filter((n) => Number.isInteger(n) && n >= 1950 && n <= 2100);
+    .filter((n) => Number.isInteger(n) && n >= min && n <= max);
 }
 
 function parseSort(value: string | undefined): SortColumn | null {
-  if (value === 'title' || value === 'magazine' || value === 'language' || value === 'pages' || value === 'size' || value === 'reads') {
+  if (
+    value === 'date' ||
+    value === 'title' ||
+    value === 'magazine' ||
+    value === 'language' ||
+    value === 'pages' ||
+    value === 'size' ||
+    value === 'reads'
+  ) {
     return value;
   }
   return null;

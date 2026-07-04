@@ -237,6 +237,7 @@ export async function listAdminIssuesPageFromDb(input: AdminIssueListInput): Pro
 export async function updateAdminIssueInDb(
   id: string,
   input: {
+    magazine_id: string;
     title: string;
     theme?: string | null;
     description?: string | null;
@@ -249,7 +250,8 @@ export async function updateAdminIssueInDb(
   await getDb().execute({
     sql: `
       UPDATE issues
-      SET title = ?,
+      SET magazine_id = ?,
+          title = ?,
           theme = ?,
           description = ?,
           topics_json = ?,
@@ -260,6 +262,7 @@ export async function updateAdminIssueInDb(
       WHERE id = ?
     `,
     args: [
+      input.magazine_id,
       input.title,
       input.theme ?? null,
       input.description ?? null,

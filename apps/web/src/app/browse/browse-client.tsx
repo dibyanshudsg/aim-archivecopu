@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, BookOpen, CheckSquare, Filter, Layers3, LockKeyhole } from 'lucide-react';
+import {
+  ArrowUp,
+  BookOpen,
+  Calendar,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  Eye,
+  Filter,
+  HardDrive,
+  Layers3,
+  LockKeyhole,
+} from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { IssueCard } from '@/components/magazine/issue-card';
@@ -16,7 +28,7 @@ import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
 import { fetchIssues, normalizeIssue } from '@/lib/api';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { useBrowseFilters } from '@/lib/use-browse-filters';
-import type { BrowseFilters } from '@/lib/use-browse-filters';
+import type { BrowseFilters, SortColumn } from '@/lib/use-browse-filters';
 import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
@@ -24,8 +36,8 @@ import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
-const BROWSE_GRID_COLUMNS = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5';
-const BROWSE_GRID_FULL_SPAN = 'col-span-2 sm:col-span-3 md:col-span-3 lg:col-span-4 xl:col-span-4 2xl:col-span-5';
+const BROWSE_GRID_COLUMNS = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4';
+const BROWSE_GRID_FULL_SPAN = 'col-span-2 sm:col-span-3 md:col-span-3 lg:col-span-4 xl:col-span-4';
 
 type NormalizedIssue = ReturnType<typeof normalizeIssue>;
 type BrowseGridItem =
@@ -113,6 +125,7 @@ function BrowseContent({
     toggleArray,
     setView,
     setSort,
+    setSortChoice,
     setQuery,
     setPage,
     setAvailability,
@@ -405,15 +418,12 @@ function BrowseContent({
     <main className="relative flex-1">
       <HeaderSearchDropdown />
 
-      <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
+      <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-8 lg:px-8 lg:py-9">
         <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">{copy.heading}</h1>
-              <p className="mt-2 max-w-3xl text-lg leading-relaxed text-gray-600">{copy.subtitle}</p>
-              <p className="mt-2 text-sm font-medium text-gray-500">
-                {issueCountText} across {magazines.length} magazine{magazines.length !== 1 ? 's' : ''}
-              </p>
+              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600 sm:text-lg">{copy.subtitle}</p>
             </div>
             <AvailabilityTabs
               value={filters.availability}
@@ -489,27 +499,30 @@ function BrowseContent({
         </AnimatePresence>
 
         {/* Grid area */}
-        <div ref={gridTopRef} className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-4 flex items-center gap-3">
-            {!panelOpen && (
-              <button
-                onClick={() => setPanelOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-            )}
-
-            <div className="ml-auto flex items-center gap-2 sm:gap-3">
-              <span className="hidden text-sm text-gray-400 sm:inline">
+        <div ref={gridTopRef} className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              {!panelOpen && (
+                <button
+                  onClick={() => setPanelOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
+                >
+                  <Filter className="h-4 w-4" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              <span className="min-w-0 truncate text-sm font-medium text-gray-400">
                 {issueCountText}
               </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
+              <SortMenu sort={filters.sort} dir={filters.dir} onChange={setSortChoice} />
               <button
                 onClick={() => (selectionEnabled ? disableSelection() : enableSelection())}
                 className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
@@ -628,6 +641,191 @@ function YearSeparator({ year }: { year: number }) {
         </span>
         <span className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent via-gold-300 to-flame-300 shadow-[0_1px_0_rgba(255,255,255,0.9)]" />
       </div>
+    </div>
+  );
+}
+
+type SortOption = {
+  id: string;
+  label: string;
+  helper: string;
+  sort: SortColumn | null;
+  dir: 'asc' | 'desc';
+  Icon: typeof Calendar;
+};
+
+const sortOptions: SortOption[] = [
+  {
+    id: 'newest',
+    label: 'Newest first',
+    helper: 'Latest public issue date',
+    sort: null,
+    dir: 'desc',
+    Icon: Calendar,
+  },
+  {
+    id: 'oldest',
+    label: 'Oldest first',
+    helper: 'Start from earlier archives',
+    sort: 'date',
+    dir: 'asc',
+    Icon: Calendar,
+  },
+  {
+    id: 'reads',
+    label: 'Most read',
+    helper: 'Popular with readers',
+    sort: 'reads',
+    dir: 'desc',
+    Icon: Eye,
+  },
+  {
+    id: 'title',
+    label: 'Theme A-Z',
+    helper: 'Visible theme, then issue title',
+    sort: 'title',
+    dir: 'asc',
+    Icon: BookOpen,
+  },
+  {
+    id: 'magazine',
+    label: 'Magazine A-Z',
+    helper: 'Group by publication name',
+    sort: 'magazine',
+    dir: 'asc',
+    Icon: Layers3,
+  },
+  {
+    id: 'size',
+    label: 'Smallest file',
+    helper: 'Lighter downloads first',
+    sort: 'size',
+    dir: 'asc',
+    Icon: HardDrive,
+  },
+];
+
+function SortMenu({
+  sort,
+  dir,
+  onChange,
+}: {
+  sort: SortColumn | null;
+  dir: 'asc' | 'desc';
+  onChange: (sort: SortColumn | null, dir: 'asc' | 'desc') => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const activeOption =
+    sortOptions.find((option) => option.sort === sort && option.dir === dir) ??
+    sortOptions[0];
+  const ActiveIcon = activeOption.Icon;
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+      >
+        <ActiveIcon className="h-4 w-4" />
+        <span>Sort</span>
+        <span className="hidden max-w-28 truncate text-gray-500 sm:inline">
+          {activeOption.label}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${
+            open ? 'rotate-180 text-flame-600' : ''
+          }`}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="browse-sort-menu"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute left-0 z-30 mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-flame-100 bg-white p-1.5 shadow-[0_18px_48px_rgba(120,84,28,0.18)] ring-1 ring-white sm:right-0 sm:left-auto"
+            role="menu"
+          >
+            {sortOptions.map((option) => {
+              const active = option.id === activeOption.id;
+              const Icon = option.Icon;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={active}
+                  onClick={() => {
+                    onChange(option.sort, option.dir);
+                    setOpen(false);
+                  }}
+                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'text-flame-800'
+                      : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="browse-sort-active"
+                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-gold-50 to-flame-50"
+                      transition={{ type: 'spring', stiffness: 430, damping: 34 }}
+                    />
+                  )}
+                  <span
+                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                      active ? 'bg-white text-flame-700 shadow-sm' : 'bg-gray-50 text-gray-500'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="relative min-w-0 flex-1">
+                    <span className="block text-sm font-semibold leading-tight">
+                      {option.label}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-gray-400">
+                      {option.helper}
+                    </span>
+                  </span>
+                  <span
+                    className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                      active ? 'bg-flame-500 text-white' : 'text-transparent'
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                  </span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
