@@ -19,15 +19,16 @@ concurrency:
 
 jobs:
   index:
-    if: vars.INDEXING_ENABLED == 'true'
+    if: vars.INDEXING_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.verify_worker)
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: ${{ inputs.verify_worker && 15 || 75 }}
     env:
       INDEXING_OCR_CACHE_PATH: ${{ github.workspace }}/.ocr-cache
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Check for queued issues
         id: queue
+        if: '!inputs.verify_worker'
         env:
           TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
