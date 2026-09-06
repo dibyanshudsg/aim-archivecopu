@@ -95,12 +95,12 @@ export function LatestSubscriberEditions({ issues }: LatestSubscriberEditionsPro
                   Current circulation
                 </p>
                 <h2 className="font-heading text-xl font-bold text-gray-900 sm:text-2xl">
-                  Latest subscriber editions
+                  Awaiting public release
                 </h2>
               </div>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-600">
-              Covers, themes, and topics stay visible while the PDF is reserved for print subscribers. Each edition opens publicly after the rolling 5-year archive window.
+              Recent editions remain in print circulation. Covers, themes, and topics are listed here; public reading opens five years after publication.
             </p>
           </div>
           <div className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gold-200 bg-gold-50 px-3 py-1.5 text-xs font-semibold text-gold-800">

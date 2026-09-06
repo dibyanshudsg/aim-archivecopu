@@ -1,0 +1,67 @@
+name: Search indexing
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      verify_worker:
+        description: Run an isolated native-text and scanned-PDF worker test
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: search-indexing-production
+  cancel-in-progress: false
+
+jobs:
+  index:
+    if: vars.INDEXING_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      INDEXING_OCR_CACHE_PATH: ${{ github.workspace }}/.ocr-cache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check for queued issues
+        id: queue
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
+        run: python3 scripts/indexing-schedule.py check
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
+        with:
+          path: .ocr-cache
+          key: indexing-english-ocr-v5-${{ runner.os }}
+      - name: Install worker dependencies
+        if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
+        run: pnpm install --frozen-lockfile --filter @aim-archive/web...
+      - name: Verify worker with isolated PDFs
+        if: inputs.verify_worker
+        run: |
+          node scripts/test-indexing-runner.cjs
+          node scripts/test-indexing-worker-pdf.cjs
+      - name: Process queued issues
+        if: steps.queue.outputs.pending == 'true'
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
+        run: node scripts/indexing-worker.cjs --drain
+      - name: Record completion
+        if: always() && steps.queue.outputs.pending == 'true'
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
+          RUN_RESULT: ${{ job.status }}
+        run: python3 scripts/indexing-schedule.py "$RUN_RESULT"

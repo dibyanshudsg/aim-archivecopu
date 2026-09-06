@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     template: '%s | AIM Archive',
   },
   description:
-    'Explore decades of spiritual wisdom from All India Magazine, Agnishikha, and other publications by Sri Aurobindo Society. Free digital archive of writings by Sri Aurobindo and The Mother.',
+    'Explore Sri Aurobindo Society magazine editions and writings by Sri Aurobindo and The Mother. Editions enter the free public archive five years after publication.',
   keywords: [
     'Sri Aurobindo',
     'The Mother',
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
     description:
-      'Free digital archive of All India Magazine and other Sri Aurobindo Society publications.',
+      'Explore Sri Aurobindo Society magazines. Editions become freely readable five years after publication.',
     type: 'website',
     locale: 'en_IN',
     siteName: 'AIM Archive',
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
     description:
-      'Free digital archive of All India Magazine and other Sri Aurobindo Society publications.',
+      'Explore Sri Aurobindo Society magazines. Editions become freely readable five years after publication.',
     images: ['/logo.png'],
   },
   robots: {

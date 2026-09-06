@@ -1,5 +1,17 @@
 # AIM Archive — To Do List
 
+## Active — Approved Website Review Improvements (2026-09-06)
+
+Detailed tasks, acceptance criteria, dependencies, progress, and release evidence are tracked in [Website Review Action Plan](WEBSITE_REVIEW_ACTION_PLAN.md).
+
+This is the current priority for public website review improvements. Update the linked plan as work progresses; keep older backlog items below as context rather than duplicating completion statuses here.
+
+Implementation order: accuracy and mobile usability → search reliability → discovery and reading polish. Preserve the five-year access policy and existing visual identity.
+
+Approved follow-on: search indexing, SI-01–SI-06 in the linked plan, implemented and deployed to the production website. All 102 supported English editions are indexed, with 17 uncertain cover pages withheld. See [Completed Rebuild Report](SEARCH_REBUILD_REPORT.md) for coverage and [Indexing Worker](INDEXING_WORKER.md) for durable upload/replacement jobs, progress, retries and operation. Production worker hosting and processing verification remain; maintain detailed statuses in the action plan.
+
+Approved dedicated indexing workspace: `/admin/indexing` now consolidates catalogue-wide coverage, filtered/paginated issue lists, batch actions, processing details, authenticated PDF review and persistent run history. Earlier rebuild evidence is reconciled into the workspace; Issues retains a compact shortcut. Operational details and rollout remain in `INDEXING_WORKER.md`.
+
 _________________________
 
 Personal Addition:
@@ -9,72 +21,6 @@ Personal Addition:
 2. 
 
 _________________________
-
-## Completed
-- [x] Create CLAUDE.md (comprehensive project bible)
-- [x] Create ROADMAP.md (phased development plan)
-- [x] Initialize Git repository
-- [x] Define tech stack and architecture
-- [x] Define database schema (high-level)
-- [x] Define MVP scope
-- [x] Set up Turborepo monorepo (pnpm workspaces)
-- [x] Scaffold Next.js 15 web app (builds clean, 0 warnings)
-
-- [x] Create shared types/constants package (@aim-archive/shared)
-- [x] Create Supabase package with DB types + migration SQL
-- [x] Scaffold Expo mobile app skeleton (4 tab screens)
-- [x] Configure ESLint + Prettier
-- [x] Set up design system (gold/cream color palette, fonts, animations)
-- [x] Build homepage (hero, animated bookshelf, features, CTA, stats)
-- [x] Build header (responsive nav, mobile menu with animations)
-- [x] Build footer (links, branding, admin link)
-- [x] Build Browse page (issue cards, filters by magazine/year/language/topic)
-- [x] Build Issue detail page (cover, metadata, download, bookmark)
-- [x] Build in-app PDF reader (page nav, zoom, fullscreen, scrubber)
-- [x] Build Search page (global search, advanced filters, sort, popular topics)
-- [x] Build Bookmarks page (Zustand + localStorage persistence)
-- [x] Create Supabase project (database + storage + auth)
-- [x] Run initial migration (00001_initial_schema.sql)
-- [x] Set up Supabase Storage bucket + upload 8 real PDFs
-- [x] API routes: magazines, issues, search, PDF serving
-- [x] Wire frontend to live Supabase data (replace mock data)
-- [x] Admin login page with authentication
-- [x] Admin dashboard (stat cards, popular issues, quick links)
-- [x] Admin magazine management (add/edit/delete)
-- [x] Admin issues management (table, search, filters, sort, inline edit, upload)
-- [x] Admin PDF upload page (drag-drop, auto-title, topics, metadata)
-- [x] PDF cover thumbnail pipeline (auto-generated on upload via pdfjs + node-canvas)
-- [x] Backfill thumbnails endpoint (`POST /api/admin/thumbnails`, one issue per call)
-- [x] SEO optimization (meta tags, sitemap, structured data)
-- [x] Zod input validation on all API routes
-- [x] Browse page redesign (Phase 1 polish):
-  - [x] Collapsible side filter panel (5 multi-select sections with facet counts)
-  - [x] List/Grid view toggle with sortable list table
-  - [x] URL-synced filter state (`?year=…&subject=…&view=list&page=2`)
-  - [x] Pagination with smooth scroll + ellipsis truncation
-  - [x] Active filter chips above the grid
-  - [x] Mobile slide-out drawer + responsive panel
-  - [x] Animated row stagger + modern hover lift
-- [x] Web Share API on issue cards + list rows (cover thumbnail attached, clipboard fallback)
-- [x] Bookmark count badge in header
-- [x] Managed Topics dropdown in admin (add inline / rename / delete across all issues)
-- [x] Alphabetical topic sort across all surfaces (admin + public)
-- [x] Deploy to Vercel (`aim-archive.vercel.app`)
-
-## Up Next — Admin Issues Page Enhancements
-- [x] Bulk select & bulk actions (delete, publish, unpublish) — checkbox column, master checkbox, action toolbar appears when rows selected
-- [x] Manual cover image upload per issue (replace-cover modal with auto-crop + orientation toggle)
-- [x] View/open link — opens public issue page in new tab
-- [x] Download PDF link — direct download from row action
-- [x] Download count column in table (sortable)
-- [x] Pagination for large issue lists (25/page, prev/next, "Showing X–Y of Z")
-- [x] Status filter (Published / Draft)
-- [x] Topic filter dropdown
-- [x] Export issue list as CSV (respects current filters)
-- [x] Bulk upload — multiple PDFs at once with auto-detected magazine/month/year from filename (`/admin/issues/bulk`)
-- [x] Duplicate issue — clones magazine + topics + description into upload form via sessionStorage
-- [x] Last modified date shown per row (sortable, relative format like "3d ago")
-- [x] Confirmation toast + custom confirm dialog (`components/ui/toast.tsx`, `UIProvider` wraps admin layout) — replaced `window.alert` / `window.confirm`
 
 ## Up Next — Phase 1.5: Polish & Deploy
 - [ ] Performance audit (Lighthouse score)

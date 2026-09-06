@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { BrowseClient } from './browse-client';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import { getPublicNavigationFromDb } from '@/lib/db';
 import {
   listPublicIssues,
   parsePublicIssueListInput,
@@ -39,7 +40,11 @@ export default async function BrowsePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { issues, magazines, total, totalPages, facets } = await fetchInitialBrowseData(await searchParams);
+  const params = await searchParams;
+  const [{ issues, magazines, total, totalPages, facets }, navigation] = await Promise.all([
+    fetchInitialBrowseData(params),
+    getPublicNavigationFromDb(),
+  ]);
 
   return (
     <Suspense fallback={null}>
@@ -49,6 +54,7 @@ export default async function BrowsePage({
         initialTotal={total}
         initialTotalPages={totalPages}
         initialFacets={facets}
+        navigation={navigation}
       />
     </Suspense>
   );

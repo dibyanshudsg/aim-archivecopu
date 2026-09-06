@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { isEmbargoed } from '@/lib/embargo';
 import { getPublicIssueById, incrementIssueReadCount } from '@/lib/db';
 
@@ -12,11 +12,13 @@ export async function GET(
     return NextResponse.json({ error: 'Issue not found', code: 'NOT_FOUND' }, { status: 404 });
   }
   if (!isEmbargoed(issue.year, issue.month)) {
-    try {
-      await incrementIssueReadCount(id);
-    } catch (incrementError) {
-      console.error('Failed to increment read count:', incrementError);
-    }
+    after(async () => {
+      try {
+        await incrementIssueReadCount(id);
+      } catch (incrementError) {
+        console.error('Failed to increment read count:', incrementError);
+      }
+    });
   }
   return NextResponse.json(issue, {
     headers: {

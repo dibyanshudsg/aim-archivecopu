@@ -1,3 +1,5 @@
+import { configurePdfWorker } from './pdf-worker-client';
+
 export async function renderPdfFirstPageCoverFromFile(file: File): Promise<File | null> {
   const data = new Uint8Array(await file.arrayBuffer());
   const baseName = file.name.replace(/\.pdf$/i, '');
@@ -19,9 +21,7 @@ async function renderPdfFirstPageCover(
   baseName: string,
 ): Promise<File | null> {
   const pdfjsLib = await import('pdfjs-dist');
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  }
+  configurePdfWorker(pdfjsLib);
 
   const doc = await pdfjsLib.getDocument({ data }).promise;
 

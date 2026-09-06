@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -11,12 +11,7 @@ import {
   ArrowLeft,
   FileText,
   Calendar,
-  CalendarClock,
-  Eye,
-  Globe2,
   HardDrive,
-  Lock,
-  RefreshCw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -25,15 +20,30 @@ import { LANGUAGE_NAMES, MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex, Language } from '@aim-archive/shared';
 import { formatFileSize } from '@/lib/utils';
 import { useBookmarks } from '@/lib/bookmarks-store';
-import { EMBARGO_TIME_ZONE, EMBARGO_TIME_ZONE_LABEL } from '@/lib/embargo';
+import { AccessNotice } from '@/components/magazine/access-notice';
+import { ReportProblem } from '@/components/magazine/report-problem';
+import { IssueCard } from '@/components/magazine/issue-card';
+import type { PublicNavigation } from '@/lib/navigation';
+import { configurePdfWorker } from '@/lib/pdf-worker-client';
 
 interface IssueDetailClientProps {
   initialIssue: ApiIssue;
+  navigation: PublicNavigation;
+  relatedIssues: ApiIssue[];
 }
 
 const MAX_UNLOCK_TIMER_DELAY_MS = 2_147_000_000;
 
-export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
+function scheduleIdleWork(callback: () => void, timeout = 1_500): () => void {
+  if ('requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(callback, { timeout });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = setTimeout(callback, 500);
+  return () => clearTimeout(id);
+}
+
+export function IssueDetailClient({ initialIssue, navigation, relatedIssues }: IssueDetailClientProps) {
   const { toggle, isBookmarked } = useBookmarks();
   const [apiIssue, setApiIssue] = useState(initialIssue);
   const [unlockRefreshing, setUnlockRefreshing] = useState(false);
@@ -49,13 +59,16 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
   // that are already public. The API itself refuses to count embargoed reads.
   useEffect(() => {
     let cancelled = false;
-    fetchIssue(issue.id, { cache: 'no-store' })
-      .then((data) => {
-        if (!cancelled && data) setApiIssue(data);
-      })
-      .catch(() => {});
+    const cancelScheduledRefresh = scheduleIdleWork(() => {
+      fetchIssue(issue.id, { cache: 'no-store' })
+        .then((data) => {
+          if (!cancelled && data) setApiIssue(data);
+        })
+        .catch(() => {});
+    });
     return () => {
       cancelled = true;
+      cancelScheduledRefresh();
     };
   }, [issue.id]);
 
@@ -121,9 +134,7 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
     async function countPages() {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-        }
+        configurePdfWorker(pdfjsLib);
         const doc = await pdfjsLib.getDocument(pdfUrl).promise;
         try {
           if (!cancelled) setDerivedPageCount(doc.numPages);
@@ -135,9 +146,12 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
       }
     }
 
-    countPages();
+    const cancelScheduledLookup = scheduleIdleWork(() => {
+      void countPages();
+    }, 2_000);
     return () => {
       cancelled = true;
+      cancelScheduledLookup();
     };
   }, [issue.isEmbargoed, issue.pageCount, issue.pdfUrl]);
 
@@ -151,7 +165,7 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
+      <Header navigation={navigation} />
       <main className="flex-1">
         <div className="border-b border-gray-100 px-6 py-3 lg:px-8">
           <div className="mx-auto flex max-w-5xl items-center gap-2 text-sm text-gray-500">
@@ -242,17 +256,16 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
                 </p>
               )}
 
-              <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <MetaItem icon={Calendar} label="Published" value={`${monthName} ${issue.year}`} />
                 <MetaItem icon={FileText} label="Pages" value={pageCountValue} />
                 <MetaItem icon={HardDrive} label="Size" value={formatFileSize(issue.fileSizeBytes)} />
-                <MetaItem icon={Eye} label="Reads" value={issue.readCount.toLocaleString()} />
               </div>
 
               {issue.isEmbargoed ? (
-                <EmbargoNotice
+                <AccessNotice
                   liftLabel={issue.embargoLiftLabel}
-                  liftAt={issue.embargoLiftAt}
+                  magazineId={issue.magazine.id}
                   refreshing={unlockRefreshing}
                 />
               ) : (
@@ -305,24 +318,23 @@ export function IssueDetailClient({ initialIssue }: IssueDetailClientProps) {
                 </div>
               )}
 
-              {!issue.isEmbargoed && (
-                <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50/50 p-5">
-                  <h3 className="text-sm font-semibold text-gray-900">Available Formats</h3>
-                  <div className="mt-3 flex gap-3">
-                    <FormatBadge format="PDF" available />
-                    <FormatBadge format="EPUB" available={!!issue.epubUrl} />
-                    <FormatBadge format="MOBI" available={!!issue.mobiUrl} />
-                  </div>
-                  {!issue.epubUrl && (
-                    <p className="mt-2 text-xs text-gray-400">EPUB and MOBI formats coming soon</p>
-                  )}
+              {!issue.isEmbargoed && (issue.epubUrl || issue.mobiUrl) && (
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {[{ label: 'EPUB', url: issue.epubUrl }, { label: 'MOBI', url: issue.mobiUrl }].filter((format) => format.url).map((format) => (
+                    <a key={format.label} href={format.url!} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-gray-200 px-4 py-3 text-sm font-semibold text-flame-700 hover:bg-flame-50">Download {format.label}</a>
+                  ))}
                 </div>
               )}
+              <ReportProblem issueId={issue.id} title={issue.title} />
             </motion.div>
           </div>
+          {relatedIssues.length > 0 && <section className="mt-12" aria-labelledby="related-heading">
+            <h2 id="related-heading" className="font-heading mb-5 text-2xl font-semibold text-gray-900">Readable editions to explore</h2>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">{relatedIssues.map((related, index) => <IssueCard key={related.id} issue={normalizeIssue(related)} index={index} />)}</div>
+          </section>}
         </div>
       </main>
-      <Footer />
+      <Footer navigation={navigation} />
     </div>
   );
 }
@@ -342,111 +354,5 @@ function MetaItem({
       <p className="mt-2 text-sm font-semibold text-gray-900">{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
     </div>
-  );
-}
-
-function EmbargoNotice({
-  liftLabel,
-  liftAt,
-  refreshing,
-}: {
-  liftLabel: string | null;
-  liftAt: string | null;
-  refreshing: boolean;
-}) {
-  const indiaUnlockLabel = useMemo(() => formatUnlockInstant(liftAt, EMBARGO_TIME_ZONE, 'en-IN'), [liftAt]);
-  const localUnlockLabel = useMemo(() => formatUnlockInstant(liftAt), [liftAt]);
-
-  return (
-    <div className="mt-8 overflow-hidden rounded-xl border border-flame-200 bg-gradient-to-br from-gold-50/80 to-flame-50/80 p-6 shadow-sm">
-      <div className="flex items-start gap-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-flame-600 shadow-sm ring-1 ring-flame-200">
-          <Lock className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h3 className="font-heading text-lg font-semibold text-gray-900">
-            {liftLabel ? `Available ${liftLabel}` : 'Available to subscribers'}
-          </h3>
-          <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
-            This edition is reserved for our print subscribers while it&apos;s still in active
-            circulation. The archive opens it to everyone on a rolling 5-year window — the cover,
-            theme, and topics stay visible here so you can find it again when it goes public.
-          </p>
-
-          {liftAt && (
-            <>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <UnlockMeta
-                  icon={CalendarClock}
-                  label="Archive unlock"
-                  value={indiaUnlockLabel ?? `${liftLabel} at 12:00 AM ${EMBARGO_TIME_ZONE_LABEL}`}
-                />
-                <UnlockMeta
-                  icon={Globe2}
-                  label="Your local time"
-                  value={localUnlockLabel ?? 'At the same global moment'}
-                />
-              </div>
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-flame-100 bg-white/75 px-3 py-2 text-xs font-semibold text-flame-700 shadow-sm">
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                <span>
-                  {refreshing
-                    ? 'Unlocking reading access...'
-                    : 'This page will switch to reading access when the release time arrives.'}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UnlockMeta({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-flame-100 bg-white/70 p-3 shadow-sm">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-normal text-flame-700">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <p className="mt-1 text-sm font-semibold leading-snug text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-function formatUnlockInstant(value: string | null, timeZone?: string, locale?: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  }).format(date);
-}
-
-function FormatBadge({ format, available }: { format: string; available: boolean }) {
-  return (
-    <span
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-        available ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700' : 'bg-gray-100 text-gray-400'
-      }`}
-    >
-      {format}
-    </span>
   );
 }

@@ -10,6 +10,7 @@ node_modules/
 
 # Build outputs
 .next/
+.next-verify/
 out/
 dist/
 build/
@@ -35,6 +36,9 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+.cache/search-reader-qa/
+.cache/indexing-qa/
+*.traineddata
 
 # Supabase
 supabase/.temp/

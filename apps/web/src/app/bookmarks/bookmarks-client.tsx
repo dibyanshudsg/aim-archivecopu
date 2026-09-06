@@ -11,19 +11,77 @@ import { BulkActionBar } from '@/components/browse/bulk-action-bar';
 import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
 import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
 import { useBookmarks } from '@/lib/bookmarks-store';
-import { normalizeIssue, type ApiIssue, type ApiMagazine } from '@/lib/api';
+import {
+  fetchBookmarkedIssues,
+  normalizeIssue,
+  type ApiIssue,
+  type ApiMagazine,
+} from '@/lib/api';
 import { applyFilters, sortIssues, useBrowseFilters } from '@/lib/use-browse-filters';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
+import type { PublicNavigation } from '@/lib/navigation';
 
 interface BookmarksClientProps {
-  allIssues: ApiIssue[];
-  allMagazines: ApiMagazine[];
+  navigation: PublicNavigation;
 }
 
-export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProps) {
+export function BookmarksClient({ navigation }: BookmarksClientProps) {
   const { bookmarkedIds, clear } = useBookmarks();
   const { filters, toggleArray, setQuery, clearAll, hasActiveFilters } = useBrowseFilters();
+  const [bookmarksHydrated, setBookmarksHydrated] = useState(false);
+  const [allIssues, setAllIssues] = useState<ApiIssue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(true);
+  const [issuesError, setIssuesError] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
+
+  useEffect(() => {
+    setBookmarksHydrated(useBookmarks.persist.hasHydrated());
+    return useBookmarks.persist.onFinishHydration(() => setBookmarksHydrated(true));
+  }, []);
+
+  useEffect(() => {
+    if (!bookmarksHydrated) return;
+    if (bookmarkedIds.length === 0) {
+      setAllIssues([]);
+      setIssuesError(false);
+      setIssuesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIssuesLoading(true);
+    setIssuesError(false);
+    fetchBookmarkedIssues(bookmarkedIds)
+      .then((issues) => {
+        if (!cancelled) setAllIssues(issues);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setIssuesError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIssuesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmarkedIds, bookmarksHydrated, retryVersion]);
+
+  const allMagazines = useMemo<ApiMagazine[]>(() => {
+    const magazines = new Map<string, ApiMagazine>();
+    for (const issue of allIssues) {
+      if (magazines.has(issue.magazines.id)) continue;
+      magazines.set(issue.magazines.id, {
+        ...issue.magazines,
+        created_at: issue.created_at,
+        updated_at: issue.updated_at,
+      });
+    }
+    return [...magazines.values()];
+  }, [allIssues]);
 
   // Index for O(1) lookup. Issue order in `bookmarkedIds` reflects when each
   // was saved, so we preserve that order in the rendered list (most recent
@@ -53,7 +111,7 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
   );
   const normalized = useMemo(() => sorted.map(normalizeIssue), [sorted]);
 
-  const totalBookmarks = bookmarkedIssues.length;
+  const totalBookmarks = issuesLoading ? bookmarkedIds.length : bookmarkedIssues.length;
   const isFiltered = totalBookmarks > 0 && totalBookmarks !== sorted.length;
 
   // Bulk selection / download state. Identical pattern to Browse — different
@@ -143,7 +201,7 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
+      <Header navigation={navigation} />
       <HeaderSearchDropdown />
       <main className="flex-1">
         <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
@@ -153,12 +211,15 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
                 My Bookmarks
               </h1>
               <p className="mt-2 text-lg text-gray-600">
-                {isFiltered
+                {!bookmarksHydrated || issuesLoading
+                  ? 'Loading saved issues…'
+                  : isFiltered
                   ? `${sorted.length} of ${totalBookmarks} saved issue${totalBookmarks !== 1 ? 's' : ''}`
                   : `${totalBookmarks} saved issue${totalBookmarks !== 1 ? 's' : ''}`}
               </p>
+              <p className="mt-2 text-sm text-gray-600">Saved in this browser; not synced across devices.</p>
             </div>
-            {totalBookmarks > 0 && (
+            {!issuesLoading && totalBookmarks > 0 && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleDownloadAll}
@@ -192,7 +253,22 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
         </section>
 
         <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-          {totalBookmarks === 0 ? (
+          {!bookmarksHydrated || issuesLoading ? (
+            <BookmarksLoadingState count={bookmarkedIds.length} />
+          ) : issuesError ? (
+            <div className="py-20 text-center" role="alert">
+              <BookMarked className="mx-auto h-12 w-12 text-flame-300" />
+              <p className="mt-4 text-lg font-medium text-gray-700">Couldn’t load your bookmarks</p>
+              <p className="mt-2 text-sm text-gray-500">Your saved list is still intact. Try loading it again.</p>
+              <button
+                type="button"
+                onClick={() => setRetryVersion((version) => version + 1)}
+                className="mt-6 rounded-xl border border-flame-200 bg-white px-5 py-2.5 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+              >
+                Try again
+              </button>
+            </div>
+          ) : totalBookmarks === 0 ? (
             <div className="py-20 text-center">
               <BookMarked className="mx-auto h-12 w-12 text-gray-300" />
               <p className="mt-4 text-lg font-medium text-gray-400">No bookmarks yet</p>
@@ -241,7 +317,7 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
           )}
         </div>
       </main>
-      <Footer />
+      <Footer navigation={navigation} />
 
       <BulkActionBar
         issues={sorted}
@@ -254,6 +330,28 @@ export function BookmarksClient({ allIssues, allMagazines }: BookmarksClientProp
         onCancel={cancelDownload}
         onClose={closeDownloadModal}
       />
+    </div>
+  );
+}
+
+function BookmarksLoadingState({ count }: { count: number }) {
+  const cardCount = Math.min(Math.max(count, 4), 8);
+  return (
+    <div
+      className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4"
+      aria-label="Loading saved issues"
+      aria-live="polite"
+    >
+      {Array.from({ length: cardCount }).map((_, index) => (
+        <div key={index} className="overflow-hidden rounded-xl border border-flame-100 bg-white">
+          <div className="aspect-[3/4] animate-pulse bg-flame-50" />
+          <div className="space-y-3 p-4">
+            <div className="h-4 w-4/5 animate-pulse rounded bg-gray-100" />
+            <div className="h-3 w-3/5 animate-pulse rounded bg-gray-100" />
+            <div className="h-3 w-full animate-pulse rounded bg-gray-100" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

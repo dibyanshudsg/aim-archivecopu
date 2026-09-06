@@ -1,4 +1,6 @@
 import {
+  getPublicNavigationFromDb,
+  getPublicCollectionSummary,
   listHomeShelfIssues,
   listLatestEmbargoedIssues,
   listMagazines,
@@ -6,11 +8,11 @@ import {
 } from '@/lib/db';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { HomeClient } from './home-client';
+import { readableCutoffIssueMonth } from '@/lib/embargo';
 
 export const dynamic = 'force-dynamic';
 
-/** Homepage year shelf metadata. Embargoed issues are included here so the
- *  user can browse newer covers, but their PDF URLs stay stripped. */
+/** Readable shelf; restricted editions have their own section. */
 async function fetchShelfIssues(): Promise<ApiIssue[]> {
   return listHomeShelfIssues();
 }
@@ -45,9 +47,9 @@ interface CarouselData {
  * next, then future Tamil/Marathi/Bengali editions in the order they're added.
  */
 async function fetchCarouselData(): Promise<CarouselData> {
-  const now = new Date();
-  const releaseMonth = now.getMonth() + 1; // 1-12 — calendar month *now*
-  const currentYear = now.getFullYear() - 5; // issue year of this month's release
+  const cutoff = readableCutoffIssueMonth();
+  const releaseMonth = cutoff.month;
+  const currentYear = cutoff.year;
   const currentMonth = releaseMonth;
   const prevYear = releaseMonth === 1 ? currentYear - 1 : currentYear;
   const prevMonth = releaseMonth === 1 ? 12 : releaseMonth - 1;
@@ -64,10 +66,12 @@ async function fetchCarouselData(): Promise<CarouselData> {
 }
 
 export default async function HomePage() {
-  const [recentIssues, latestSubscriberEditions, carousel] = await Promise.all([
+  const [recentIssues, latestSubscriberEditions, carousel, navigation, collection] = await Promise.all([
     fetchShelfIssues(),
     fetchLatestSubscriberEditions(),
     fetchCarouselData(),
+    getPublicNavigationFromDb(),
+    getPublicCollectionSummary(),
   ]);
 
   return (
@@ -80,6 +84,8 @@ export default async function HomePage() {
       carouselCurrentMonth={carousel.currentMonth}
       carouselPrevYear={carousel.prevYear}
       carouselPrevMonth={carousel.prevMonth}
+      navigation={navigation}
+      collection={collection}
     />
   );
 }

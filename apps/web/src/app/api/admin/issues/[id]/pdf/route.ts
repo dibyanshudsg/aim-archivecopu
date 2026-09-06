@@ -5,8 +5,7 @@ import {
   updateIssueCoverInDb,
   updateIssuePdfInDb,
 } from '@/lib/db';
-import { extractPdfText } from '@/lib/pdf-extract';
-import { indexIssue } from '@/lib/search-indexer';
+import { canIndexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
@@ -14,8 +13,8 @@ import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 /**
  * Replace the PDF for an existing issue. The new PDF is always written to
  * R2 — if the issue was on Supabase Storage, this implicitly migrates it.
- * The storage key is preserved from the original URL so legacy and new
- * URLs share the same key shape.
+ * Each replacement uses a unique key so in-flight readers and indexing jobs
+ * continue to see the original immutable source.
  */
 export async function POST(
   request: NextRequest,
@@ -31,10 +30,11 @@ export async function POST(
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
-  const storageKey = storageKeyFromUrl(issue.pdf_url);
-  if (!storageKey) {
+  const originalKey = storageKeyFromUrl(issue.pdf_url);
+  if (!originalKey) {
     return NextResponse.json({ error: 'Could not derive storage key' }, { status: 500 });
   }
+  const storageKey = originalKey.replace(/(?:-revision-[a-f0-9-]+)?\.pdf$/i, '') + `-revision-${crypto.randomUUID()}.pdf`;
 
   const formData = await request.formData();
   const file = formData.get('pdf') as File | null;
@@ -60,14 +60,7 @@ export async function POST(
 
   await updateIssuePdfInDb(id, cacheBustedUrl, file.size);
 
-  // Reindex OCR
-  let pagesIndexed = 0;
-  try {
-    const pages = await extractPdfText(buffer);
-    pagesIndexed = await indexIssue(id, pages);
-  } catch (err) {
-    console.error('Reindex after PDF replace failed (non-blocking):', err);
-  }
+  const indexing = await canIndexIssue(id) ? 'queued' : 'skipped';
 
   // Regenerate auto-thumbnail only if the current cover was auto-generated
   // (custom uploaded covers live at <path>-cover.jpg; page-1 thumbnails at <path>-thumb.jpg).
@@ -90,7 +83,7 @@ export async function POST(
     success: true,
     pdf_url: cacheBustedUrl,
     file_size_bytes: file.size,
-    pages_indexed: pagesIndexed,
+    indexing,
     cover_image_url: thumbnailUrl,
   });
 }

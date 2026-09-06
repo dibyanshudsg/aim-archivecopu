@@ -67,10 +67,37 @@ export interface PaginatedIssues {
   };
 }
 
-export async function fetchMagazines(): Promise<ApiMagazine[]> {
-  const res = await fetch(`${BASE_URL}/api/magazines`);
+export async function fetchMagazines(signal?: AbortSignal): Promise<ApiMagazine[]> {
+  const res = await fetch(`${BASE_URL}/api/magazines`, { signal });
   if (!res.ok) throw new Error('Failed to fetch magazines');
   return res.json();
+}
+
+const bookmarkedIssueRequests = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ApiIssue[]> }
+>();
+
+export function fetchBookmarkedIssues(ids: string[]): Promise<ApiIssue[]> {
+  if (ids.length === 0) return Promise.resolve([]);
+  const key = [...new Set(ids)].sort().join(',');
+  const existing = bookmarkedIssueRequests.get(key);
+  if (existing && existing.expiresAt > Date.now()) return existing.promise;
+
+  const searchParams = new URLSearchParams({ ids: key });
+  const promise = fetch(`${BASE_URL}/api/issues/bookmarks?${searchParams}`)
+    .then(async (res) => {
+      if (!res.ok) throw new Error('Failed to fetch bookmarked issues');
+      const result = (await res.json()) as { data: ApiIssue[] };
+      return result.data;
+    })
+    .catch((error) => {
+      bookmarkedIssueRequests.delete(key);
+      throw error;
+    });
+
+  bookmarkedIssueRequests.set(key, { expiresAt: Date.now() + 60_000, promise });
+  return promise;
 }
 
 export async function fetchIssues(params?: {
@@ -127,11 +154,13 @@ export async function fetchIssue(id: string, init?: RequestInit): Promise<ApiIss
 export interface FullTextSearchResult {
   issue_id: string;
   issue_title: string;
+  theme: string | null;
   magazine_name: string;
   magazine_language: string;
   year: number;
   month: number;
-  page_number: number;
+  page_number: number | null;
+  match_kind: 'title' | 'theme' | 'topic' | 'description' | 'page_text';
   /** For embargoed issues this is a synthesized "Available {Month YYYY}"
    *  placeholder — never an OCR excerpt, so embargoed content doesn't leak
    *  through search. */
@@ -146,9 +175,10 @@ export interface FullTextSearchResult {
 }
 
 export interface SearchResponse {
-  data: FullTextSearchResult[] | ApiIssue[];
+  data: FullTextSearchResult[];
   total: number;
-  type: 'fulltext' | 'fallback' | 'none';
+  type: 'matches' | 'none';
+  limited?: boolean;
 }
 
 export async function searchIssues(params: {
@@ -156,14 +186,16 @@ export async function searchIssues(params: {
   magazineId?: string;
   yearFrom?: string;
   yearTo?: string;
-}): Promise<SearchResponse> {
+  availability?: 'read' | 'subscriber' | 'all';
+}, signal?: AbortSignal): Promise<SearchResponse> {
   const searchParams = new URLSearchParams({ q: params.query });
   if (params.magazineId) searchParams.set('magazine_id', params.magazineId);
   if (params.yearFrom) searchParams.set('year_from', params.yearFrom);
   if (params.yearTo) searchParams.set('year_to', params.yearTo);
+  searchParams.set('availability', params.availability ?? 'read');
 
-  const res = await fetch(`${BASE_URL}/api/search?${searchParams}`);
-  if (!res.ok) throw new Error('Failed to search');
+  const res = await fetch(`${BASE_URL}/api/search?${searchParams}`, { signal });
+  if (!res.ok) throw new Error(res.status === 400 ? 'Check your query and filters. Years must be between 1950 and 2100, with the start before the end.' : 'Search could not load. Please try again.');
   return res.json();
 }
 

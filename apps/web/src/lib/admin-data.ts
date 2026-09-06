@@ -1,11 +1,14 @@
 import {
   getAdminSiteSettingsFromDb,
+  getAdminNavigationFromDb,
   getAdminStatsFromDb,
   getAdminStorageDataFromDb,
+  listNavigationDestinationsFromDb,
   listAdminIssuesFromDb,
   listAdminIssuesPageFromDb,
   listAdminMagazinesFromDb,
 } from '@/lib/db';
+import type { NavigationDestinations, PublicNavigation } from '@/lib/navigation';
 
 export interface AdminStats {
   totalMagazines: number;
@@ -37,12 +40,20 @@ export interface AdminIssue {
   magazine_id: string;
   pdf_url: string;
   cover_image_url: string | null;
+  created_at: string | null;
   updated_at: string | null;
   page_count: number | null;
   magazines: { name: string; language: string };
 }
 
-export type AdminIssueSortField = 'title' | 'year' | 'read_count' | 'download_count' | 'file_size_bytes' | 'updated_at';
+export type AdminIssueSortField =
+  | 'title'
+  | 'year'
+  | 'read_count'
+  | 'download_count'
+  | 'file_size_bytes'
+  | 'created_at'
+  | 'updated_at';
 export type AdminIssueSortDir = 'asc' | 'desc';
 export type AdminIssueStatusFilter = 'all' | 'published' | 'draft';
 
@@ -139,4 +150,12 @@ export async function getAdminSiteSettings(): Promise<AdminSiteSettings> {
 
 export async function getAdminStorageData(): Promise<AdminStorageData> {
   return getAdminStorageDataFromDb();
+}
+
+export async function getAdminNavigation(): Promise<PublicNavigation> {
+  return getAdminNavigationFromDb();
+}
+
+export async function listNavigationDestinations(): Promise<NavigationDestinations> {
+  return listNavigationDestinationsFromDb();
 }

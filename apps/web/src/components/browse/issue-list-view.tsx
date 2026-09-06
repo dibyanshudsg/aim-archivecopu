@@ -14,7 +14,8 @@ import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import type { SortColumn } from '@/lib/use-browse-filters';
 import { cn } from '@/lib/utils';
 import { shareIssue } from '@/lib/share-issue';
-import { readerPath, rememberReaderSource } from '@/lib/reader-url';
+import { readerPath, rememberReaderSource, warmReaderRoute } from '@/lib/reader-url';
+import { issueDetailPath, warmIssueDetailRoute } from '@/lib/issue-detail-url';
 
 interface Props {
   issues: IssueWithMagazine[];
@@ -35,7 +36,6 @@ export function IssueListView({ issues, sort, dir, onSort }: Props) {
               <th className="px-4 py-3 text-left">Topic Tags</th>
               <th className="px-4 py-3 text-right">Pages</th>
               <SortHeader col="size" label="Size" current={sort} dir={dir} onSort={onSort} align="right" />
-              <SortHeader col="reads" label="Reads" current={sort} dir={dir} onSort={onSort} align="right" />
               <th className="px-3 py-3"></th>
             </tr>
           </thead>
@@ -126,6 +126,7 @@ function ShareButton({ issue, className }: { issue: IssueWithMagazine; className
 
 function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number }) {
   const router = useRouter();
+  const detailHref = issueDetailPath(issue.id);
   const { toggle, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(issue.id);
   const delay = Math.min(index * 0.035, 0.4);
@@ -133,13 +134,30 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
   const selectionEnabled = useBulkSelection((s) => s.enabled);
   const isSelected = useBulkSelection((s) => s.selectedIds.has(issue.id));
   const toggleSelection = useBulkSelection((s) => s.toggle);
+  const prepareDetails = () => {
+    if (selectionEnabled) return;
+    router.prefetch(detailHref);
+    warmIssueDetailRoute(issue.id);
+  };
+  const preparePrimaryRoute = () => {
+    if (selectionEnabled) return;
+    if (issue.isEmbargoed) {
+      prepareDetails();
+      return;
+    }
+    router.prefetch(readerPath(issue.id));
+    warmReaderRoute(issue.id);
+  };
 
   return (
     <motion.tr
+      data-browse-issue-id={issue.id}
       initial={{ opacity: 0, x: -16 }}
       animate={{ opacity: 1, x: 0 }}
       whileHover={{ y: -2, transition: { duration: 0.18, ease: 'easeOut' } }}
       transition={{ delay, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      onPointerEnter={preparePrimaryRoute}
+      onFocusCapture={preparePrimaryRoute}
       onClick={() => {
         if (selectionEnabled) {
           toggleSelection(issue.id);
@@ -148,7 +166,7 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
         // Embargoed issues route to the detail page (where the embargo
         // messaging lives) — opening the reader would just paint a broken PDF.
         if (issue.isEmbargoed) {
-          router.push(`/issue/${issue.id}`);
+          router.push(detailHref);
         } else {
           rememberReaderSource(issue.id, 'browse');
           router.push(readerPath(issue.id));
@@ -192,7 +210,7 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="truncate font-medium text-gray-900">{issue.title}</span>
+              <span className="line-clamp-2 font-semibold text-gray-900">{issue.theme || issue.title}</span>
               {issue.isEmbargoed && issue.embargoLiftLabel && (
                 <span className="hidden shrink-0 rounded-full border border-flame-200 bg-flame-50/70 px-1.5 py-0.5 text-[10px] font-semibold text-flame-700 lg:inline-flex">
                   <Lock className="mr-0.5 inline h-2.5 w-2.5" />
@@ -201,8 +219,8 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
               )}
             </div>
             {issue.theme && (
-              <div className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[13px] font-bold leading-normal text-transparent">
-                {issue.theme}
+              <div className="mt-1 text-xs leading-relaxed text-gray-600">
+                {issue.title}
               </div>
             )}
             <div className="text-xs text-gray-500">{formatMonthYear(issue.month, issue.year)}</div>
@@ -232,9 +250,6 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
       <td className="px-4 py-3 text-right tabular-nums text-gray-700">
         {formatFileSize(issue.fileSizeBytes)}
       </td>
-      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-        {issue.readCount.toLocaleString()}
-      </td>
       <td className="px-3 py-3">
         <div
           className={cn(
@@ -254,8 +269,11 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
           </button>
           <ShareButton issue={issue} />
           <Link
-            href={`/issue/${issue.id}`}
+            href={detailHref}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            onPointerEnter={prepareDetails}
+            onPointerDown={prepareDetails}
+            onFocus={prepareDetails}
             aria-label="Issue details"
             className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-flame-50 hover:text-flame-700"
           >
@@ -268,6 +286,8 @@ function DesktopRow({ issue, index }: { issue: IssueWithMagazine; index: number 
 }
 
 function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }) {
+  const router = useRouter();
+  const detailHref = issueDetailPath(issue.id);
   const { toggle, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(issue.id);
   const delay = Math.min(index * 0.035, 0.4);
@@ -275,13 +295,30 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
   const selectionEnabled = useBulkSelection((s) => s.enabled);
   const isSelected = useBulkSelection((s) => s.selectedIds.has(issue.id));
   const toggleSelection = useBulkSelection((s) => s.toggle);
+  const prepareDetails = () => {
+    if (selectionEnabled) return;
+    router.prefetch(detailHref);
+    warmIssueDetailRoute(issue.id);
+  };
+  const preparePrimaryRoute = () => {
+    if (selectionEnabled) return;
+    if (issue.isEmbargoed) {
+      prepareDetails();
+      return;
+    }
+    router.prefetch(readerPath(issue.id));
+    warmReaderRoute(issue.id);
+  };
 
   return (
     <motion.li
+      data-browse-issue-id={issue.id}
       initial={{ opacity: 0, x: -16 }}
       animate={{ opacity: 1, x: 0 }}
       whileHover={{ y: -4, transition: { duration: 0.18, ease: 'easeOut' } }}
       transition={{ delay, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      onPointerEnter={preparePrimaryRoute}
+      onFocusCapture={preparePrimaryRoute}
       onClick={selectionEnabled ? () => toggleSelection(issue.id) : undefined}
       className={cn(
         'relative cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition-shadow duration-200 hover:shadow-xl',
@@ -292,7 +329,7 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
     >
       {!selectionEnabled && (
         <Link
-          href={issue.isEmbargoed ? `/issue/${issue.id}` : readerPath(issue.id)}
+          href={issue.isEmbargoed ? detailHref : readerPath(issue.id)}
           onClick={() => {
             if (!issue.isEmbargoed) rememberReaderSource(issue.id, 'browse');
           }}
@@ -327,10 +364,10 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-gray-900">{issue.title}</div>
+          <div className="line-clamp-2 text-sm font-semibold text-gray-900">{issue.theme || issue.title}</div>
           {issue.theme && (
-            <div className="font-heading truncate bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[12px] font-bold leading-normal text-transparent">
-              {issue.theme}
+            <div className="mt-1 text-xs leading-relaxed text-gray-600">
+              {issue.title}
             </div>
           )}
           <div className="text-xs text-gray-500">
@@ -343,9 +380,8 @@ function MobileRow({ issue, index }: { issue: IssueWithMagazine; index: number }
             </div>
           ) : (
             <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
-              <span>{issue.pageCount}p</span>
+              {issue.pageCount ? <span>{issue.pageCount}p</span> : null}
               <span>{formatFileSize(issue.fileSizeBytes)}</span>
-              <span>{issue.readCount.toLocaleString()} reads</span>
             </div>
           )}
         </div>

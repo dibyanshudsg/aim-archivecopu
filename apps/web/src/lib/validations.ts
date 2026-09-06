@@ -55,11 +55,12 @@ export const issuesQuerySchema = z.object({
 
 // Search query params
 export const searchQuerySchema = z.object({
-  q: z.string().min(1).max(500),
+  q: z.string().trim().min(1).max(500),
   magazine_id: z.string().uuid().optional(),
   year_from: z.coerce.number().int().min(1950).max(2100).optional(),
   year_to: z.coerce.number().int().min(1950).max(2100).optional(),
-});
+  availability: z.enum(['read', 'subscriber', 'all']).default('read'),
+}).refine((value) => !value.year_from || !value.year_to || value.year_from <= value.year_to, { message: 'Start year must not exceed end year' });
 
 const optionalUrl = z
   .string()
@@ -79,6 +80,31 @@ const optionalUrl = z
 export const siteSettingsSchema = z.object({
   feedback_form_url: optionalUrl,
   feedback_form_edit_url: optionalUrl,
+});
+
+const navigationMenuKeySchema = z.enum(['header', 'mobile', 'footer_archive', 'footer_magazines', 'footer_about']);
+const navigationLinkTypeSchema = z.enum(['route', 'magazine', 'topic', 'issue', 'external', 'feedback']);
+
+export const navigationItemSchema = z.object({
+  menu_key: navigationMenuKeySchema,
+  label: z.string().trim().min(1, 'Label is required').max(80),
+  link_type: navigationLinkTypeSchema,
+  route_key: z.string().trim().max(80).nullable().optional(),
+  target_id: z.string().trim().max(300).nullable().optional(),
+  href: z.string().trim().max(2000).nullable().optional(),
+  params: z.record(z.string().trim().max(120)).default({}),
+  sort_order: z.number().int().min(0).max(1000).optional(),
+  is_published: z.boolean().default(true),
+  opens_new_tab: z.boolean().default(false),
+});
+
+export const navigationReorderSchema = z.object({
+  menu_key: navigationMenuKeySchema,
+  item_ids: z.array(z.string().min(1)).max(100),
+});
+
+export const navigationMenuResetSchema = z.object({
+  menu_key: navigationMenuKeySchema,
 });
 
 /** Parse URL search params into an object for Zod */

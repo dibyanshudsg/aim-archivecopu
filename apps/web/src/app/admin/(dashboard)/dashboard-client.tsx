@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookCopy, FileText, Eye, Download, TrendingUp, Settings } from 'lucide-react';
+import { BookCopy, FileText, Eye, Download, TrendingUp, Settings, Navigation } from 'lucide-react';
 import type { AdminStats } from '@/lib/admin-data';
 
 export function AdminDashboardClient({ initialStats }: { initialStats: AdminStats }) {
@@ -74,7 +74,7 @@ export function AdminDashboardClient({ initialStats }: { initialStats: AdminStat
       </div>
 
       {/* Quick Links */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link
           href="/admin/magazines"
           className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-flame-200 hover:shadow-sm"
@@ -98,6 +98,14 @@ export function AdminDashboardClient({ initialStats }: { initialStats: AdminStat
           <Settings className="h-8 w-8 text-flame-500" />
           <h3 className="mt-3 font-semibold text-gray-900">Site Settings</h3>
           <p className="mt-1 text-sm text-gray-500">Manage footer feedback and public links</p>
+        </Link>
+        <Link
+          href="/admin/navigation"
+          className="group rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:border-flame-200 hover:shadow-sm"
+        >
+          <Navigation className="h-8 w-8 text-flame-500" />
+          <h3 className="mt-3 font-semibold text-gray-900">Navigation</h3>
+          <p className="mt-1 text-sm text-gray-500">Manage header, mobile, and footer links</p>
         </Link>
       </div>
     </div>

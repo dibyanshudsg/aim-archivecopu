@@ -8,32 +8,38 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BookOpen, Lock } from 'lucide-react';
 import type { FullTextSearchResult } from '@/lib/api';
 import { readerPath, rememberReaderSource } from '@/lib/reader-url';
-import { MONTH_NAMES } from '@aim-archive/shared';
-import type { MonthIndex } from '@aim-archive/shared';
+import { searchReaderPath } from '@/lib/search-reader-target';
 
 interface SearchResultItemProps {
   result: FullTextSearchResult;
   index: number;
+  query: string;
 }
 
-export function SearchResultItem({ result, index }: SearchResultItemProps) {
-  const monthName = MONTH_NAMES[result.month as MonthIndex];
-  const snippetParts = result.snippet.split(/(<mark>|<\/mark>)/g);
-  let highlighted = false;
+export function SearchResultItem({ result, index, query }: SearchResultItemProps) {
+  const themeTitle = result.theme?.trim();
+  const heading = themeTitle || result.issue_title;
+  const matchLabel = { title: 'Title match', theme: 'Theme match', topic: 'Topic match', description: 'Description match', page_text: 'Indexed text match' }[result.match_kind];
+  const snippet = decodeSnippet(result.snippet.replace(/<\/?mark>/g, ''));
+  const href = result.is_embargoed ? `/issue/${result.issue_id}`
+    : result.page_number !== null ? searchReaderPath(result.issue_id, { page: result.page_number, query, excerpt: snippet })
+    : readerPath(result.issue_id);
 
   return (
-    <div
-      className="group rounded-2xl border border-gray-100 bg-white p-5 transition-all hover:border-flame-200 hover:shadow-sm"
+    <Link
+      href={href}
+      onClick={() => rememberReaderSource(result.issue_id, 'search')}
+      aria-label={`${heading}${result.page_number !== null ? `, page ${result.page_number}` : ''}${result.is_embargoed ? ', view details' : ', open in reader'}`}
+      className="group block rounded-2xl border border-gray-100 bg-white p-5 transition-all hover:border-flame-200 hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flame-500"
       style={{ animationDelay: `${index * 40}ms` }}
     >
-      <div className="flex items-start gap-4">
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4">
         {/* Cover thumbnail with hover-preview (replaces the old page-icon
             pill — page number now overlaid as a badge so we don't lose
             at-a-glance scanning). */}
         <ResultThumbnail
-          issueId={result.issue_id}
           coverUrl={result.cover_image_url}
-          title={result.issue_title}
+          title={themeTitle ? `${themeTitle} — ${result.issue_title}` : result.issue_title}
           pageNumber={result.page_number}
           isEmbargoed={result.is_embargoed}
           embargoLiftLabel={result.embargo_lift_label}
@@ -41,71 +47,69 @@ export function SearchResultItem({ result, index }: SearchResultItemProps) {
 
         <div className="min-w-0 flex-1">
           {/* Issue info */}
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/issue/${result.issue_id}`}
-              className="text-sm font-semibold text-gray-900 hover:text-flame-700"
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="min-w-0 break-words text-sm font-semibold text-gray-900 hover:text-flame-700"
             >
-              {result.issue_title}
-            </Link>
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-              {result.magazine_name}
+              <HighlightedText text={heading} query={query} />
             </span>
           </div>
 
-          <p className="mt-0.5 text-xs text-gray-400">
-            {monthName} {result.year}
-            {!result.is_embargoed && ` — Page ${result.page_number}`}
+          {themeTitle && (
+            <p className="mt-0.5 break-words text-xs text-gray-500">
+              <HighlightedText text={result.issue_title} query={query} />
+            </p>
+          )}
+          <p className="mt-0.5 text-xs text-gray-500">
+            {matchLabel}
+            {result.page_number !== null && ` — Page ${result.page_number}`}
           </p>
 
           {/* Snippet with highlighted matches. Embargoed issues never carry an
               OCR excerpt — only the metadata placeholder ("Theme: … · Topics: …
               · Available {Month YYYY}") so page content never leaks. */}
           <p className="mt-2 text-sm leading-relaxed text-gray-600">
-            {snippetParts.map((part, partIndex) => {
-              if (part === '<mark>') {
-                highlighted = true;
-                return null;
-              }
-              if (part === '</mark>') {
-                highlighted = false;
-                return null;
-              }
-              return highlighted ? (
-                <mark key={partIndex} className="rounded-sm bg-gradient-to-r from-gold-100 to-flame-100 px-0.5 text-flame-900">
-                  {part}
-                </mark>
-              ) : (
-                <span key={partIndex}>{part}</span>
-              );
-            })}
+            <HighlightedText text={snippet} query={query} />
           </p>
         </div>
 
         {/* Action — Read for public issues, View Details for embargoed ones
             (which have no PDF to open yet). */}
         {result.is_embargoed ? (
-          <Link
-            href={`/issue/${result.issue_id}`}
-            className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 px-3 text-xs font-semibold text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
+          <span
+            className="flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 px-3 text-xs font-semibold text-flame-700 focus-visible:ring-2 focus-visible:ring-flame-500"
             title={result.embargo_lift_label ? `Available ${result.embargo_lift_label}` : 'Subscribers only'}
           >
             <Lock className="h-3.5 w-3.5" />
             Details
-          </Link>
+          </span>
         ) : (
-          <Link
-            href={readerPath(result.issue_id, result.page_number)}
-            onClick={() => rememberReaderSource(result.issue_id, 'search')}
-            className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 opacity-0 transition-opacity group-hover:opacity-100"
+          <span
+            className="flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-50 to-flame-50 px-3 text-xs font-medium text-flame-700 focus-visible:ring-2 focus-visible:ring-flame-500"
           >
             <BookOpen className="h-3.5 w-3.5" />
             Read
-          </Link>
+          </span>
         )}
       </div>
-    </div>
+    </Link>
   );
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const terms = [...new Set(query.trim().split(/\s+/u).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (terms.length === 0) return <>{text}</>;
+
+  // Capturing split retains the original casing and safely renders plain text,
+  // including Hindi and query characters that have special meaning in regexes.
+  const parts = text.split(new RegExp(`(${terms.join('|')})`, 'giu'));
+  return <>{parts.map((part, index) => index % 2 === 1 ? (
+    <mark key={index} className="rounded-sm bg-gradient-to-r from-gold-100 to-flame-100 px-0.5 text-flame-900">
+      {part}
+    </mark>
+  ) : part)}</>;
 }
 
 // ---------- Cover thumbnail with portal-rendered hover preview ----------
@@ -119,24 +123,22 @@ const PREVIEW_GAP = 12;
 const VIEWPORT_PAD = 12;
 
 function ResultThumbnail({
-  issueId,
   coverUrl,
   title,
   pageNumber,
   isEmbargoed,
   embargoLiftLabel,
 }: {
-  issueId: string;
   coverUrl: string | null;
   title: string;
-  pageNumber: number;
+  pageNumber: number | null;
   isEmbargoed: boolean;
   embargoLiftLabel: string | null;
 }) {
   const [show, setShow] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
-  const thumbRef = useRef<HTMLAnchorElement>(null);
+  const thumbRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -164,14 +166,12 @@ function ResultThumbnail({
 
   return (
     <>
-      <Link
+      <span
         ref={thumbRef}
-        href={`/issue/${issueId}`}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
         onFocus={handleEnter}
         onBlur={handleLeave}
-        aria-label={`Open ${title}`}
         className="group/thumb relative flex-shrink-0"
       >
         <div className="relative h-20 w-[60px] overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-100 shadow-sm ring-1 ring-flame-200/50 transition-transform group-hover/thumb:scale-[1.03]">
@@ -202,12 +202,12 @@ function ResultThumbnail({
                 <Lock className="h-2.5 w-2.5" />
                 {embargoLiftLabel ?? 'Locked'}
               </span>
-            ) : (
+            ) : pageNumber !== null ? (
               <>P.{pageNumber}</>
-            )}
+            ) : 'Details'}
           </div>
         </div>
-      </Link>
+      </span>
 
       {mounted &&
         coverUrl &&
@@ -249,4 +249,9 @@ function ResultThumbnail({
         )}
     </>
   );
+}
+
+// Decode only our escaped text entities; React still renders all text safely.
+function decodeSnippet(value: string) {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }

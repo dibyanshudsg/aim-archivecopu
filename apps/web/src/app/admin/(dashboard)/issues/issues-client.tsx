@@ -43,12 +43,20 @@ import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 import { useUI } from '@/components/ui/toast';
 import type { AdminIssue, AdminIssueListResult, AdminMagazine } from '@/lib/admin-data';
 import { renderPdfFirstPageCoverFromUrl } from '@/lib/pdf-cover-client';
+import { IndexingPanel } from '@/components/admin/indexing-panel';
 
 type Issue = AdminIssue;
 
 type Magazine = Pick<AdminMagazine, 'id' | 'name'>;
 
-type SortField = 'title' | 'year' | 'read_count' | 'download_count' | 'file_size_bytes' | 'updated_at';
+type SortField =
+  | 'title'
+  | 'year'
+  | 'read_count'
+  | 'download_count'
+  | 'file_size_bytes'
+  | 'created_at'
+  | 'updated_at';
 type SortDir = 'asc' | 'desc';
 type StatusFilter = 'all' | 'published' | 'draft';
 
@@ -68,6 +76,18 @@ interface AdminFilterOption {
 const PAGE_SIZE = 25;
 const DESCRIPTION_PREVIEW_LENGTH = 110;
 const SORT_OPTIONS: SortOption[] = [
+  {
+    field: 'created_at',
+    dir: 'desc',
+    label: 'Date added: newest first',
+    helper: 'Most recently uploaded issues at the top',
+  },
+  {
+    field: 'created_at',
+    dir: 'asc',
+    label: 'Date added: oldest first',
+    helper: 'Earliest uploads first',
+  },
   {
     field: 'updated_at',
     dir: 'desc',
@@ -158,7 +178,7 @@ export function AdminIssuesClient({
   const [filterTopic, setFilterTopic] = useState('all');
 
   // Sort
-  const [sortField, setSortField] = useState<SortField>('updated_at');
+  const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // Pagination
@@ -428,6 +448,7 @@ export function AdminIssuesClient({
       Downloads: i.download_count,
       'Size (bytes)': i.file_size_bytes,
       Status: i.is_published ? 'Published' : 'Draft',
+      'Date added': i.created_at ?? '',
       'Last modified': i.updated_at ?? '',
     }));
     const headers = Object.keys(rows[0] ?? {});
@@ -559,6 +580,8 @@ export function AdminIssuesClient({
           </Link>
         </div>
       </div>
+
+      <IndexingPanel />
 
       {/* Search & Filters */}
       <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-[0_12px_34px_rgba(15,23,42,0.04)] ring-1 ring-white">
@@ -1214,7 +1237,11 @@ function SortMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeOption = getSortOption(currentField, currentDir);
   const ActiveIcon =
-    currentField === 'updated_at' ? Clock3 : currentField === 'year' ? CalendarDays : ArrowUpDown;
+    currentField === 'updated_at' || currentField === 'created_at'
+      ? Clock3
+      : currentField === 'year'
+        ? CalendarDays
+        : ArrowUpDown;
 
   useEffect(() => {
     if (!open) return;
@@ -1910,8 +1937,6 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
   const fileRef = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState(false);
   const [reindexing, setReindexing] = useState(false);
-  const [reindexStatus, setReindexStatus] = useState<string>('Re-running OCR…');
-  const [reindexProgress, setReindexProgress] = useState<{ page: number; total: number } | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   const filename = useMemo(() => {
@@ -1975,7 +2000,8 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
     setReplacing(false);
     if (res.ok) {
       const data = await res.json();
-      toast.success(`PDF replaced · ${data.pages_indexed ?? 0} pages re-indexed`);
+      toast.success(data.indexing === 'queued' ? 'PDF replaced. Search indexing queued.' : 'PDF replaced. English-only indexing skipped.');
+      window.dispatchEvent(new Event('indexing-updated'));
       onChanged();
     } else {
       const data = await res.json().catch(() => ({}));
@@ -1984,80 +2010,17 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
   }
 
   async function handleReindex() {
-    const pages = issue.page_count ?? 0;
-    const etaText = pages > 0 ? ` Estimated time: ~${pages * 4}s for ${pages} pages.` : '';
-    const ok = await confirm({
-      title: 'Re-run OCR?',
-      message: `The full-text index for this issue will be rebuilt from the current PDF.${etaText} You'll see live page-by-page progress.`,
-      confirmLabel: 'Reindex',
-    });
-    if (!ok) return;
-
     setReindexing(true);
-    setReindexStatus('Starting…');
-    setReindexProgress(null);
-
-    let finished = false;
-    let lastError: string | null = null;
-    let finalPages = 0;
-
     try {
-      const res = await fetch(`/api/admin/issues/${issue.id}/reindex`, { method: 'POST' });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        let nl: number;
-        while ((nl = buf.indexOf('\n')) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          let event: { type: string; [k: string]: unknown };
-          try {
-            event = JSON.parse(line);
-          } catch {
-            continue;
-          }
-          if (event.type === 'status') {
-            setReindexStatus(String(event.message ?? ''));
-            setReindexProgress(null);
-          } else if (event.type === 'progress') {
-            setReindexStatus('OCR');
-            setReindexProgress({
-              page: Number(event.page),
-              total: Number(event.total),
-            });
-          } else if (event.type === 'done') {
-            finished = true;
-            finalPages = Number(event.pagesIndexed ?? 0);
-          } else if (event.type === 'error') {
-            lastError = String(event.message ?? 'Reindex failed');
-          }
-        }
-      }
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Reindex failed';
-    }
-
-    setReindexing(false);
-    setReindexProgress(null);
-
-    if (finished) {
-      toast.success(`Reindexed · ${finalPages} pages`);
+      const res = await fetch('/api/admin/issues/' + issue.id + '/reindex', {method:'POST'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not queue indexing');
+      toast.info(data.indexing === 'skipped' ? 'Indexing is enabled only for English editions.' : 'Search indexing queued. Follow progress on the Search Indexing page.');
+      window.dispatchEvent(new Event('indexing-updated'));
       onChanged();
-    } else {
-      toast.error(lastError || 'Reindex failed');
-    }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not queue indexing');
+    } finally { setReindexing(false); }
   }
 
   return (
@@ -2119,25 +2082,13 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
         <button
           type="button"
           onClick={handleReindex}
-          disabled={reindexing}
+          disabled={reindexing || issue.magazines.language !== 'english'}
+          title={issue.magazines.language !== 'english' ? 'OCR is available only for English editions' : undefined}
           className="relative flex items-center justify-center gap-2 overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-wait disabled:opacity-80"
         >
-          {reindexing && reindexProgress && (
-            <span
-              aria-hidden
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-gold-200/60 to-flame-200/60 transition-[width] duration-200"
-              style={{
-                width: `${Math.min(100, (reindexProgress.page / Math.max(1, reindexProgress.total)) * 100)}%`,
-              }}
-            />
-          )}
           <span className="relative flex items-center gap-2">
             <RotateCw className={cn('h-3.5 w-3.5', reindexing && 'animate-spin')} />
-            {reindexing
-              ? reindexProgress
-                ? `OCR · ${reindexProgress.page} / ${reindexProgress.total} pages`
-                : reindexStatus
-              : 'Re-run OCR'}
+            {reindexing ? 'Queuing...' : issue.magazines.language === 'english' ? 'Rebuild search index' : 'Indexing: English only'}
           </span>
         </button>
 

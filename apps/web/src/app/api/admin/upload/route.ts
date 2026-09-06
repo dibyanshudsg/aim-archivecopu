@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { createAdminIssueInDb, getMagazineNameFromDb } from '@/lib/db';
-import { extractPdfText } from '@/lib/pdf-extract';
-import { indexIssue } from '@/lib/search-indexer';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { isR2Url, keyFromPublicUrl, uploadToR2 } from '@/lib/r2-client';
@@ -18,11 +16,11 @@ export const maxDuration = 60;
  * R2 upload is the dominant cost (~3-5s) and cover processing is another
  * 2-5s. Event shapes (one JSON object per line):
  *   { type: 'status', step: 'uploading-pdf' | 'processing-cover' | 'creating-record', message: string }
- *   { type: 'done',   issue: {...}, indexing: 'in_progress' }
+ *   { type: 'done',   issue: {...}, indexing: 'queued' | 'skipped' }
  *   { type: 'error',  message: string }
  *
- * OCR + search indexing run via after() once the stream closes, so the user
- * gets immediate "Done!" feedback while indexing populates in the background.
+ * The issue and durable indexing job are saved atomically. A separate worker
+ * performs extraction after upload; completion here means the issue is saved.
  */
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
@@ -167,19 +165,7 @@ export async function POST(request: NextRequest) {
         });
         refreshPublicArchiveCaches(String(issue.id));
 
-        // Schedule background OCR + indexing — runs after the stream closes.
-        // Falls back to the per-issue Reindex button if the platform cuts off
-        // the after() callback (Vercel Hobby max duration).
-        after(async () => {
-          try {
-            const pages = await extractPdfText(pdfBuffer);
-            await indexIssue(String(issue.id), pages);
-          } catch (extractErr) {
-            console.error('PDF text extraction failed (can be retried via reindex):', extractErr);
-          }
-        });
-
-        send({ type: 'done', issue, indexing: 'in_progress' });
+        send({ type: 'done', issue, indexing: issue.indexing_job_id ? 'queued' : 'skipped' });
         controller.close();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Upload failed';

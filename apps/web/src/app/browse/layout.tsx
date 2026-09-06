@@ -3,10 +3,10 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Browse Archive',
   description:
-    'Browse the complete archive of All India Magazine, Agnishikha, and other Sri Aurobindo Society publications. Filter by magazine, year, language, or topic.',
+    'Browse listed Sri Aurobindo Society magazine editions by magazine, year, language, or topic. Public reading opens five years after publication.',
   openGraph: {
     title: 'Browse Archive | AIM Archive',
-    description: 'Browse the complete collection of Sri Aurobindo Society magazines.',
+    description: 'Browse the online collection of Sri Aurobindo Society magazines.',
   },
   alternates: { canonical: '/browse' },
 };

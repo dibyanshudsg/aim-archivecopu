@@ -1,0 +1,92 @@
+# Durable search indexing
+
+Implemented and verified locally: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. Production worker hosting remains a separate, unprovisioned step.
+
+Final release and integrity evidence: [Production release — 6 September 2026](PRODUCTION_RELEASE_2026-09-06.md).
+
+## Admin access
+
+The public footer includes **Admin**, linking to `/admin`. Signed-out users reach `/admin/login`; authenticated users reach the dashboard. The sidebar's **Search Indexing** entry opens `/admin/indexing`. Issues retains a compact coverage summary and a link to the workspace. Per-issue PDF controls still include **Rebuild search index**.
+
+The workspace defaults to issues needing attention. It lists the entire catalogue with status, magazine, year, publication and title filters, 25-row pagination, and selection retained while inspecting details. Missing and failed batch actions explicitly cover up to 100 issues across the catalogue; selections are capped at 100. Rebuilding existing indexes requires confirmation. Every issue is rechecked inside its enqueue transaction to skip unsupported, unavailable or already-active work.
+
+Coverage distinguishes missing text, queued/processing/failed jobs, verified indexes, withheld pages, existing indexes requiring verification, unavailable sources, and languages outside scope. Summary counts cover the full catalogue including drafts. Job status and current searchable coverage are separate: a failed rebuild can still have an earlier searchable index.
+
+The details drawer includes processing stage, saved pages, attempts, errors, coverage evidence, withheld-page links, and 30 recent runs. The paginated Activity / History tab retains previous manual runs, upload/replacement triggers, automatic-attempt counts, failures and superseded work. Earlier rebuilds are labelled as reconciled records; their attempt/start times are not invented.
+
+Withheld-page links open `/admin/indexing/[id]/preview`, an authenticated PDF preview supporting drafts and restricted editions without changing publication, public embargo rules, or reader analytics.
+
+## What runs automatically
+
+- Saving a new English issue and saving its queue job are one database transaction. Single and bulk uploads share this path.
+- PDF replacements use a unique R2 object key. Updating the issue, clearing obsolete search-page targets, superseding old work, and queuing the replacement are atomic. The old object is retained; storage cleanup is a separate action.
+- Single and bulk reindex APIs enqueue work and return promptly. They no longer perform OCR inside the web request. Single reindex returns JSON with `indexing` and `jobId` (HTTP 202 when queued). Bulk reindex returns `queued`, `errors`, and `total`; external callers of the old stream/loop contract must update.
+- Hindi/non-English editions do not enqueue OCR. Metadata-only edits do not rebuild text. Direct database imports must explicitly queue eligible issues afterward; application repository creation automatically queues them.
+- A worker claims one issue at a time, checks the PDF hash and extraction version, and saves each physical page's extraction before moving on. A changed source/version discards incompatible checkpoints.
+- Leases last two minutes and renew every 20 seconds. A crashed process can be replaced without losing completed pages. Lease tokens and source checks prevent superseded workers from publishing stale results.
+- Failed work gets **three total automatic attempts**, with 30-second and 60-second backoff. A manual retry resets the attempt budget and reuses compatible checkpoints. Repeated crashes become a visible failure. The standalone process exits after a 45-minute stall so its supervisor can recover it.
+- The index and final job state commit together. Low-confidence pages remain out of search. Successful jobs retain only withheld-page evidence; failed jobs retain checkpoints for retry. Excessive uncertainty leaves an existing same-PDF index intact and reports the extraction failure.
+- Admin status polls approximately every five seconds after the preceding request finishes. Worker health becomes offline after 60 seconds without a heartbeat. The original job-only endpoint remains for compatibility; the dedicated workspace reconciles job state with catalogue coverage and persistent history.
+- Public data uses its existing cache lifetimes; a completed job may need a refresh/cache expiry before a repeated public query reflects it.
+
+## Database migration
+
+Apply once before enabling the new application paths. This idempotent migration creates only the queue, page-checkpoint, and worker-health tables; it does not rebuild or modify existing issue/search rows.
+
+```powershell
+node scripts/apply-turso-migrations.mjs --only 00003_indexing_jobs.sql
+node scripts/apply-turso-migrations.mjs --only 00004_indexing_workspace.sql
+# For the separate local smoke database:
+node scripts/apply-turso-migrations.mjs --local --only 00003_indexing_jobs.sql
+node scripts/apply-turso-migrations.mjs --local --only 00004_indexing_workspace.sql
+```
+
+Applied to both configured databases on 2026-09-06. Do not rerun every historical migration just to install this feature.
+
+Migration 00004 adds persistent run history and source-bound coverage evidence. It is idempotent, including when jobs already have history. Worker completion writes the index, coverage evidence and run outcome atomically. Restart workers after updating this release so they record stage/history updates.
+
+`node scripts/reconcile-indexing-coverage.cjs` checks saved v5 extraction evidence against every current page-text row, PDF URL and physical page count. `--apply` imports matching evidence/history only; `--local` selects the smoke database. Unproven entries remain unverified. Reconciliation applied successfully: 102 remote English editions (17 withheld pages) and two local English editions (one withheld page). Existing PDFs, publication state and search text were not rewritten.
+
+## Local operation
+
+Run `pnpm.cmd dev` from `apps/web` as usual. The development launcher starts Next and the indexing worker using the same inherited database configuration. `pnpm.cmd dev:local-db` from the root explicitly selects the smoke database for both. The normal `.env.local` selects the full catalogue.
+
+To run only the worker from the repository root:
+
+```powershell
+pnpm.cmd indexing:worker
+# Process at most one currently eligible job, then exit:
+node scripts/indexing-worker.cjs --once
+```
+
+Requirements: Node 22+, installed workspace dependencies including TypeScript, native `canvas`, PDF.js standard fonts, and network access to Turso and source PDFs. Tesseract downloads English language data on first use. Set `INDEXING_OCR_CACHE_PATH` to a writable cache directory when the checkout is read-only. Environment variables already set by the launcher take precedence over `.env.local`.
+
+## Production worker operation — hosting pending
+
+The Next/Vercel web process only enqueues jobs. A continuously running Node worker is required on a chosen host; `next start`, Vercel `after()`, and an open browser do not provide it.
+
+1. Deploy the migration and the web/worker code from the same release. Install the worker checkout with `pnpm install --frozen-lockfile` including development dependencies (the standalone TypeScript loader requires TypeScript).
+2. Supply `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` through the host's protected environment settings. Public R2 PDF downloads do not require R2 write credentials. Do not commit environment files.
+3. Run `node scripts/indexing-worker.cjs` with automatic restart. An example Linux service is at `ops/indexing-worker.service`; its account, paths, Node installation, environment file and cache directory must exist before installation. This example has not been installed on a production host.
+4. Confirm **Worker connected** in Search Indexing. Perform a controlled upload, interruption/resume, manual retry, and PDF replacement on that deployment; verify the resulting public page-text search after cache refresh.
+
+Multiple workers are allowed and leases prevent duplicate ownership, but each adds OCR CPU/memory load. Start with one. A stopped worker does not lose queued jobs. Stopping a service may interrupt the current page; already checkpointed pages resume after its lease expires.
+
+### Hosting decision pending
+
+No production worker host is configured in the repository or local hosting setup. The connected worker currently runs on the development computer. The owner requested free alternatives before choosing a host; no paid service has been provisioned.
+
+A scheduled GitHub Actions worker is a possible alternative to continuous hosting for occasional uploads. It would require a bounded queue-draining mode, protected database secrets, concurrency control, dependency/OCR caching, an on-demand trigger, and health copy that distinguishes scheduled operation from an offline continuous worker. GitHub Free includes 2,000 monthly runner minutes for private repositories; standard public-repository runners are free. Check the account's remaining allowance and block overages before enabling it. Scheduled runs can be delayed, so an hourly check does not guarantee indexing starts within one hour. This alternative is proposed, not implemented. Sources: [billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [schedule behavior](https://docs.github.com/en/actions/tutorials/manage-your-work/schedule-issue-creation).
+
+Railway is the paid continuous-host option considered: Hobby has a $5 monthly minimum including $5 of usage, with additional resource usage charged above that amount. Actual OCR CPU and memory usage must be measured before estimating the ongoing bill. [Pricing](https://docs.railway.com/pricing/plans).
+
+## Verification evidence
+
+- `node scripts/test-indexing-jobs.cjs`: real isolated libSQL transactions test upload/replacement queue atomicity, English-only guards, duplicate ownership prevention, crash checkpoints, stale-worker rejection, source hash changes, retry limits/backoff, review evidence, heartbeat expiry, deletion cleanup and injected write rollback.
+- `node scripts/test-indexing-worker-pdf.cjs`: actual native-text and scanned-page PDF extraction through the worker, persistent checkpoints, and exact page 1/2 searchable output. No real catalogue/storage mutations.
+- Existing indexing and search-quality/reader regressions remain applicable.
+- Production build passes using isolated `.next-verify` output.
+- Local browser QA verifies the Admin footer/login path, real admin authentication, unauthorized API rejection, live empty queue, desktop/mobile progress/failure/review fixtures, retry requests, and no page errors or phone overflow. Fixture screenshots are not evidence of production processing.
+- Combined local development launcher was restarted and verified: full catalogue remains 104 listed editions, the worker reports connected, and unauthenticated indexing access returns HTTP 401. Finish review accepted the desktop/mobile panel and rendered Admin footer control.
+
+GitHub Actions has now been selected and its hourly/manual workflow implemented. Execution remains disabled pending explicit authorization for the two encrypted database secrets and confirmation that paid overages are blocked. See [GitHub indexing setup](GITHUB_INDEXING.md). Cloud execution verification remains outstanding. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.

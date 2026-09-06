@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { BookMarked, BookOpen, LibraryBig, Search, Download, Globe } from 'lucide-react';
+import { BookMarked, LibraryBig, Search } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
@@ -26,7 +26,7 @@ const ThisMonthFeatured = dynamic(
     loading: () => (
       <div
         aria-hidden
-        className="relative -mx-6 mt-16 min-h-[520px] max-w-5xl rounded-3xl border border-flame-100/60 bg-white/60 sm:mx-auto sm:min-h-[640px]"
+        className="relative mx-auto mt-10 min-h-[220px] max-w-5xl rounded-xl border border-flame-100/60 bg-white/60"
       />
     ),
   },
@@ -40,6 +40,7 @@ import {
 } from '@/lib/reading-history';
 import { readerPath, rememberDirectResume, rememberReaderSource } from '@/lib/reader-url';
 import { formatMonthYear } from '@/lib/utils';
+import type { PublicNavigation } from '@/lib/navigation';
 
 // Slide-up entrance — no opacity gate. Opacity transitions block LCP measurement
 // (the element isn't "contentful" while opacity:0), so we keep the element fully
@@ -61,30 +62,6 @@ const staggerContainer = {
   },
 };
 
-const features = [
-  {
-    icon: BookOpen,
-    title: 'Read Online',
-    description: 'Browse and read any issue directly in your browser with our smooth PDF viewer.',
-  },
-  {
-    icon: Search,
-    title: 'Search Everything',
-    description:
-      'Full-text search across every issue ever published. Find exactly what you need.',
-  },
-  {
-    icon: Download,
-    title: 'Download & Offline',
-    description: 'Download issues in PDF, EPUB, or MOBI. Read offline anytime, anywhere.',
-  },
-  {
-    icon: Globe,
-    title: 'Multiple Languages',
-    description:
-      'Archives in English, Hindi, Tamil, Marathi, Bengali and more - all in one place.',
-  },
-];
 
 interface HomeClientProps {
   recentIssues: ApiIssue[];
@@ -95,6 +72,8 @@ interface HomeClientProps {
   carouselCurrentMonth: number;
   carouselPrevYear: number;
   carouselPrevMonth: number;
+  navigation: PublicNavigation;
+  collection: { listed: number; readable: number; languages: string[] };
 }
 
 function ContinueReadingShelf() {
@@ -213,14 +192,16 @@ export function HomeClient({
   carouselCurrentMonth,
   carouselPrevYear,
   carouselPrevMonth,
+  navigation,
+  collection,
 }: HomeClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
+      <Header navigation={navigation} />
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-24 sm:py-32 lg:px-8">
+        <section className="relative overflow-hidden bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
           <motion.div
             className="relative mx-auto max-w-5xl text-center"
             initial="hidden"
@@ -228,14 +209,14 @@ export function HomeClient({
             variants={staggerContainer}
           >
             <motion.div variants={fadeInUp} className="mb-4 flex justify-center">
-              <Flame />
+              <Flame className="scale-75 sm:scale-100" />
             </motion.div>
 
             <motion.h1
               variants={fadeInUp}
-              className="font-cursive text-6xl font-bold leading-snug sm:text-7xl sm:leading-relaxed lg:text-8xl bg-gradient-to-r from-gold-500 via-flame-500 to-flame-600 bg-clip-text text-transparent"
+              className="font-cursive text-4xl font-bold leading-snug sm:text-7xl sm:leading-relaxed lg:text-8xl bg-gradient-to-r from-gold-500 via-flame-500 to-flame-600 bg-clip-text text-transparent"
             >
-              An Archive<br className="sm:hidden" /> of <br className="sm:hidden" /><span className="whitespace-nowrap">Eternal Flame</span>
+              An Archive of <span className="whitespace-nowrap">Eternal Flame</span>
             </motion.h1>
 
             {/* Static (no Framer motion variant) — this is the LCP element on
@@ -243,15 +224,14 @@ export function HomeClient({
                 the element reaches its final position; rendering it statically
                 paints it on first frame. The H1 and CTAs stay animated for
                 entrance polish. */}
-            <p className="mt-6 text-lg leading-relaxed text-gray-600 sm:text-xl">
+            <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-gray-600 sm:mt-6 sm:text-xl">
               Decades of spiritual wisdom from{' '}
               <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">Sri Aurobindo</span> and{' '}
-              <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">The Mother</span>, preserved and
-              accessible to all. Explore the complete archive of All India Magazine, Agnishikha, and
-              more.
+              <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">The Mother</span>.
+              {' '}Read archive editions freely once they enter the five-year public archive.
             </p>
 
-            <motion.div variants={fadeInUp} className="mt-10 flex items-center justify-center gap-4">
+            <motion.div variants={fadeInUp} className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:mt-10">
               <Link
                 href="/browse"
                 className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)] sm:px-8 sm:py-3.5 sm:text-base"
@@ -280,7 +260,6 @@ export function HomeClient({
             prevMonth={carouselPrevMonth}
           />
 
-          <LatestSubscriberEditions issues={latestSubscriberEditions} />
 
           {/* Dynamic Bookshelf */}
           <motion.div
@@ -293,6 +272,7 @@ export function HomeClient({
           </motion.div>
 
           <ContinueReadingShelf />
+          <LatestSubscriberEditions issues={latestSubscriberEditions} />
 
           {/* Archive Stats */}
           <motion.div
@@ -302,9 +282,9 @@ export function HomeClient({
             transition={{ delay: 1, duration: 0.6 }}
           >
             {[
-              { label: 'Issues Archived', value: '850+' },
-              { label: 'Years of Wisdom', value: '35+' },
-              { label: 'Languages', value: '6' },
+              { label: 'Publicly listed editions', value: collection.listed.toLocaleString() },
+              { label: 'Readable now', value: collection.readable.toLocaleString() },
+              { label: 'Awaiting public release', value: (collection.listed - collection.readable).toLocaleString() },
             ].map((stat) => (
               <div key={stat.label}>
                 <p className="font-heading bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-3xl font-bold text-transparent sm:text-4xl">
@@ -314,43 +294,12 @@ export function HomeClient({
               </div>
             ))}
           </motion.div>
+          <p className="mx-auto mt-5 max-w-3xl text-center text-sm text-gray-600">
+            {collection.languages.length ? `Languages in the listed collection: ${collection.languages.join(', ')}.` : 'No editions are listed yet.'}
+            {' '}Counts describe the online catalogue, including restricted editions, not the complete print collection.
+          </p>
         </section>
 
-        {/* Features Section */}
-        <section className="px-6 py-20 lg:px-8">
-          <motion.div
-            className="mx-auto max-w-5xl"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-100px' }}
-            variants={staggerContainer}
-          >
-            <motion.div variants={fadeInUp} className="text-center">
-              <h2 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">
-                Everything you need
-              </h2>
-              <p className="mt-4 text-lg text-gray-600">
-                A complete platform to explore, read, and preserve spiritual literature.
-              </p>
-            </motion.div>
-
-            <div className="mt-16 grid gap-8 sm:grid-cols-2">
-              {features.map((feature) => (
-                <motion.div
-                  key={feature.title}
-                  variants={fadeInUp}
-                  className="group rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all hover:border-flame-200 hover:shadow-md"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600 transition-colors group-hover:from-gold-100 group-hover:to-flame-100">
-                    <feature.icon className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">{feature.title}</h3>
-                  <p className="mt-2 leading-relaxed text-gray-600">{feature.description}</p>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </section>
 
         {/* CTA Section */}
         <section className="bg-gradient-to-b from-white to-flame-50 px-6 py-20 lg:px-8">
@@ -368,7 +317,7 @@ export function HomeClient({
               Begin your exploration
             </motion.h2>
             <motion.p variants={fadeInUp} className="mt-4 text-lg text-gray-600">
-              Dive into the treasury of spiritual knowledge. Every issue, every article, always free.
+              Explore the public archive. Editions become freely readable five years after publication.
             </motion.p>
             <motion.div variants={fadeInUp} className="mt-8">
               <Link
@@ -382,7 +331,7 @@ export function HomeClient({
         </section>
       </main>
 
-      <Footer />
+      <Footer navigation={navigation} />
     </div>
   );
 }

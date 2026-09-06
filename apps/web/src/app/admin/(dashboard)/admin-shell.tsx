@@ -9,10 +9,12 @@ import {
   LayoutDashboard,
   BookCopy,
   FileText,
+  SearchCheck,
   HardDrive,
   LogOut,
   Menu,
   Settings,
+  Navigation,
   X,
   ExternalLink,
   ChevronsLeft,
@@ -25,6 +27,8 @@ const navItems = [
   { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/magazines', icon: BookCopy, label: 'Magazines' },
   { href: '/admin/issues', icon: FileText, label: 'Issues' },
+  { href: '/admin/indexing', icon: SearchCheck, label: 'Search Indexing' },
+  { href: '/admin/navigation', icon: Navigation, label: 'Navigation' },
   { href: '/admin/storage', icon: HardDrive, label: 'Storage' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
@@ -160,12 +164,12 @@ function AdminDashboardFrame({
         animate={{ width: effectiveWidth }}
         transition={dragging ? { duration: 0 } : { type: 'tween', duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         style={{ width: effectiveWidth }}
-        className="relative hidden shrink-0 flex-col border-r border-gray-200 bg-white lg:flex"
+        className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white lg:flex"
       >
         {/* Header */}
         <div
           className={cn(
-            'flex border-b border-gray-100',
+            'flex shrink-0 border-b border-gray-100',
             collapsed ? 'flex-col items-center gap-2 px-2 py-4' : 'items-center gap-3 px-6 py-5',
           )}
         >
@@ -191,7 +195,7 @@ function AdminDashboardFrame({
         </div>
 
         {/* Nav */}
-        <nav className={cn('flex flex-1 flex-col py-4', collapsed ? 'px-2' : 'px-3')}>
+        <nav className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto py-4', collapsed ? 'px-2' : 'px-3')}>
           {navItems.map((item) => {
             const active =
               pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
@@ -234,7 +238,7 @@ function AdminDashboardFrame({
         </nav>
 
         {/* User info + sign out */}
-        <div className={cn('border-t border-gray-100', collapsed ? 'p-2' : 'p-4')}>
+        <div className={cn('shrink-0 border-t border-gray-100 bg-white', collapsed ? 'p-2' : 'p-4')}>
           {!collapsed && (
             <div className="mb-3 px-2">
               <p className="truncate text-sm font-medium text-gray-900">{admin.name}</p>
@@ -269,7 +273,7 @@ function AdminDashboardFrame({
       </motion.aside>
 
       {/* Mobile header */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
           <div className="flex items-center gap-2">
             <button onClick={() => setSidebarOpen(true)} className="p-1 text-gray-600">
@@ -289,7 +293,7 @@ function AdminDashboardFrame({
         {sidebarOpen && (
           <div className="fixed inset-0 z-50 flex lg:hidden">
             <div className="fixed inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
-            <div className="relative w-64 bg-white shadow-xl">
+            <div className="relative flex h-dvh w-64 flex-col bg-white shadow-xl">
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="absolute top-4 right-4 text-gray-400"
@@ -299,7 +303,7 @@ function AdminDashboardFrame({
               <div className="border-b border-gray-100 px-6 py-5">
                 <p className="font-heading text-sm font-bold">AIM Archive</p>
               </div>
-              <nav className="px-3 py-4">
+              <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
                 {navItems.map((item) => {
                   const active = pathname === item.href;
                   return (

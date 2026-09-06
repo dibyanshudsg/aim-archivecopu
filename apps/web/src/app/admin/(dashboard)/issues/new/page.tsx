@@ -668,7 +668,7 @@ export default function UploadIssuePage() {
               />
             </div>
             <p className="text-[11px] text-gray-500">
-              Search indexing (OCR) continues in the background after upload completes.
+              English editions are queued for search indexing after upload. Follow progress and retry failures on the Search Indexing page.
             </p>
           </div>
         )}

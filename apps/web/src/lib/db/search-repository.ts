@@ -1,6 +1,7 @@
 import type { FullTextSearchResult } from '@/lib/api';
-import { getEmbargoState } from '@/lib/embargo';
+import { getEmbargoState, readableCutoffIssueMonth } from '@/lib/embargo';
 import { displayableAssetUrl, getDb } from './client';
+import { buildSearchSnippet } from '../search-text-quality';
 
 export interface SearchInput {
   query: string;
@@ -8,6 +9,7 @@ export interface SearchInput {
   yearFrom?: number;
   yearTo?: number;
   limit?: number;
+  availability?: 'read' | 'subscriber' | 'all';
 }
 
 export interface MetadataSearchIssue {
@@ -86,10 +88,10 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
       WHERE i.is_published = 1
         AND i.pdf_url NOT LIKE '%.supabase.co/%'
         AND (
-          lower(i.title) LIKE ?
-          OR lower(coalesce(i.theme, '')) LIKE ?
-          OR lower(coalesce(i.description, '')) LIKE ?
-          OR lower(coalesce(topic.value, '')) LIKE ?
+          lower(i.title) LIKE ? ESCAPE '\\'
+          OR lower(coalesce(i.theme, '')) LIKE ? ESCAPE '\\'
+          OR lower(coalesce(i.description, '')) LIKE ? ESCAPE '\\'
+          OR lower(coalesce(topic.value, '')) LIKE ? ESCAPE '\\'
         )
         ${filters.sql}
       ORDER BY i.year DESC, i.month DESC
@@ -120,6 +122,20 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
   }));
 }
 
+export async function listSearchTopics(input: SearchInput): Promise<string[]> {
+  const filters = buildSearchFilters(input);
+  const result = await getDb().execute({
+    sql: `SELECT trim(topic.value) AS topic, count(DISTINCT i.id) AS uses
+      FROM issues i JOIN json_each(i.topics_json) topic ON true
+      WHERE i.is_published = 1 AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        AND topic.type = 'text' AND length(trim(topic.value)) BETWEEN 1 AND 100
+        ${filters.sql}
+      GROUP BY trim(topic.value) ORDER BY uses DESC, topic COLLATE NOCASE LIMIT 12`,
+    args: filters.args,
+  });
+  return result.rows.map((row) => String(row.topic));
+}
+
 async function searchWithTursoFts(input: SearchInput): Promise<FullTextSearchResult[]> {
   const filters = buildSearchFilters(input);
   const result = await getDb().execute({
@@ -132,7 +148,7 @@ async function searchWithTursoFts(input: SearchInput): Promise<FullTextSearchRes
         i.year,
         i.month,
         idx.page_number,
-        fts_highlight(idx.content, '<mark>', '</mark>', ?) AS snippet,
+        idx.content AS snippet,
         fts_score(idx.content, ?) AS rank,
         i.cover_image_url,
         i.pdf_url,
@@ -148,15 +164,15 @@ async function searchWithTursoFts(input: SearchInput): Promise<FullTextSearchRes
       ORDER BY rank DESC, i.year DESC, i.month DESC
       LIMIT ?
     `,
-    args: [input.query, input.query, input.query, ...filters.args, input.limit ?? 50],
+    args: [input.query, input.query, ...filters.args, input.limit ?? 50],
   });
 
-  return decorateSearchRows(result.rows as unknown as SearchRow[]);
+  return decorateSearchRows((result.rows as unknown as SearchRow[]).map(row => ({ ...row, snippet: buildSearchSnippet(String(row.snippet), input.query, Number(row.page_number)) })));
 }
 
 async function searchWithLikeFallback(input: SearchInput): Promise<FullTextSearchResult[]> {
   const filters = buildSearchFilters(input);
-  const pattern = `%${input.query.toLowerCase()}%`;
+  const pattern = `%${input.query.toLowerCase().replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
   const result = await getDb().execute({
     sql: `
       SELECT
@@ -178,7 +194,7 @@ async function searchWithLikeFallback(input: SearchInput): Promise<FullTextSearc
       JOIN magazines m ON m.id = i.magazine_id
       WHERE i.is_published = 1
         AND i.pdf_url NOT LIKE '%.supabase.co/%'
-        AND lower(idx.content) LIKE ?
+        AND lower(replace(replace(idx.content, char(10), ' '), char(13), ' ')) LIKE ? ESCAPE '\\'
         ${filters.sql}
       ORDER BY i.year DESC, i.month DESC, idx.page_number ASC
       LIMIT ?
@@ -188,13 +204,20 @@ async function searchWithLikeFallback(input: SearchInput): Promise<FullTextSearc
 
   return decorateSearchRows((result.rows as unknown as SearchRow[]).map((row) => ({
     ...row,
-    snippet: highlightSnippet(String(row.snippet), input.query),
+    snippet: buildSearchSnippet(String(row.snippet), input.query, Number(row.page_number)),
   })));
 }
 
 function buildSearchFilters(input: SearchInput) {
-  const clauses: string[] = [];
+  const clauses: string[] = ["AND trim(i.pdf_url) <> ''"];
   const args: Array<string | number> = [];
+  if (input.availability !== 'all') {
+    const cutoff = readableCutoffIssueMonth();
+    clauses.push(input.availability === 'subscriber'
+      ? 'AND (i.year > ? OR (i.year = ? AND i.month > ?))'
+      : 'AND (i.year < ? OR (i.year = ? AND i.month <= ?))');
+    args.push(cutoff.year, cutoff.year, cutoff.month);
+  }
   if (input.magazineId) {
     clauses.push('AND i.magazine_id = ?');
     args.push(input.magazineId);
@@ -225,13 +248,15 @@ function decorateSearchRows(rows: SearchRow[]): FullTextSearchResult[] {
     results.push({
       issue_id: String(row.issue_id),
       issue_title: String(row.issue_title),
+      theme: row.theme == null ? null : String(row.theme),
       magazine_name: String(row.magazine_name),
       magazine_language: String(row.magazine_language),
       year: Number(row.year),
       month: Number(row.month),
-      page_number: state.isEmbargoed ? 1 : Number(row.page_number),
+      page_number: state.isEmbargoed ? null : Number(row.page_number),
+      match_kind: 'page_text',
       snippet: state.isEmbargoed
-        ? buildEmbargoSnippet(row.theme, parseTopics(row.topics_json), state.embargoLiftLabel)
+        ? `Matches indexed text; excerpt available when public reading opens. ${buildEmbargoSnippet(row.theme, parseTopics(row.topics_json), state.embargoLiftLabel)}`
         : String(row.snippet),
       rank: Number(row.rank ?? 0),
       cover_image_url: displayableAssetUrl(row.cover_image_url),
@@ -263,24 +288,8 @@ function parseTopics(value: string | null): string[] {
   }
 }
 
-function highlightSnippet(content: string, query: string): string {
-  const lower = content.toLowerCase();
-  const q = query.toLowerCase();
-  const idx = lower.indexOf(q);
-  const start = idx >= 0 ? Math.max(0, idx - 80) : 0;
-  const end = idx >= 0 ? Math.min(content.length, idx + query.length + 120) : Math.min(content.length, 220);
-  let snippet = content.slice(start, end);
-  if (start > 0) snippet = `...${snippet}`;
-  if (end < content.length) snippet = `${snippet}...`;
-  return escapeHtml(snippet).replace(new RegExp(`(${escapeRegExp(query)})`, 'gi'), '<mark>$1</mark>');
-}
-
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function isMissingFtsError(error: unknown): boolean {

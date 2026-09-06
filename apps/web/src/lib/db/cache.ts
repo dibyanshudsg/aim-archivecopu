@@ -21,6 +21,13 @@ export class AsyncTtlCache<T> {
     return promise;
   }
 
+  set(key: string, value: T): void {
+    this.entries.set(key, {
+      expiresAt: Date.now() + this.ttlMs,
+      promise: Promise.resolve(value),
+    });
+  }
+
   clear() {
     this.entries.clear();
   }

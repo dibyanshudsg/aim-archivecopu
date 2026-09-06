@@ -1,0 +1,17 @@
+.agents/
+.cache/
+.codex/
+.codex-logs/
+.lighthouse/
+.migration/
+
+AIM 2026/
+Agnisikha 2026/
+Agnishikha 2026/
+AIM Issues/
+
+*.pdf
+coverage/
+**/.next-verify/
+**/.env*
+**/*.traineddata*

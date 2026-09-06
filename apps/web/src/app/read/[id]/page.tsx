@@ -1,9 +1,10 @@
 'use client';
 
-import { use, useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { Suspense, use, useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
+import { Document, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
@@ -14,7 +15,6 @@ import {
   ChevronRight,
   CalendarDays,
   Download,
-  Eye,
   FileText,
   ZoomIn,
   ZoomOut,
@@ -35,30 +35,59 @@ import { useBookmarks } from '@/lib/bookmarks-store';
 import { formatFileSize, formatMonthYear } from '@/lib/utils';
 import { shareIssue, sharePage } from '@/lib/share-issue';
 import { ReaderPageScrubber } from '@/components/reader/page-scrubber';
+import { SearchablePdfPage } from '@/components/reader/searchable-pdf-page';
+import { parseSearchReaderTarget } from '@/lib/search-reader-target';
 import { CopyDisclaimerToast } from '@/components/reader/copy-disclaimer-toast';
+import { configurePdfWorker } from '@/lib/pdf-worker-client';
 import {
   consumeDirectResume,
   consumeReaderSource,
+  getBrowseReturnHref,
   isReaderSource,
   type ReaderSource,
 } from '@/lib/reader-url';
 import type { IssueWithMagazine } from '@aim-archive/shared';
+import { useInitialReaderIssue } from './reader-issue-context';
+import { AccessNotice } from '@/components/magazine/access-notice';
+import { ReportProblem } from '@/components/magazine/report-problem';
 
-// PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+configurePdfWorker(pdfjs);
 
 type PdfDocLike = import('pdfjs-dist').PDFDocumentProxy;
 
-export default function ReaderPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const { toggle, isBookmarked } = useBookmarks();
+const MAX_PAGE_RENDER_SCALE = 2;
+const MAX_RENDER_DPR = 2;
+const RENDER_SETTLE_MS = 180;
 
-  const [issue, setIssue] = useState<ReturnType<typeof normalizeIssue> | null>(null);
+export default function ReaderPage({ params }: { params: Promise<{ id: string }> }) {
+  return <Suspense fallback={<main className="p-8 text-center text-gray-600">Loading reader…</main>}><ReaderContent params={params} /></Suspense>;
+}
+
+function ReaderContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get('find') || '';
+  const searchPage = searchParams.get('matchPage') || '';
+  const searchExcerpt = searchParams.get('excerpt') || '';
+  const searchTarget = useMemo(() => parseSearchReaderTarget(new URLSearchParams({ find: searchQuery, matchPage: searchPage, excerpt: searchExcerpt })), [searchQuery, searchPage, searchExcerpt]);
+  const [searchStatus, setSearchStatus] = useState('');
+  const [searchNoticeVisible, setSearchNoticeVisible] = useState(true);
+  const searchNoticeCleanup = useRef<(() => void) | null>(null);
+  const reducedMotion = useReducedMotion();
+  const [locationReady, setLocationReady] = useState(false);
+  const { toggle, isBookmarked } = useBookmarks();
+  const initialApiIssue = useInitialReaderIssue();
+
+  const [issue, setIssue] = useState<ReturnType<typeof normalizeIssue> | null>(() =>
+    initialApiIssue ? normalizeIssue(initialApiIssue) : null,
+  );
   const [readerSource, setReaderSource] = useState<ReaderSource>('issue');
-  const [pageLoading, setPageLoading] = useState(true);
+  const [browseReturnHref, setBrowseReturnHref] = useState('/browse');
+  const [pageLoading, setPageLoading] = useState(!initialApiIssue);
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [infoDrawerOpen, setInfoDrawerOpen] = useState(false);
+  const closeInfoDrawer = useCallback(() => setInfoDrawerOpen(false), []);
   const [scale, setScale] = useState(1.0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState(false);
@@ -82,27 +111,30 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     return () => mql.removeEventListener('change', update);
   }, []);
   const effectivePagesPerView: 1 | 2 = isPhone ? 1 : pagesPerView;
-  // Single-page mode renders the PDF at a constant high resolution and uses
-  // CSS `zoom` on the wrapper for ALL zoom (buttons, double-tap, pinch). The
-  // PDF never re-renders for zoom changes — that's why pinch feels smooth
-  // and there's no white-flash mid-gesture. Crisp up to ~2× display; above
-  // that the user gets mild bitmap blur, acceptable for close inspection.
-  const SINGLE_RENDER_SCALE = 4;
+  // Keep gestures immediate by scaling the current canvas with CSS, then
+  // sharpen it after zoom settles. The render scale is capped so default and
+  // two-page views never allocate the previous 4x-scale × DPR canvases.
+  const [pageRenderScale, setPageRenderScale] = useState(1);
+  useEffect(() => {
+    const target = Math.min(MAX_PAGE_RENDER_SCALE, Math.max(1, scale));
+    const timer = window.setTimeout(() => {
+      setPageRenderScale((current) => (current === target ? current : target));
+    }, RENDER_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [scale]);
   const pinchInitRef = useRef<{
     distance: number;
     scaleAtStart: number;
-    /** Screen coords of the pinch midpoint at gesture start — the anchor we
-     *  want to keep stationary so the page zooms INTO where the user pinched. */
-    anchorScreenX: number;
-    anchorScreenY: number;
-    /** Where the anchor lands in unzoomed wrapper-local coordinates. After
-     *  each zoom change we re-position scroll so this point lands back on
-     *  (anchorScreenX, anchorScreenY). */
-    contentX: number;
-    contentY: number;
+    /** The PDF point under the initial midpoint. It stays beneath the fingers
+     *  while their midpoint moves, so pinch and two-finger pan feel native. */
+    anchorElement: HTMLElement | null;
+    anchorX: number;
+    anchorY: number;
   } | null>(null);
-  const pinchWrapperRef = useRef<HTMLDivElement | null>(null);
   const pinchPendingScaleRef = useRef<number | null>(null);
+  const gestureFrameRef = useRef<number | null>(null);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
   const [scrollProgress, setScrollProgress] = useState(0);
   // +1 when moving forward (next), -1 when moving back (prev). Drives the
   // single-page slide animation direction.
@@ -137,7 +169,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const [renderDpr, setRenderDpr] = useState(2);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setRenderDpr(window.devicePixelRatio || 1);
+    setRenderDpr(Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR));
   }, []);
 
   // Continuous-mode virtualization: only mount <Page> for pages near the
@@ -147,12 +179,41 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const [mountedPages, setMountedPages] = useState<Set<number>>(new Set([0]));
 
   useEffect(() => {
+    let active = true;
+
+    // Refresh in the background and record the read. The server-provided issue
+    // already lets the cover/PDF start loading, so this request is no longer on
+    // the visible critical path.
     fetchIssue(id)
-      .then((data) => setIssue(data ? normalizeIssue(data) : null))
-      .finally(() => setPageLoading(false));
+      .then((data) => {
+        if (active && data) setIssue(normalizeIssue(data));
+      })
+      .finally(() => {
+        if (active) setPageLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   const directResumeRef = useRef(false);
+  const searchLandingPending = useRef(false);
+
+  useEffect(() => {
+    searchNoticeCleanup.current?.();
+    searchNoticeCleanup.current = null;
+    setSearchNoticeVisible(true);
+    searchLandingPending.current = Boolean(searchTarget);
+    if (!searchTarget) { setSearchStatus(''); return; }
+    setCurrentPage(searchTarget.page);
+    setInitialScrollDone(false);
+    setResumeOffer(null);
+    directResumeRef.current = false;
+    setReaderSource('search');
+    setSearchStatus('Opening the matching page…');
+    return () => searchNoticeCleanup.current?.();
+  }, [id, searchTarget]);
 
   // Read ?page= from URL once on mount (avoids useSearchParams Suspense).
   // Source/resume are navigation state, so old query params are consumed and
@@ -166,13 +227,16 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
     const from = params.get('from');
     const rememberedSource = consumeReaderSource(id);
-    if (isReaderSource(from)) {
-      setReaderSource(from);
-    } else if (rememberedSource) {
-      setReaderSource(rememberedSource);
+    const source = isReaderSource(from) ? from : rememberedSource;
+    if (source) {
+      setReaderSource(source);
+      if (source === 'browse') {
+        setBrowseReturnHref(getBrowseReturnHref(id) ?? '/browse');
+      }
     }
 
-    directResumeRef.current = params.get('resume') === '1' || consumeDirectResume(id);
+    directResumeRef.current = !params.has('matchPage') && (params.get('resume') === '1' || consumeDirectResume(id));
+    setLocationReady(true);
 
     if (params.has('from') || params.has('resume')) {
       params.delete('from');
@@ -241,7 +305,9 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
     const urlPage = new URLSearchParams(window.location.search).get('page');
     if (!urlPage && savedPage != null) setCurrentPage(savedPage);
-  }, [issue]);
+  // A background metadata refresh must not restart a completed search landing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue?.id]);
 
   // Hold a reference to the underlying pdfjs document so we can render any
   // requested page to an image on demand (used by the share-page button).
@@ -251,6 +317,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     async (pdf: PdfDocLike) => {
       pdfDocRef.current = pdf;
       setNumPages(pdf.numPages);
+      setCurrentPage((value) => Math.min(Math.max(1, value), pdf.numPages));
       try {
         const first = await pdf.getPage(1);
         const vp = first.getViewport({ scale: 1 });
@@ -289,18 +356,18 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   // pick up the browser URL get a page-specific deep link, and right-click
   // → copy URL gives the current page.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !locationReady) return;
     const params = new URLSearchParams(window.location.search);
     params.delete('from');
     params.delete('resume');
-    if (currentPage > 1) params.set('page', String(currentPage));
+    if (currentPage > 1 || searchTarget) params.set('page', String(currentPage));
     else params.delete('page');
     const qs = params.toString();
     const next = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
     if (next !== window.location.pathname + window.location.search + window.location.hash) {
-      window.history.replaceState(null, '', next);
+      window.history.replaceState(window.history.state, '', next);
     }
-  }, [currentPage]);
+  }, [currentPage, locationReady, searchTarget]);
 
   const scrollToPage = useCallback((page: number) => {
     // Pre-mount destination + immediate neighbours so the user lands on a
@@ -318,7 +385,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     if (!el) return;
     isProgrammaticScroll.current = true;
     if (programmaticScrollTimer.current) clearTimeout(programmaticScrollTimer.current);
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     programmaticScrollTimer.current = setTimeout(() => {
       isProgrammaticScroll.current = false;
     }, 800);
@@ -326,6 +393,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
 
   const goToPage = (page: number) => {
     if (page < 1 || page > numPages) return;
+    searchLandingPending.current = false;
     setNavDirection(page > currentPage ? 1 : page < currentPage ? -1 : navDirection);
     setCurrentPage(page);
     if (viewMode === 'continuous') {
@@ -360,7 +428,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     let raf = 0;
 
     const compute = () => {
-      if (isProgrammaticScroll.current) return;
+      if (isProgrammaticScroll.current || !initialScrollDone) return;
 
       const containerRect = root.getBoundingClientRect();
       const target = containerRect.top + containerRect.height / 2;
@@ -403,7 +471,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
       root.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
-  }, [viewMode, numPages]);
+  }, [viewMode, numPages, initialScrollDone]);
 
   // Track currentPage in a ref so the render queue can read the latest value
   // without re-creating the IntersectionObserver on every page change.
@@ -598,8 +666,10 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         }, 300);
         directResumeRef.current = false;
       } else {
-        scrollToPage(currentPage);
-        if (canResumeExact) {
+        const destination = searchTarget ? Math.min(searchTarget.page, numPages) : currentPage;
+        setCurrentPage(destination);
+        scrollToPage(destination);
+        if (canResumeExact && !searchTarget) {
           setResumeOffer({
             scrollTop: saved!.scrollTop!,
             page: saved!.page ?? currentPage,
@@ -612,6 +682,47 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     // currentPage intentionally excluded — initial restore reads it at fire time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issue?.id, numPages, viewMode, initialScrollDone]);
+
+  const onSearchLocated = useCallback((element: HTMLElement) => {
+    const container = scrollContainerRef.current;
+    if (!container || !searchTarget || !searchLandingPending.current) return;
+    searchLandingPending.current = false;
+    setCurrentPage(searchTarget.page);
+    const box = element.getBoundingClientRect();
+    const viewport = container.getBoundingClientRect();
+    const top = Math.max(0, Math.min(container.scrollHeight - container.clientHeight, container.scrollTop + box.top - viewport.top - container.clientHeight * 0.4));
+    const left = Math.max(0, Math.min(container.scrollWidth - container.clientWidth, container.scrollLeft + box.left - viewport.left - Math.max(16, (container.clientWidth - box.width) / 2)));
+    const willScroll = Math.abs(container.scrollTop - top) > 1 || Math.abs(container.scrollLeft - left) > 1;
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    searchNoticeCleanup.current?.();
+    let settled = false;
+    let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+    const onSettled = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(scrollFallback);
+      container.removeEventListener('scrollend', onSettled);
+      dismissTimer = setTimeout(() => setSearchNoticeVisible(false), 2000);
+    };
+    // Fallback for browsers without scrollend; no-scroll/reduced-motion
+    // landings begin the two-second reading window immediately.
+    const scrollFallback = setTimeout(onSettled, 1200);
+    container.addEventListener('scrollend', onSettled, { once: true });
+    searchNoticeCleanup.current = () => {
+      clearTimeout(scrollFallback);
+      clearTimeout(dismissTimer);
+      container.removeEventListener('scrollend', onSettled);
+    };
+    isProgrammaticScroll.current = true;
+    if (programmaticScrollTimer.current) clearTimeout(programmaticScrollTimer.current);
+    container.scrollTo({
+      top,
+      left,
+      behavior: instant ? 'auto' : 'smooth',
+    });
+    if (!willScroll || instant) onSettled();
+    programmaticScrollTimer.current = setTimeout(() => { isProgrammaticScroll.current = false; }, 1000);
+  }, [searchTarget]);
 
   // Subsequent re-scrolls: when the user toggles view mode or pages-per-view,
   // jump back to whatever page they were on so they don't get lost in the new
@@ -735,85 +846,108 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
     return () => ro.disconnect();
   }, []);
 
-  // Pinch-to-zoom on touch. Single-page mode only — the PDF renders at a
-  // constant 2× resolution and the wrapper's CSS `transform: scale(scale/2)`
-  // controls display size. During pinch we update the wrapper's DOM transform
-  // directly (instant, no re-render). On touchend we commit the new scale
-  // to React state — the wrapper re-renders with the same transform and the
-  // PDF stays at constant render scale, so there's no flash.
+  // Keep pinch gestures local to the PDF viewport. Touch pinch, Safari gesture
+  // events, and desktop trackpad pinch (Ctrl+wheel) all update the Reader scale
+  // without changing the browser's page zoom. Canvas re-rasterization is
+  // deferred by pageRenderScale, so the gesture itself only changes CSS layout.
   useEffect(() => {
     const sc = scrollContainerRef.current;
     if (!sc) return;
+
+    type PinchAnchor = {
+      element: HTMLElement | null;
+      x: number;
+      y: number;
+    };
+    type SafariGestureEvent = Event & {
+      scale?: number;
+      clientX?: number;
+      clientY?: number;
+    };
+
     const distance = (touches: TouchList) =>
       Math.hypot(
         touches[0].clientX - touches[1].clientX,
         touches[0].clientY - touches[1].clientY,
       );
 
+    const createAnchor = (
+      clientX: number,
+      clientY: number,
+      eventTarget: EventTarget | null,
+    ): PinchAnchor => {
+      const target =
+        eventTarget instanceof Element
+          ? eventTarget
+          : document.elementFromPoint(clientX, clientY);
+      const element = target?.closest('.react-pdf__Page') as HTMLElement | null;
+      if (!element) return { element: null, x: 0.5, y: 0.5 };
+      const rect = element.getBoundingClientRect();
+      return {
+        element,
+        x: rect.width > 0 ? (clientX - rect.left) / rect.width : 0.5,
+        y: rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5,
+      };
+    };
+
+    const applyAnchoredScale = (
+      nextScale: number,
+      clientX: number,
+      clientY: number,
+      anchor: PinchAnchor,
+    ) => {
+      const next = Math.min(4, Math.max(0.5, nextScale));
+      scaleRef.current = next;
+      pinchPendingScaleRef.current = next;
+      setScale(next);
+
+      if (gestureFrameRef.current !== null) {
+        cancelAnimationFrame(gestureFrameRef.current);
+      }
+      gestureFrameRef.current = requestAnimationFrame(() => {
+        gestureFrameRef.current = null;
+        if (!anchor.element?.isConnected) return;
+        const rect = anchor.element.getBoundingClientRect();
+        const anchorAfterX = rect.left + rect.width * anchor.x;
+        const anchorAfterY = rect.top + rect.height * anchor.y;
+        sc.scrollLeft += anchorAfterX - clientX;
+        sc.scrollTop += anchorAfterY - clientY;
+      });
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        // Always block native viewport pinch — we handle it ourselves
-        // (single-page) or ignore it (continuous, where +/- works).
         e.preventDefault();
-        if (viewMode !== 'single') return;
-        const wrapper = pinchWrapperRef.current;
-        if (!wrapper) return;
-
         const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-        // Map pinch midpoint into unzoomed wrapper-local coords. We keep this
-        // point stationary on screen as zoom changes — that's what gives the
-        // illusion of zooming INTO the spot the user pinched.
-        const wrapperRect = wrapper.getBoundingClientRect();
-        const currentZoom = scale / SINGLE_RENDER_SCALE;
-        const contentX = (cx - wrapperRect.left) / currentZoom;
-        const contentY = (cy - wrapperRect.top) / currentZoom;
+        const anchor = createAnchor(cx, cy, e.target);
 
         pinchInitRef.current = {
           distance: distance(e.touches),
-          scaleAtStart: scale,
-          anchorScreenX: cx,
-          anchorScreenY: cy,
-          contentX,
-          contentY,
+          scaleAtStart: scaleRef.current,
+          anchorElement: anchor.element,
+          anchorX: anchor.x,
+          anchorY: anchor.y,
         };
-        pinchPendingScaleRef.current = scale;
+        pinchPendingScaleRef.current = scaleRef.current;
       }
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (
-        e.touches.length === 2 &&
-        pinchInitRef.current &&
-        pinchWrapperRef.current
-      ) {
+      if (e.touches.length === 2 && pinchInitRef.current) {
         e.preventDefault();
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const ratio = distance(e.touches) / pinchInitRef.current.distance;
-        const next = Math.min(
-          4,
-          Math.max(0.5, pinchInitRef.current.scaleAtStart * ratio),
+        applyAnchoredScale(
+          pinchInitRef.current.scaleAtStart * ratio,
+          cx,
+          cy,
+          {
+            element: pinchInitRef.current.anchorElement,
+            x: pinchInitRef.current.anchorX,
+            y: pinchInitRef.current.anchorY,
+          },
         );
-        pinchPendingScaleRef.current = next;
-        const newZoom = next / SINGLE_RENDER_SCALE;
-
-        const sc = scrollContainerRef.current;
-        const wrapper = pinchWrapperRef.current;
-        if (!sc || !wrapper) return;
-
-        // 1) Apply the new zoom — layout-aware (`zoom`), so scroll bounds and
-        //    visible size both update.
-        wrapper.style.zoom = String(newZoom);
-        // 2) Force layout + read where the anchor content point ended up on
-        //    screen after the new zoom.
-        const wrapperRect = wrapper.getBoundingClientRect();
-        const anchorAfterX =
-          wrapperRect.left + pinchInitRef.current.contentX * newZoom;
-        const anchorAfterY =
-          wrapperRect.top + pinchInitRef.current.contentY * newZoom;
-        // 3) Scroll the container so the anchor lands back on the original
-        //    pinch screen position — page zooms INTO the pinch point.
-        sc.scrollLeft += anchorAfterX - pinchInitRef.current.anchorScreenX;
-        sc.scrollTop += anchorAfterY - pinchInitRef.current.anchorScreenY;
       }
     };
     const onTouchEnd = (e: TouchEvent) => {
@@ -822,26 +956,82 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
           pinchPendingScaleRef.current ?? pinchInitRef.current.scaleAtStart;
         pinchInitRef.current = null;
         pinchPendingScaleRef.current = null;
-        // Commit. React re-renders the wrapper with the same transform value
-        // (`scale / SINGLE_RENDER_SCALE`); the PDF Page is unchanged. No flash.
+        scaleRef.current = finalScale;
         setScale(finalScale);
       }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const anchor = createAnchor(e.clientX, e.clientY, e.target);
+      const factor = Math.min(1.2, Math.max(0.8, Math.exp(-e.deltaY * 0.01)));
+      applyAnchoredScale(scaleRef.current * factor, e.clientX, e.clientY, anchor);
+    };
+
+    let safariScaleAtStart = scaleRef.current;
+    let safariAnchor: PinchAnchor | null = null;
+    const onGestureStart = (event: Event) => {
+      const e = event as SafariGestureEvent;
+      e.preventDefault();
+      if (pinchInitRef.current) return;
+      const rect = sc.getBoundingClientRect();
+      const clientX = e.clientX ?? rect.left + rect.width / 2;
+      const clientY = e.clientY ?? rect.top + rect.height / 2;
+      safariScaleAtStart = scaleRef.current;
+      safariAnchor = createAnchor(clientX, clientY, e.target);
+    };
+    const onGestureChange = (event: Event) => {
+      const e = event as SafariGestureEvent;
+      e.preventDefault();
+      if (pinchInitRef.current || !safariAnchor) return;
+      const rect = sc.getBoundingClientRect();
+      applyAnchoredScale(
+        safariScaleAtStart * (e.scale ?? 1),
+        e.clientX ?? rect.left + rect.width / 2,
+        e.clientY ?? rect.top + rect.height / 2,
+        safariAnchor,
+      );
+    };
+    const onGestureEnd = (event: Event) => {
+      event.preventDefault();
+      safariAnchor = null;
+      pinchPendingScaleRef.current = null;
     };
 
     sc.addEventListener('touchstart', onTouchStart, { passive: false });
     sc.addEventListener('touchmove', onTouchMove, { passive: false });
     sc.addEventListener('touchend', onTouchEnd);
     sc.addEventListener('touchcancel', onTouchEnd);
+    sc.addEventListener('wheel', onWheel, { passive: false });
+    sc.addEventListener('gesturestart', onGestureStart, { passive: false });
+    sc.addEventListener('gesturechange', onGestureChange, { passive: false });
+    sc.addEventListener('gestureend', onGestureEnd, { passive: false });
     return () => {
       sc.removeEventListener('touchstart', onTouchStart);
       sc.removeEventListener('touchmove', onTouchMove);
       sc.removeEventListener('touchend', onTouchEnd);
       sc.removeEventListener('touchcancel', onTouchEnd);
+      sc.removeEventListener('wheel', onWheel);
+      sc.removeEventListener('gesturestart', onGestureStart);
+      sc.removeEventListener('gesturechange', onGestureChange);
+      sc.removeEventListener('gestureend', onGestureEnd);
+      if (gestureFrameRef.current !== null) {
+        cancelAnimationFrame(gestureFrameRef.current);
+        gestureFrameRef.current = null;
+      }
     };
-  }, [scale, viewMode]);
+  }, []);
 
   const zoomIn = () => setScale((s) => Math.min(s + 0.2, 4));
-  const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.5));
+  const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.1));
+  const fitWidth = () => {
+    const container = scrollContainerRef.current;
+    if (!container || !pageAspect) return;
+    const padding = window.innerWidth >= 640 ? 64 : 32;
+    const width = pageAspect.w * effectivePagesPerView + (effectivePagesPerView === 2 ? 12 : 0);
+    setScale(Math.min(4, Math.max(0.1, (container.clientWidth - padding) / width)));
+  };
   /** Double-tap toggle: zoom in to 1.8× from default, back to default at zoom. */
   const toggleZoom = () => {
     setScale((s) => (s > 1.4 ? (isPhone ? 0.7 : 1) : 1.8));
@@ -887,13 +1077,8 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-flame-50 text-flame-600 ring-1 ring-flame-200">
             <Info className="h-6 w-6" />
           </div>
-          <h1 className="font-heading mt-4 text-2xl font-bold text-gray-900">
-            {issue.embargoLiftLabel ? `Available ${issue.embargoLiftLabel}` : 'Available to subscribers'}
-          </h1>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600">
-            This edition is reserved for our print subscribers while it&apos;s still in active
-            circulation. The archive opens it to everyone on a rolling 5-year window.
-          </p>
+          <h1 className="font-heading mt-4 text-xl font-bold text-gray-900">{issue.title}</h1>
+          {issue.isEmbargoed ? <AccessNotice liftLabel={issue.embargoLiftLabel} magazineId={issue.magazine.id} /> : <p className="mt-3 text-gray-700">The PDF is currently unavailable. Please choose another edition.</p>}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
               href={`/issue/${issue.id}`}
@@ -917,7 +1102,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
   const backTargets: Record<ReaderSource, { href: string; label: string; aria: string }> = {
     issue: { href: `/issue/${issue.id}`, label: 'Issue', aria: 'Back to issue details' },
     shelf: { href: '/', label: 'Home', aria: 'Back to home' },
-    browse: { href: '/browse', label: 'Browse', aria: 'Back to browse' },
+    browse: { href: browseReturnHref, label: 'Browse', aria: 'Back to browse' },
     search: { href: '/search', label: 'Search', aria: 'Back to search' },
     bookmarks: { href: '/bookmarks', label: 'Saved', aria: 'Back to bookmarks' },
   };
@@ -1015,19 +1200,23 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                 />
               </button>
 
+              <div className="hidden items-center md:flex">
               <ShareIssueButton issue={issue} />
               <SharePageButton
                 issue={issue}
                 pageNumber={currentPage}
                 renderPage={renderPageToBlob}
               />
+              </div>
               <button
                 onClick={() => setInfoDrawerOpen(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-all hover:bg-white hover:text-flame-700 hover:shadow-sm"
-                aria-label="Issue information"
-                title="Issue information"
+                className="flex min-h-11 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold text-gray-700 transition-all hover:bg-white hover:text-flame-700"
+                aria-label="More reading options"
+                aria-expanded={infoDrawerOpen}
+                title="More reading options"
               >
                 <Info className="h-4 w-4" />
+                <span className="md:hidden">More</span>
               </button>
 
               {/* Desktop-only: zoom + fullscreen + info */}
@@ -1063,7 +1252,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
               showPagesPerViewToggle={!isPhone}
             />
             <div className="flex shrink-0 items-center gap-0.5 rounded-xl bg-gradient-to-br from-flame-50/50 to-gold-50/40 p-0.5 ring-1 ring-flame-100/70">
-              <ZoomControls scale={scale} zoomIn={zoomIn} zoomOut={zoomOut} />
+              <button onClick={fitWidth} disabled={!pageAspect} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-flame-800 disabled:opacity-50">Fit width</button>
             </div>
           </div>
         </header>
@@ -1135,11 +1324,36 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
         open={infoDrawerOpen}
         bookmarked={bookmarked}
         onBookmark={() => toggle(issue.id)}
-        onClose={() => setInfoDrawerOpen(false)}
+        onClose={closeInfoDrawer}
+        scale={scale}
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        fitWidth={fitWidth}
+        renderPage={renderPageToBlob}
       />
 
       {/* PDF Viewer */}
-      <div ref={scrollContainerRef} className="relative flex-1 overflow-auto">
+      <AnimatePresence initial={false}>
+        {searchTarget && searchNoticeVisible && (
+          <motion.div
+            key={`${id}-${searchPage}-${searchQuery}-${searchExcerpt}`}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: reducedMotion ? 0 : 0.25, ease: 'easeOut' }}
+            className="shrink-0 overflow-hidden"
+          >
+            <div role="status" aria-live="polite" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              {searchTarget.page > numPages && numPages > 0 ? 'This search result refers to a page no longer present in this PDF.' : searchStatus}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div
+        ref={scrollContainerRef}
+        className="relative flex-1 overflow-auto"
+        style={{ touchAction: 'pan-x pan-y' }}
+      >
         {/* Cover-JPEG LCP placeholder. Sits over the PDF area on first paint
             so Lighthouse can pin LCP to a fast-loading raster image instead
             of waiting for the PDF canvas. Fades out once the first Page has
@@ -1172,7 +1386,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                 Unable to load PDF
               </p>
               <p className="mt-2 text-sm text-gray-400">
-                This is a demo — PDF loading requires a real file.
+                The document could not be loaded. Check your connection or try opening its details.
               </p>
               <Link
                 href={`/issue/${issue.id}`}
@@ -1232,19 +1446,21 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                     }}
                   >
                     <div
-                      ref={pinchWrapperRef}
                       onDoubleClick={toggleZoom}
                       style={{
                         // CSS `zoom` is layout-aware (unlike transform), so
                         // the scroll container only overflows when the page
                         // is actually visually larger than the viewport.
-                        zoom: scale / SINGLE_RENDER_SCALE,
+                        zoom: scale / pageRenderScale,
                       }}
                       className="flex items-start gap-3"
                     >
-                    <Page
+                    <SearchablePdfPage
+                      searchTarget={searchTarget}
+                      onSearchStatus={setSearchStatus}
+                      onSearchLocated={onSearchLocated}
                       pageNumber={currentPage}
-                      scale={SINGLE_RENDER_SCALE}
+                      scale={pageRenderScale}
                       devicePixelRatio={renderDpr}
                       className="shadow-xl"
                       onRenderSuccess={() => setFirstPageRendered(true)}
@@ -1255,9 +1471,12 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                       }
                     />
                     {effectivePagesPerView === 2 && currentPage + 1 <= numPages && (
-                      <Page
+                      <SearchablePdfPage
+                        searchTarget={searchTarget}
+                        onSearchStatus={setSearchStatus}
+                        onSearchLocated={onSearchLocated}
                         pageNumber={currentPage + 1}
-                        scale={SINGLE_RENDER_SCALE}
+                        scale={pageRenderScale}
                         devicePixelRatio={renderDpr}
                         className="shadow-xl"
                         loading={
@@ -1296,21 +1515,29 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                         }
                       >
                         {isMounted ? (
-                          <Page
-                            pageNumber={i + 1}
-                            scale={scale}
-                            devicePixelRatio={renderDpr}
-                            className="shadow-xl"
-                            onRenderSuccess={() => setFirstPageRendered(true)}
-                            loading={
-                              <div
-                                className="flex items-center justify-center rounded-lg bg-white"
-                                style={{ width: `${placeholderW}px`, height: `${placeholderH}px` }}
-                              >
-                                <div className="h-6 w-6 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
-                              </div>
-                            }
-                          />
+                          <div style={{ zoom: scale / pageRenderScale }}>
+                            <SearchablePdfPage
+                              searchTarget={searchTarget}
+                              onSearchStatus={setSearchStatus}
+                              onSearchLocated={onSearchLocated}
+                              pageNumber={i + 1}
+                              scale={pageRenderScale}
+                              devicePixelRatio={renderDpr}
+                              className="shadow-xl"
+                              onRenderSuccess={() => setFirstPageRendered(true)}
+                              loading={
+                                <div
+                                  className="flex items-center justify-center rounded-lg bg-white"
+                                  style={{
+                                    width: `${(pageAspect?.w ?? 600) * pageRenderScale}px`,
+                                    height: `${(pageAspect?.h ?? 800) * pageRenderScale}px`,
+                                  }}
+                                >
+                                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />
+                                </div>
+                              }
+                            />
+                          </div>
                         ) : (
                           <div className="h-6 w-6 animate-spin rounded-full border-2 border-flame-100 border-t-flame-300 opacity-60" />
                         )}
@@ -1500,6 +1727,7 @@ function IssueInfoDrawer({
   bookmarked,
   onBookmark,
   onClose,
+  scale, zoomIn, zoomOut, fitWidth, renderPage,
 }: {
   issue: IssueWithMagazine;
   currentPage: number;
@@ -1508,18 +1736,32 @@ function IssueInfoDrawer({
   bookmarked: boolean;
   onBookmark: () => void;
   onClose: () => void;
+  scale: number;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitWidth: () => void;
+  renderPage: (n: number) => Promise<Blob | null>;
 }) {
   const [copied, setCopied] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
   const pages = numPages || issue.pageCount || 0;
   const progressPct = pages ? Math.min(100, Math.max(2, (currentPage / pages) * 100)) : 0;
 
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const frame = requestAnimationFrame(() => drawerRef.current?.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.focus());
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') {
+        const controls = [...(drawerRef.current?.querySelectorAll<HTMLElement>('button, a[href], input, textarea, summary') ?? [])].filter((element) => element.getBoundingClientRect().width > 0 && !element.hasAttribute('disabled'));
+        const first = controls[0]; const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); cancelAnimationFrame(frame); opener?.focus(); };
   }, [open, onClose]);
 
   return (
@@ -1537,6 +1779,7 @@ function IssueInfoDrawer({
             onClick={onClose}
           />
           <motion.aside
+            ref={drawerRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="reader-info-title"
@@ -1566,6 +1809,11 @@ function IssueInfoDrawer({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                <ZoomControls scale={scale} zoomIn={zoomIn} zoomOut={zoomOut} />
+                <button onClick={fitWidth} className="min-h-11 rounded-lg border border-flame-200 px-3 text-sm font-semibold text-flame-800">Fit width</button>
+                <div className="flex items-center gap-2"><SharePageButton issue={issue} pageNumber={currentPage} renderPage={renderPage} /><span className="text-sm text-gray-700">Share page {currentPage}</span></div>
+              </div>
               <div className="flex gap-4">
                 <div className="relative h-36 w-[108px] shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-gold-100 to-flame-50 shadow-sm">
                   <div className="absolute inset-y-0 left-0 z-10 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
@@ -1580,13 +1828,13 @@ function IssueInfoDrawer({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h3 className="line-clamp-4 text-base font-semibold leading-snug text-gray-900">
+                  <h3 className="text-base font-semibold leading-snug text-gray-900">
                     {issue.title}
                   </h3>
                   {issue.theme && (
                     <div className="mt-1.5 flex items-start gap-1.5">
                       <span aria-hidden className="mt-2 h-3.5 w-[2px] shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
-                      <p className="font-heading line-clamp-2 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-sm font-bold leading-normal text-transparent">
+                      <p className="font-heading bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-sm font-bold leading-normal text-transparent">
                         {issue.theme}
                       </p>
                     </div>
@@ -1611,7 +1859,6 @@ function IssueInfoDrawer({
                 <ReaderMeta icon={CalendarDays} label="Published" value={formatMonthYear(issue.month, issue.year)} />
                 <ReaderMeta icon={FileText} label="Pages" value={pages ? String(pages) : '-'} />
                 <ReaderMeta icon={HardDrive} label="Size" value={formatFileSize(issue.fileSizeBytes)} />
-                <ReaderMeta icon={Eye} label="Reads" value={issue.readCount.toLocaleString()} />
               </div>
 
               {issue.topics.length > 0 && (
@@ -1640,6 +1887,7 @@ function IssueInfoDrawer({
                 </div>
               )}
 
+              <ReportProblem issueId={issue.id} title={issue.title} page={currentPage} />
               <div className="mt-5 grid gap-2">
                 <Link
                   href={`/issue/${issue.id}`}
