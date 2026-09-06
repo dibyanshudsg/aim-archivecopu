@@ -20,8 +20,9 @@ import { pdfjs } from 'react-pdf';
 import type { ApiIssue } from '@/lib/api';
 import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { formatMonthYear } from '@/lib/utils';
+import { configurePdfWorker } from '@/lib/pdf-worker-client';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+configurePdfWorker(pdfjs);
 
 type PdfDocLike = import('pdfjs-dist').PDFDocumentProxy;
 
@@ -48,19 +49,19 @@ const TURN_DURATION_MS = 1000;
 const CLOSE_DURATION_MS = 820;
 const LONG_PRESS_MS = 420;
 const sortOptions = [
-  { id: 'uploaded', label: 'Recent', shortLabel: 'Recent', Icon: Clock },
+  { id: 'uploaded', label: 'Recently added', shortLabel: 'Added', Icon: Clock },
   { id: 'issue-date', label: 'Issue Date', shortLabel: 'Date', Icon: CalendarDays },
   { id: 'title', label: 'A-Z', shortLabel: 'A-Z', Icon: ArrowDownAZ },
 ] satisfies Array<{ id: SortMode; label: string; shortLabel: string; Icon: typeof Clock }>;
 const sortCopy = {
-  uploaded: { eyebrow: 'Recently opened', heading: 'Now open in the archive' },
+  uploaded: { eyebrow: 'Recently added', heading: 'Now open in the archive' },
   'issue-date': { eyebrow: 'Sorted by issue date', heading: 'Readable archive editions' },
   title: { eyebrow: 'Alphabetical view', heading: 'Open issue index' },
 } satisfies Record<SortMode, { eyebrow: string; heading: string }>;
 
 function magazineShortName(name: string) {
   const normalized = name.toLowerCase();
-  if (normalized.includes('all india')) return 'AIM';
+  if (normalized.includes('all india')) return 'All India Magazine';
   if (normalized.includes('agnishikha') || normalized.includes('agnisikha')) return 'Agnishikha';
   return name;
 }
@@ -1085,7 +1086,8 @@ function YearNavigator({
   );
 }
 
-export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
+export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfProps) {
+  const issues = useMemo(() => suppliedIssues.filter(canPreviewIssue), [suppliedIssues]);
   const [sortMode, setSortMode] = useState<SortMode>('uploaded');
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
   const issuesPerRow = useIssuesPerRow();
@@ -1096,7 +1098,7 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
     [issues],
   );
   const minYear = issueYears[0] ?? currentYear;
-  const maxYear = Math.max(currentYear, issueYears[issueYears.length - 1] ?? currentYear);
+  const maxYear = issueYears[issueYears.length - 1] ?? currentYear;
   const defaultYear = useMemo(() => {
     const readableYears = issues
       .filter(canPreviewIssue)
@@ -1141,7 +1143,7 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
         return a.title.localeCompare(b.title);
       }
 
-      return b.month - a.month || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || b.month - a.month;
     });
 
     return sorted.slice(0, 12);
@@ -1168,7 +1170,7 @@ export function AnimatedBookshelf({ issues }: AnimatedBookshelfProps) {
   const browseHref =
     lockedCount > 0 && readableCount === 0
       ? `/browse?availability=subscriber&year=${selectedYear}`
-      : `/browse?availability=all&year=${selectedYear}`;
+      : `/browse?availability=read&year=${selectedYear}`;
 
   return (
     <div className="mx-auto w-full max-w-5xl">

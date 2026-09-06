@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { BookOpen, Check, Download, Heart, Lock, Share2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { IssueWithMagazine } from '@aim-archive/shared';
@@ -11,7 +12,8 @@ import { formatFileSize, formatMonthYear, cn } from '@/lib/utils';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { shareIssue } from '@/lib/share-issue';
-import { readerPath, rememberReaderSource } from '@/lib/reader-url';
+import { readerPath, rememberReaderSource, warmReaderRoute } from '@/lib/reader-url';
+import { issueDetailPath, warmIssueDetailRoute } from '@/lib/issue-detail-url';
 
 interface IssueCardProps {
   issue: IssueWithMagazine;
@@ -20,14 +22,16 @@ interface IssueCardProps {
 }
 
 export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProps) {
+  const router = useRouter();
   const { toggle, isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(issue.id);
   const [copied, setCopied] = useState(false);
   // Embargoed issues route to the detail page (where the "Available {Month}"
   // message lives) instead of the reader, which can't load their PDF.
   const readHref = issue.isEmbargoed
-    ? `/issue/${issue.id}`
+    ? issueDetailPath(issue.id)
     : readerPath(issue.id);
+  const detailHref = issueDetailPath(issue.id);
 
   // Bulk selection — when enabled, the card becomes a toggle target instead
   // of a Link, and a checkbox overlay surfaces selection state.
@@ -39,9 +43,24 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
   // first row across all breakpoints (2/3/3/4/4/5). Only matters on first
   // paint of /browse + /bookmarks; below-the-fold cards use lazy loading.
   const isAboveFold = index < 6;
+  const prepareDetails = () => {
+    if (selectionEnabled) return;
+    router.prefetch(detailHref);
+    warmIssueDetailRoute(issue.id);
+  };
+  const preparePrimaryRoute = () => {
+    if (selectionEnabled) return;
+    if (issue.isEmbargoed) {
+      prepareDetails();
+      return;
+    }
+    router.prefetch(readHref);
+    warmReaderRoute(issue.id);
+  };
 
   return (
     <motion.div
+      data-browse-issue-id={source === 'browse' ? issue.id : undefined}
       // No opacity gate on the card — opacity:0 → 1 transitions block LCP
       // measurement on the first row (the LCP element on /browse). Slide-up
       // alone preserves the entrance polish without delaying paint.
@@ -49,6 +68,8 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
       animate={{ y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.4, ease: 'easeOut' }}
       whileHover={{ y: -6, transition: { duration: 0.2, ease: 'easeOut' } }}
+      onPointerEnter={preparePrimaryRoute}
+      onFocusCapture={preparePrimaryRoute}
       onClick={selectionEnabled ? () => toggleSelection(issue.id) : undefined}
       className={cn(
         'group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow duration-200 hover:shadow-2xl',
@@ -178,13 +199,12 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
       <div className="flex flex-1 flex-col p-3.5">
         <div className="mb-2">
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 transition-colors group-hover:text-flame-800">
-            {issue.title}
+            {issue.theme || issue.title}
           </h3>
           {issue.theme && (
-            <div className="mt-1 flex items-start gap-1.5">
-              <span aria-hidden className="mt-2 h-3 w-[2px] shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500" />
-              <p className="font-heading line-clamp-2 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-0.5 text-[13px] font-bold leading-normal text-transparent">
-                {issue.theme}
+            <div className="mt-1">
+              <p className="line-clamp-2 text-xs leading-relaxed text-gray-600">
+                {issue.title}
               </p>
             </div>
           )}
@@ -217,7 +237,6 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
         <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-400">
           {issue.pageCount && <span>{issue.pageCount}p</span>}
           <span>{formatFileSize(issue.fileSizeBytes)}</span>
-          <span>{issue.readCount.toLocaleString()} reads</span>
         </div>
 
         {/* Actions — hidden in selection mode (the whole card is a selection
@@ -232,8 +251,11 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
             // Embargoed: route to details only. The date chip on the cover
             // carries the availability promise; this button is the action.
             <Link
-              href={`/issue/${issue.id}`}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+              href={detailHref}
+              onPointerEnter={prepareDetails}
+              onPointerDown={prepareDetails}
+              onFocus={prepareDetails}
+              className="relative z-20 flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
             >
               <Lock className="h-3.5 w-3.5" />
               View Details
@@ -249,8 +271,11 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
                 Read
               </Link>
               <Link
-                href={`/issue/${issue.id}`}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+                href={detailHref}
+                onPointerEnter={prepareDetails}
+                onPointerDown={prepareDetails}
+                onFocus={prepareDetails}
+                className="relative z-20 flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
               >
                 <Download className="h-3.5 w-3.5" />
                 Details

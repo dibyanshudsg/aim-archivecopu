@@ -75,8 +75,22 @@ async function executeSchema(db, schemaFile, options = {}) {
   }
 }
 
+async function executeMigrations(db, options = {}) {
+  const migrationsDir = path.join(root, 'packages/turso/migrations');
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const file of migrationFiles) {
+    await executeSchema(db, path.join(migrationsDir, file), options);
+  }
+}
+
 async function clearTables(db) {
   const tables = [
+    'navigation_items',
+    'navigation_menus',
     'user_reading_history',
     'user_bookmarks',
     'users',
@@ -119,9 +133,11 @@ async function main() {
 
   const skipFts = hasFlag('--skip-fts');
   const db = createClient({ url, authToken });
-  const schemaFile = path.join(root, 'packages/turso/migrations/00001_initial_schema.sql');
-  await executeSchema(db, schemaFile, { skipFts });
-  if (hasFlag('--reset')) await clearTables(db);
+  await executeMigrations(db, { skipFts });
+  if (hasFlag('--reset')) {
+    await clearTables(db);
+    await executeMigrations(db, { skipFts });
+  }
 
   const admins = readJson(exportDir, 'admins');
   const magazines = readJson(exportDir, 'magazines');

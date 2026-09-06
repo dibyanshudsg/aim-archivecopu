@@ -14,6 +14,7 @@ const SORT_FIELDS = new Set<AdminIssueSortField>([
   'read_count',
   'download_count',
   'file_size_bytes',
+  'created_at',
   'updated_at',
 ]);
 const SORT_DIRS = new Set<AdminIssueSortDir>(['asc', 'desc']);
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 
 function parseInput(request: Request): AdminIssueListInput {
   const searchParams = new URL(request.url).searchParams;
-  const sort = searchParams.get('sort') ?? 'updated_at';
+  const sort = searchParams.get('sort') ?? 'created_at';
   const dir = searchParams.get('dir') ?? 'desc';
   const status = searchParams.get('status') ?? 'all';
 
@@ -49,7 +50,7 @@ function parseInput(request: Request): AdminIssueListInput {
       ? (status as AdminIssueStatusFilter)
       : 'all',
     topic: normalizeFilter(searchParams.get('topic')),
-    sort: SORT_FIELDS.has(sort as AdminIssueSortField) ? (sort as AdminIssueSortField) : 'updated_at',
+    sort: SORT_FIELDS.has(sort as AdminIssueSortField) ? (sort as AdminIssueSortField) : 'created_at',
     dir: SORT_DIRS.has(dir as AdminIssueSortDir) ? (dir as AdminIssueSortDir) : 'desc',
   };
 }

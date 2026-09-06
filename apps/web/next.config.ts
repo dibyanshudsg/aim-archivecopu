@@ -1,8 +1,34 @@
 import type { NextConfig } from 'next';
+import { realpathSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
+
+// Trace the real pnpm package directory, not files beneath its symlink.
+// Vercel cannot package a path as both a symlink and a parent directory.
+const pdfJsDirectory = dirname(realpathSync(require.resolve('pdfjs-dist/package.json')));
+const pdfJsFontFiles = `${relative(__dirname, pdfJsDirectory).replace(/\\/g, '/')}/standard_fonts/**/*`;
 
 const nextConfig: NextConfig = {
+  // Allow verification builds alongside an active local development server.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   transpilePackages: ['@aim-archive/shared'],
   serverExternalPackages: ['pdf-parse', 'tesseract.js', 'canvas', 'pdfjs-dist'],
+  outputFileTracingRoot: resolve(__dirname, '../..'),
+  outputFileTracingIncludes: {
+    '/*': [pdfJsFontFiles],
+  },
+  async headers() {
+    return [
+      {
+        source: '/pdf.worker-4.8.69.min.mjs',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

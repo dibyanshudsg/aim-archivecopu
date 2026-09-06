@@ -16,7 +16,7 @@ import {
 
 const MAX_ENTRIES = 5;
 
-export function ContinueReadingFab() {
+export function ContinueReadingFab({ inline = false }: { inline?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,7 +33,7 @@ export function ContinueReadingFab() {
     setEntries(
       getRecentReads(MAX_ENTRIES * 2).filter((e) => !isEmbargoed(e.year, e.month)).slice(0, MAX_ENTRIES),
     );
-  }, [open]);
+  }, [open, pathname]);
 
   // Listen for storage changes from other tabs as well as our own writes.
   useEffect(() => {
@@ -72,6 +72,7 @@ export function ContinueReadingFab() {
   if (pathname?.startsWith('/admin')) return null;
 
   const count = entries.length;
+  if (count === 0) return null;
 
   function openIssue(entry: ReadingHistoryEntry) {
     setOpen(false);
@@ -97,8 +98,11 @@ export function ContinueReadingFab() {
         whileTap={{ scale: 0.94 }}
         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         aria-label="Continue reading"
+        aria-expanded={open}
         title="Continue reading"
-        className="fixed right-6 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_12px_30px_rgba(190,140,46,0.28)] ring-1 ring-flame-600/20 hover:from-gold-600 hover:to-flame-600"
+        className={inline
+          ? 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-flame-700 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-500 md:hidden'
+          : 'fixed right-6 bottom-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-lg focus-visible:ring-2 focus-visible:ring-flame-700 md:flex'}
       >
         <BookMarked className="h-6 w-6" />
         {count > 0 && (
@@ -117,7 +121,9 @@ export function ContinueReadingFab() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-            className="fixed right-6 bottom-24 z-40 flex w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
+            className={inline
+              ? 'absolute top-full right-2 z-50 flex w-[min(380px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl md:hidden'
+              : 'fixed right-6 bottom-24 z-40 hidden w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl md:flex'}
           >
             <header className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div>
@@ -237,7 +243,7 @@ function ContinueReadingCard({
         type="button"
         onClick={onRemove}
         aria-label="Remove from history"
-        className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+        className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-500 hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-flame-500"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>

@@ -2,17 +2,19 @@ import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { applyEmbargoToIssueRow, readableCutoffIssueMonth } from '@/lib/embargo';
 import type { BrowseFacets, PublicIssueListInput, PublicIssueListResult } from '@/lib/public-issues';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
-import { getDb, isSupabaseHostedUrl, nowIso } from './client';
+import type { ResultSet } from '@libsql/client';
+import { getDb, isSupabaseHostedUrl } from './client';
 import { AsyncTtlCache } from './cache';
 import { issueSelectSql, rowToIssue, rowToMagazine, type IssueJoinedRow, type MagazineRow } from './mappers';
 
 const IMPOSSIBLE_ID = '__none__';
 const SHORT_PUBLIC_CACHE_MS = 10_000;
 const PUBLIC_LOOKUP_CACHE_MS = 30_000;
+const ISSUE_DETAIL_CACHE_MS = 60_000;
 const publicListCache = new AsyncTtlCache<PublicIssueListResult>(SHORT_PUBLIC_CACHE_MS);
 const magazineCache = new AsyncTtlCache<ApiMagazine[]>(PUBLIC_LOOKUP_CACHE_MS);
 const issueArrayCache = new AsyncTtlCache<ApiIssue[]>(PUBLIC_LOOKUP_CACHE_MS);
-const issueCache = new AsyncTtlCache<ApiIssue | null>(SHORT_PUBLIC_CACHE_MS);
+const issueCache = new AsyncTtlCache<ApiIssue | null>(ISSUE_DETAIL_CACHE_MS);
 
 export function clearPublicRepositoryCaches(): void {
   publicListCache.clear();
@@ -86,6 +88,7 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
 
 export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
   return issueArrayCache.get(`home-shelf:${limit}:${embargoWindowCacheKey()}`, async () => {
+    const cutoff = readableCutoffIssueMonth();
     const result = await getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
@@ -93,10 +96,12 @@ export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.is_published = 1
           AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND trim(i.pdf_url) <> ''
+          AND (i.year < ? OR (i.year = ? AND i.month <= ?))
         ORDER BY i.year DESC, i.month DESC, m.created_at ASC
         LIMIT ?
       `,
-      args: [limit],
+      args: [cutoff.year, cutoff.year, cutoff.month, limit],
     });
 
     const now = new Date();
@@ -105,6 +110,29 @@ export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
       .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
       .map((issue) => applyEmbargoToIssueRow(issue, now));
   });
+}
+
+/** Same published/asset scope as Browse; counts are never based on the capped shelf. */
+export async function getPublicCollectionSummary(): Promise<{
+  listed: number;
+  readable: number;
+  languages: string[];
+}> {
+  const cutoff = readableCutoffIssueMonth();
+  const result = await getDb().execute({
+    sql: `SELECT m.language, count(*) AS listed,
+      sum(CASE WHEN i.year < ? OR (i.year = ? AND i.month <= ?) THEN 1 ELSE 0 END) AS readable
+      FROM issues i JOIN magazines m ON m.id = i.magazine_id
+      WHERE i.is_published = 1 AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        AND trim(i.pdf_url) <> ''
+      GROUP BY m.language ORDER BY m.language`,
+    args: [cutoff.year, cutoff.year, cutoff.month],
+  });
+  return {
+    listed: result.rows.reduce((sum, row) => sum + Number(row.listed), 0),
+    readable: result.rows.reduce((sum, row) => sum + Number(row.readable), 0),
+    languages: result.rows.map((row) => LANGUAGE_NAMES[String(row.language) as Language] ?? String(row.language)),
+  };
 }
 
 export async function listPublicIssuesForMonths(months: Array<{ year: number; month: number }>): Promise<ApiIssue[]> {
@@ -134,6 +162,31 @@ export async function listPublicIssuesForMonths(months: Array<{ year: number; mo
   });
 }
 
+export async function listPublicIssuesByIds(ids: string[]): Promise<ApiIssue[]> {
+  const uniqueIds = [...new Set(ids)].slice(0, 100);
+  if (uniqueIds.length === 0) return [];
+
+  const cacheIds = [...uniqueIds].sort();
+  return issueArrayCache.get(`ids:${JSON.stringify(cacheIds)}:${embargoWindowCacheKey()}`, async () => {
+    const result = await getDb().execute({
+      sql: `
+        SELECT ${issueSelectSql()}
+        FROM issues i
+        JOIN magazines m ON m.id = i.magazine_id
+        WHERE i.id IN (${placeholders(uniqueIds.length)})
+          AND i.is_published = 1
+          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+      `,
+      args: uniqueIds,
+    });
+
+    const now = new Date();
+    return result.rows
+      .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
+      .map((issue) => applyEmbargoToIssueRow(issue, now));
+  });
+}
+
 export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
   return issueCache.get(`${id}:${embargoWindowCacheKey()}`, async () => {
     const result = await getDb().execute({
@@ -153,6 +206,22 @@ export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
     if (!row) return null;
     return applyEmbargoToIssueRow(rowToIssue(row as unknown as IssueJoinedRow));
   });
+}
+
+export async function listRelatedReadableIssues(issue: ApiIssue, limit = 3): Promise<ApiIssue[]> {
+  const cutoff = readableCutoffIssueMonth();
+  const result = await getDb().execute({
+    sql: `SELECT ${issueSelectSql()} FROM issues i JOIN magazines m ON m.id = i.magazine_id
+      WHERE i.is_published = 1 AND i.id <> ? AND m.language = ?
+        AND i.pdf_url NOT LIKE '%.supabase.co/%' AND trim(i.pdf_url) <> ''
+        AND (i.year < ? OR (i.year = ? AND i.month <= ?))
+      ORDER BY EXISTS (SELECT 1 FROM json_each(i.topics_json) topic
+        JOIN json_each(?) selected ON topic.value = selected.value) DESC,
+        (i.magazine_id = ?) DESC, i.year DESC, i.month DESC LIMIT ?`,
+    args: [issue.id, issue.magazines.language, cutoff.year, cutoff.year, cutoff.month,
+      JSON.stringify(issue.topics), issue.magazine_id, limit],
+  });
+  return result.rows.map((row) => applyEmbargoToIssueRow(rowToIssue(row as unknown as IssueJoinedRow)));
 }
 
 export async function getPublicIssueMetadataById(id: string): Promise<{
@@ -232,12 +301,11 @@ async function incrementIssueCounter(id: string, column: 'read_count' | 'downloa
   await getDb().execute({
     sql: `
       UPDATE issues
-      SET ${column} = ${column} + 1,
-          updated_at = ?
+      SET ${column} = ${column} + 1
       WHERE id = ?
         AND is_published = 1
     `,
-    args: [nowIso(), id],
+    args: [id],
   });
 }
 
@@ -252,8 +320,12 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
   const order = buildOrderBy(input);
   const offset = (input.page - 1) * input.pageSize;
 
-  const [rowsResult, countResult, facets] = await Promise.all([
-    getDb().execute({
+  const facetQueries = FACET_DIMENSIONS.map((dimension) =>
+    facetCountQuery(buildIssueWhere(input, magazines, dimension, searchIssueIds), dimension),
+  );
+  const [rowsResult, countResult, ...facetResults] = await getDb().batch(
+    [
+      {
       sql: `
         SELECT ${issueSelectSql()}
         FROM issues i
@@ -263,8 +335,8 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
         LIMIT ? OFFSET ?
       `,
       args: [...where.args, input.pageSize, offset],
-    }),
-    getDb().execute({
+      },
+      {
       sql: `
         SELECT COUNT(*) AS count
         FROM issues i
@@ -272,14 +344,21 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
         ${where.sql}
       `,
       args: where.args,
-    }),
-    buildFacets(input, magazines, searchIssueIds),
-  ]);
+      },
+      ...facetQueries,
+    ],
+    'read',
+  );
+  const facets = buildFacets(input, magazines, facetResults);
 
   const now = new Date();
   const data = rowsResult.rows
     .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
     .map((row) => applyEmbargoToIssueRow(row, now));
+  const issueCacheSuffix = embargoWindowCacheKey();
+  for (const issue of data) {
+    issueCache.set(`${issue.id}:${issueCacheSuffix}`, issue);
+  }
   const total = Number(countResult.rows[0]?.count ?? 0);
 
   return {
@@ -294,6 +373,7 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
 }
 
 type FacetDimension = 'years' | 'months' | 'magazines' | 'languages' | 'subjects';
+const FACET_DIMENSIONS: FacetDimension[] = ['years', 'months', 'magazines', 'languages', 'subjects'];
 
 interface SqlPart {
   sql: string;
@@ -313,6 +393,7 @@ function buildIssueWhere(
   const clauses = [
     'i.is_published = 1',
     "i.pdf_url NOT LIKE '%.supabase.co/%'",
+    "trim(i.pdf_url) <> ''",
   ];
   const args: SqlArg[] = [];
   const availability = availabilityWhere(input.availability);
@@ -397,18 +478,13 @@ function buildOrderBy(input: PublicIssueListInput): string {
   }
 }
 
-async function buildFacets(
+function buildFacets(
   input: PublicIssueListInput,
   magazines: ApiMagazine[],
-  searchIssueIds: string[] | null,
-): Promise<BrowseFacets> {
-  const [yearCountsRaw, monthCountsRaw, magazineCountsRaw, languageCountsRaw, subjectCountsRaw] = await Promise.all([
-    fetchFacetCounts(input, magazines, 'years', searchIssueIds),
-    fetchFacetCounts(input, magazines, 'months', searchIssueIds),
-    fetchFacetCounts(input, magazines, 'magazines', searchIssueIds),
-    fetchFacetCounts(input, magazines, 'languages', searchIssueIds),
-    fetchFacetCounts(input, magazines, 'subjects', searchIssueIds),
-  ]);
+  facetResults: ResultSet[],
+): BrowseFacets {
+  const [yearCountsRaw, monthCountsRaw, magazineCountsRaw, languageCountsRaw, subjectCountsRaw] =
+    facetResults.map(facetResultToMap);
   const yearCounts = numberCountMap(yearCountsRaw);
   const monthCounts = numberCountMap(monthCountsRaw);
   const magazineCounts = stringCountMap(magazineCountsRaw);
@@ -442,15 +518,7 @@ async function buildFacets(
   };
 }
 
-async function fetchFacetCounts(
-  input: PublicIssueListInput,
-  magazines: ApiMagazine[],
-  exclude: FacetDimension,
-  searchIssueIds: string[] | null,
-): Promise<Map<FacetCountValue, number>> {
-  const where = buildIssueWhere(input, magazines, exclude, searchIssueIds);
-  const result = await getDb().execute(facetCountQuery(where, exclude));
-
+function facetResultToMap(result: ResultSet): Map<FacetCountValue, number> {
   return new Map(
     result.rows
       .map((row) => ({ value: row.value, count: Number(row.count ?? 0) }))

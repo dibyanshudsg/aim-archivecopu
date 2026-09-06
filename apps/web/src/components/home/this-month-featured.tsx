@@ -21,11 +21,9 @@ import type { Language, MonthIndex } from '@aim-archive/shared';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { cn, formatFileSize } from '@/lib/utils';
+import { configurePdfWorker } from '@/lib/pdf-worker-client';
 
-// Configure react-pdf worker (idempotent — same setup as the reader page).
-if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-}
+configurePdfWorker(pdfjs);
 
 /** Reactive media-query hook — switches the embedded reader between
  *  single-page (mobile/tablet) and two-page-spread (desktop, lg+). */
@@ -198,34 +196,12 @@ export function ThisMonthFeatured({
     const neighbours = [visibleIssues[nextIdx], visibleIssues[prevIdx]].filter(
       (issue, i, arr) => arr.findIndex((j) => j.id === issue.id) === i,
     );
-    const conn = (
-      navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }
-    ).connection;
-    const slowConn =
-      !!conn &&
-      (conn.saveData === true ||
-        /(2g|slow-2g)/i.test(conn.effectiveType ?? ''));
-
-    const controllers: AbortController[] = [];
     for (const issue of neighbours) {
       if (issue.cover_image_url) {
         const img = new window.Image();
         img.src = issue.cover_image_url;
       }
-      // Embargoed issues never reach this carousel (the server fetch filters
-      // them upstream), but guard at runtime so a stale type assumption can't
-      // throw on `fetch(null)`.
-      if (!slowConn && issue.pdf_url) {
-        const ctrl = new AbortController();
-        controllers.push(ctrl);
-        fetch(issue.pdf_url, { signal: ctrl.signal, cache: 'force-cache' }).catch(
-          () => {
-            /* prefetch best-effort — surface no error */
-          },
-        );
-      }
     }
-    return () => controllers.forEach((c) => c.abort());
   }, [currentIndex, visibleIssues]);
 
   // Bail if there's literally nothing to show across both windows. The
@@ -251,7 +227,7 @@ export function ThisMonthFeatured({
 
   return (
     <motion.section
-      className="relative -mx-6 mt-16 max-w-5xl sm:mx-auto"
+      className="relative mx-auto mt-10 max-w-5xl sm:mt-16"
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.45, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
@@ -261,9 +237,7 @@ export function ThisMonthFeatured({
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-flame-700">
           {eyebrowText}
         </p>
-        {/* Title smoothly cross-fades between the "current" and
-            "current + previous" variants when the toggle changes. */}
-        <div className="relative mt-2 min-h-[2.25rem] sm:min-h-[2.75rem]">
+        <div className="mt-2">
           <AnimatePresence mode="wait" initial={false}>
             <motion.h2
               key={titleText}
@@ -272,7 +246,7 @@ export function ThisMonthFeatured({
               animate={{ opacity: 1, y: 0 }}
               exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              className="font-heading absolute inset-x-0 bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 text-2xl font-medium tracking-wide text-transparent sm:text-3xl"
+              className="font-heading mx-auto max-w-xl bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text px-1 text-2xl font-medium leading-tight tracking-normal text-transparent sm:text-3xl"
             >
               {titleText}
             </motion.h2>
@@ -644,7 +618,10 @@ function EmptyCard({
 
 // ---------- Single slide (rich, focused — with embedded reader) ----------
 function FeaturedSlide({ issue }: { issue: ApiIssue }) {
+  const reduceMotion = useReducedMotion();
   const { toggle, isBookmarked } = useBookmarks();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const bookmarked = isBookmarked(issue.id);
 
   const monthName = MONTH_NAMES[issue.month as MonthIndex];
@@ -661,17 +638,7 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
 
   return (
     <article className="relative overflow-hidden border-y border-flame-200/60 bg-white shadow-[0_10px_36px_rgba(190,140,46,0.12)] sm:rounded-2xl sm:border">
-      {/* Embedded PDF reader on top — single page on mobile/tablet, two-page
-          spread on desktop (lg+). */}
-      <SlideReader
-        pdfUrl={issue.pdf_url}
-        fallbackCoverUrl={issue.cover_image_url}
-        fallbackTitle={issue.title}
-        magazineName={issue.magazines.name}
-        monthName={monthName}
-        year={issue.year}
-        language={language}
-      />
+      {issue.cover_image_url && <div className="relative mx-auto mt-6 h-44 w-32 sm:h-52 sm:w-40"><Image src={issue.cover_image_url} alt={issue.title} fill sizes="160px" className="rounded-md object-contain" /></div>}
 
       {/* Info section below the book */}
       <div className="px-6 py-6 sm:px-10 sm:py-8">
@@ -703,15 +670,18 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-center gap-2">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <Link
             href={readerPath(issue.id)}
             onClick={() => rememberReaderSource(issue.id, 'shelf')}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.24)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_12px_28px_rgba(229,86,31,0.28)]"
           >
             <BookOpen className="h-4 w-4" />
-            Open Full Reader
+            Read issue
           </Link>
+          <button type="button" aria-expanded={previewOpen} aria-controls={`preview-${issue.id}`} onClick={() => { setPreviewLoaded(true); setPreviewOpen((open) => !open); }} className="min-h-11 rounded-xl border border-flame-200 px-4 py-2 text-sm font-semibold text-flame-800 hover:bg-flame-50">
+            {previewOpen ? 'Close preview' : 'Preview here'}
+          </button>
           <button
             onClick={() => toggle(issue.id)}
             aria-label={bookmarked ? 'Remove bookmark' : 'Save to bookmarks'}
@@ -745,10 +715,26 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
               {issue.page_count && <span>{issue.page_count} pages</span>}
               <span>{formatFileSize(issue.file_size_bytes)}</span>
-              <span>{issue.read_count.toLocaleString()} reads</span>
             </div>
           </div>
         )}
+      </div>
+      <div
+        id={`preview-${issue.id}`}
+        aria-hidden={!previewOpen}
+        inert={!previewOpen}
+        className="grid"
+        style={{
+          gridTemplateRows: previewOpen ? '1fr' : '0fr',
+          transition: reduceMotion
+            ? 'none'
+            : `grid-template-rows ${previewOpen ? 360 : 280}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+          overflowAnchor: 'none',
+        }}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {previewLoaded && <SlideReader pdfUrl={issue.pdf_url} fallbackCoverUrl={issue.cover_image_url} fallbackTitle={issue.title} magazineName={issue.magazines.name} monthName={monthName} year={issue.year} language={language} />}
+        </div>
       </div>
     </article>
   );
@@ -781,10 +767,8 @@ function SlideReader({
   /** 1 = next-page motion, -1 = prev-page motion. */
   const [pageDirection, setPageDirection] = useState(1);
   /** Flips true the first time react-pdf signals page 1 has finished
-   *  rendering. Drives the cover→canvas cross-fade — the cover overlay
-   *  (rendered on top of the canvas) fades to opacity 0 once this is true,
-   *  revealing the now-painted PDF page underneath without a frame of
-   *  white space. */
+   *  rendering. Removes the opaque loading cover only once the canvas
+   *  underneath is ready, without a separate loading fade. */
   const [page1Rendered, setPage1Rendered] = useState(false);
   /** First-time swipe hint — shown once on mobile, then suppressed via
    *  localStorage. Dismisses on first user interaction or after 4s. */
@@ -887,7 +871,7 @@ function SlideReader({
 
   // Reset zoom whenever the slide changes (new issue) so the next reader
   // doesn't inherit the previous user's zoom level. Same trigger resets the
-  // cover-overlay cross-fade so it covers the new issue's page-1 render.
+  // loading cover so it covers the new issue's page-1 render.
   useEffect(() => {
     setZoom(1);
     setPage1Rendered(false);
@@ -1037,7 +1021,7 @@ function SlideReader({
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                     onRenderSuccess={() => {
-                      // Trigger the cover→canvas cross-fade only after
+                      // Remove the loading cover only after
                       // page 1 has actually painted. Subsequent pages don't
                       // need the overlay (they have the page-turn skeleton
                       // built into their own loading prop).
@@ -1074,22 +1058,12 @@ function SlideReader({
             </Document>
           )}
 
-          {/* Cover→canvas cross-fade overlay. Renders the same cover JPEG
-              as Page 1's `loading` prop, but as an absolutely-positioned
-              layer that fades out once react-pdf signals page 1 has painted
-              its canvas underneath. Without this, the swap from cover-image
-              to canvas was a hard DOM replace — perceptible blink. With
-              it, the canvas is already drawn under the overlay by the time
-              the fade starts, so the user sees one continuous image. */}
-          {!loadError && fallbackCoverUrl && (
-            <motion.div
+          {/* Keep the cover opaque until the canvas is painted underneath.
+              The disclosure moves the section; loading must not fade it again. */}
+          {!loadError && fallbackCoverUrl && page === 1 && !page1Rendered && (
+            <div
               aria-hidden
               className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-              initial={{ opacity: 1 }}
-              animate={{
-                opacity: page === 1 && !page1Rendered ? 1 : 0,
-              }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
             >
               <PdfLoadingSpread
                 coverUrl={fallbackCoverUrl}
@@ -1098,7 +1072,7 @@ function SlideReader({
                 isSpread={isSpread}
                 decorative
               />
-            </motion.div>
+            </div>
           )}
 
           {/* First-time swipe hint — bottom-center of the book card.
@@ -1178,8 +1152,8 @@ function SlideReader({
       {/* Page indicator pill — centered below the book.
           Mobile/tablet: prev/next arrows live INSIDE the pill (since the
           side arrows are hidden < lg). Desktop: just the label. */}
-      {!loadError && numPages !== null && (
-        <div className="mt-5 flex justify-center">
+      <div className="mt-5 flex min-h-[54px] justify-center lg:min-h-[34px]">
+        {!loadError && numPages !== null && (
           <div className="flex items-center gap-2 rounded-full border border-flame-200/60 bg-white/80 px-2 py-1 shadow-sm">
             <button
               type="button"
@@ -1203,8 +1177,8 @@ function SlideReader({
               <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

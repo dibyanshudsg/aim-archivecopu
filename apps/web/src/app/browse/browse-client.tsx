@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowUp,
@@ -33,6 +33,12 @@ import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
 import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
+import type { PublicNavigation } from '@/lib/navigation';
+import {
+  consumeBrowseReturnTarget,
+  type BrowseReturnTarget,
+} from '@/lib/reader-url';
+import { warmIssueDetailRoute } from '@/lib/issue-detail-url';
 
 const PANEL_STORAGE_KEY = 'browse:panel:open';
 const PAGE_SIZE = 24;
@@ -60,8 +66,8 @@ const availabilityOptions = [
   },
   {
     id: 'subscriber',
-    label: 'Subscriber editions',
-    helper: 'Current circulation',
+    label: 'Awaiting public release',
+    helper: 'Print circulation',
     Icon: LockKeyhole,
   },
   {
@@ -84,13 +90,13 @@ const availabilityCopy: Record<AvailabilityFilter, { heading: string; subtitle: 
     countLabel: 'readable',
   },
   subscriber: {
-    heading: 'Subscriber Editions',
+    heading: 'Awaiting Public Release',
     subtitle: 'Current circulation editions are visible for discovery and open publicly after the rolling 5-year archive window.',
-    countLabel: 'subscriber',
+    countLabel: 'restricted',
   },
   all: {
     heading: 'Browse Archive',
-    subtitle: 'Browse readable archive editions and current subscriber editions together.',
+    subtitle: 'Browse readable editions and editions awaiting public release together.',
     countLabel: 'archive',
   },
 };
@@ -101,16 +107,11 @@ interface BrowseClientProps {
   initialTotal: number;
   initialTotalPages: number;
   initialFacets: BrowseFacets;
+  navigation: PublicNavigation;
 }
 
 export function BrowseClient(props: BrowseClientProps) {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Header />
-      <BrowseContent {...props} />
-      <Footer />
-    </div>
-  );
+  return <BrowseContent {...props} />;
 }
 
 function BrowseContent({
@@ -119,6 +120,7 @@ function BrowseContent({
   initialTotal,
   initialTotalPages,
   initialFacets,
+  navigation,
 }: BrowseClientProps) {
   const {
     filters,
@@ -135,9 +137,10 @@ function BrowseContent({
   } = useBrowseFilters();
 
   const gridTopRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const currentCacheKey = useMemo(() => browseCacheKey(filters), [filters]);
   const responseCacheRef = useRef(new Map<string, BrowseCacheEntry>());
-  const inFlightPrefetchRef = useRef(new Set<string>());
+  const inFlightRequestRef = useRef(new Map<string, Promise<BrowseCacheEntry>>());
   const cacheSeededRef = useRef(false);
   if (!cacheSeededRef.current) {
     responseCacheRef.current.set(currentCacheKey, {
@@ -157,10 +160,84 @@ function BrowseContent({
   const [facets, setFacets] = useState(initialFacets);
   const [loading, setLoading] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [controlsDocked, setControlsDocked] = useState(false);
   const showScrollTopRef = useRef(false);
+  const controlsDockedRef = useRef(false);
   const firstFetchRef = useRef(true);
+  const detailTemplateWarmRef = useRef(false);
+
+  const applyBrowseEntry = useCallback((entry: BrowseCacheEntry) => {
+    setIssues(entry.issues);
+    setTotal(entry.total);
+    setTotalPages(entry.totalPages);
+    setFacets(entry.facets);
+  }, []);
+
+  const loadBrowseEntry = useCallback(
+    (requestFilters: BrowseFilters, key: string) => {
+      const cached = responseCacheRef.current.get(key);
+      if (cached) return Promise.resolve(cached);
+
+      const inFlight = inFlightRequestRef.current.get(key);
+      if (inFlight) return inFlight;
+
+      const request = fetchIssues({
+        years: requestFilters.years,
+        months: requestFilters.months,
+        magazines: requestFilters.magazines,
+        languages: requestFilters.languages,
+        subjects: requestFilters.subjects,
+        query: requestFilters.query,
+        sort: requestFilters.sort,
+        dir: requestFilters.dir,
+        page: requestFilters.page,
+        pageSize: PAGE_SIZE,
+        availability: requestFilters.availability,
+      })
+        .then((result) => {
+          const entry = {
+            issues: result.data,
+            total: result.total,
+            totalPages: result.totalPages,
+            facets: result.facets ?? initialFacets,
+          };
+          responseCacheRef.current.set(key, entry);
+          return entry;
+        })
+        .finally(() => {
+          if (inFlightRequestRef.current.get(key) === request) {
+            inFlightRequestRef.current.delete(key);
+          }
+        });
+
+      inFlightRequestRef.current.set(key, request);
+      return request;
+    },
+    [initialFacets],
+  );
+
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== 'development' ||
+      loading ||
+      issues.length === 0 ||
+      detailTemplateWarmRef.current
+    ) {
+      return;
+    }
+
+    detailTemplateWarmRef.current = true;
+    const warm = () => warmIssueDetailRoute(issues[0].id);
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(warm, { timeout: 3_000 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(warm, 1_200);
+    return () => window.clearTimeout(timeoutId);
+  }, [issues, loading]);
 
   const [panelOpen, setPanelOpen] = useState(true);
+  const panelScrollRestoreRef = useRef<number | null>(null);
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(PANEL_STORAGE_KEY) : null;
     if (stored !== null) setPanelOpen(stored === 'true');
@@ -170,27 +247,51 @@ function BrowseContent({
     if (typeof window !== 'undefined') localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
   }, [panelOpen]);
 
+  useLayoutEffect(() => {
+    const scrollTop = panelScrollRestoreRef.current;
+    if (scrollTop === null) return;
+    window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'auto' });
+    panelScrollRestoreRef.current = null;
+  }, [panelOpen]);
+
+  const setPanelVisibility = useCallback((open: boolean) => {
+    panelScrollRestoreRef.current = window.scrollY;
+    setPanelOpen(open);
+  }, []);
+
   useEffect(() => {
     let frame = 0;
 
-    const updateScrollTopVisibility = () => {
+    const updateScrollUi = () => {
       frame = 0;
       const nextVisible = window.scrollY > 520;
-      if (nextVisible === showScrollTopRef.current) return;
-      showScrollTopRef.current = nextVisible;
-      setShowScrollTop(nextVisible);
+      if (nextVisible !== showScrollTopRef.current) {
+        showScrollTopRef.current = nextVisible;
+        setShowScrollTop(nextVisible);
+      }
+
+      const toolbarBottom = toolbarRef.current?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY;
+      const headerBottom =
+        document.querySelector<HTMLElement>('[data-site-header]')?.getBoundingClientRect().bottom ?? 64;
+      const nextDocked = toolbarBottom <= headerBottom;
+      if (nextDocked !== controlsDockedRef.current) {
+        controlsDockedRef.current = nextDocked;
+        setControlsDocked(nextDocked);
+      }
     };
 
     const handleScroll = () => {
       if (frame) return;
-      frame = window.requestAnimationFrame(updateScrollTopVisibility);
+      frame = window.requestAnimationFrame(updateScrollUi);
     };
 
-    updateScrollTopVisibility();
+    updateScrollUi();
     window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
@@ -205,99 +306,68 @@ function BrowseContent({
 
     const cached = responseCacheRef.current.get(currentCacheKey);
     if (cached) {
-      setIssues(cached.issues);
-      setTotal(cached.total);
-      setTotalPages(cached.totalPages);
-      setFacets(cached.facets);
+      applyBrowseEntry(cached);
       setLoading(false);
       return;
     }
 
-    const controller = new AbortController();
+    let cancelled = false;
     setLoading(true);
-    fetchIssues({
-        years: filters.years,
-        months: filters.months,
-        magazines: filters.magazines,
-        languages: filters.languages,
-        subjects: filters.subjects,
-        query: filters.query,
-        sort: filters.sort,
-        dir: filters.dir,
-        page: filters.page,
-        pageSize: PAGE_SIZE,
-        availability: filters.availability,
-        signal: controller.signal,
-      })
-      .then((result) => {
-        const entry = {
-          issues: result.data,
-          total: result.total,
-          totalPages: result.totalPages,
-          facets: result.facets ?? initialFacets,
-        };
-        responseCacheRef.current.set(currentCacheKey, entry);
-        setIssues(entry.issues);
-        setTotal(entry.total);
-        setTotalPages(entry.totalPages);
-        setFacets(entry.facets);
+    loadBrowseEntry(filters, currentCacheKey)
+      .then((entry) => {
+        if (!cancelled) applyBrowseEntry(entry);
       })
       .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        console.error(error);
+        if (!cancelled) console.error(error);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!cancelled) setLoading(false);
       });
 
-    return () => controller.abort();
-  }, [currentCacheKey, filters, initialFacets]);
+    return () => {
+      cancelled = true;
+    };
+  }, [applyBrowseEntry, currentCacheKey, filters, loadBrowseEntry]);
 
   const prefetchAvailability = useCallback(
     (availability: AvailabilityFilter) => {
       if (availability === filters.availability || !shouldPrefetchAvailability(filters)) return;
       const key = browseCacheKey(filters, { availability, page: 1 });
-      if (responseCacheRef.current.has(key) || inFlightPrefetchRef.current.has(key)) return;
-
-      inFlightPrefetchRef.current.add(key);
-      fetchIssues({
-        years: filters.years,
-        months: filters.months,
-        magazines: filters.magazines,
-        languages: filters.languages,
-        subjects: filters.subjects,
-        query: filters.query,
-        sort: filters.sort,
-        dir: filters.dir,
-        page: 1,
-        pageSize: PAGE_SIZE,
-        availability,
-      })
-        .then((result) => {
-          responseCacheRef.current.set(key, {
-            issues: result.data,
-            total: result.total,
-            totalPages: result.totalPages,
-            facets: result.facets ?? initialFacets,
-          });
-        })
+      const requestFilters = { ...filters, availability, page: 1 };
+      loadBrowseEntry(requestFilters, key)
         .catch(() => {
           /* best-effort warm cache */
-        })
-        .finally(() => {
-          inFlightPrefetchRef.current.delete(key);
         });
     },
-    [filters, initialFacets],
+    [filters, loadBrowseEntry],
   );
 
+  // Desktop visitors can switch availability views before a hover prefetch
+  // finishes. Warm both alternate first pages immediately after hydration;
+  // the shared in-flight map lets a quick click join this exact request.
   useEffect(() => {
-    if (!shouldPrefetchAvailability(filters)) return;
-    const timeout = window.setTimeout(() => {
-      availabilityOptions.forEach((option) => prefetchAvailability(option.id));
-    }, 700);
-    return () => window.clearTimeout(timeout);
+    if (!window.matchMedia('(min-width: 768px)').matches || !shouldPrefetchAvailability(filters)) {
+      return;
+    }
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+
+    const timeoutId = window.setTimeout(() => {
+      for (const option of availabilityOptions) prefetchAvailability(option.id);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [filters, prefetchAvailability]);
+
+  const handleAvailabilityChange = useCallback(
+    (availability: AvailabilityFilter) => {
+      if (availability === filters.availability) return;
+      const key = browseCacheKey(filters, { availability, page: 1 });
+      const cached = responseCacheRef.current.get(key);
+      if (cached) applyBrowseEntry(cached);
+      setAvailability(availability);
+    },
+    [applyBrowseEntry, filters, setAvailability],
+  );
 
   const currentPage = Math.min(filters.page, totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -308,6 +378,64 @@ function BrowseContent({
     () => buildYearSeparatedGridItems(normalized, showYearSeparators),
     [normalized, showYearSeparators],
   );
+  const browseReturnTargetRef = useRef<BrowseReturnTarget | null>(null);
+  const browseReturnReadRef = useRef(false);
+
+  useEffect(() => {
+    if (!browseReturnReadRef.current) {
+      browseReturnReadRef.current = true;
+      browseReturnTargetRef.current = consumeBrowseReturnTarget();
+    }
+
+    const target = browseReturnTargetRef.current;
+    if (!target || loading) return;
+
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (target.href !== currentHref) {
+      browseReturnTargetRef.current = null;
+      return;
+    }
+
+    let frame = 0;
+    let attempts = 0;
+    let cancelled = false;
+    const restorePosition = () => {
+      if (cancelled) return;
+      const element = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-browse-issue-id]'),
+      ).find(
+        (candidate) =>
+          candidate.dataset.browseIssueId === target.issueId &&
+          candidate.getClientRects().length > 0,
+      );
+
+      // Page transitions and responsive list wrappers can briefly leave the
+      // correct card mounted but without layout. Retry for up to two seconds
+      // instead of consuming the return target too early.
+      if (!element) {
+        attempts += 1;
+        if (attempts < 120) frame = window.requestAnimationFrame(restorePosition);
+        return;
+      }
+
+      browseReturnTargetRef.current = null;
+      frame = window.requestAnimationFrame(() => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        element.scrollIntoView({
+          behavior: reduceMotion ? 'auto' : 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+      });
+    };
+    frame = window.requestAnimationFrame(restorePosition);
+
+    return () => {
+      cancelled = true;
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [currentCacheKey, filters.view, issues, loading]);
+
   const copy = availabilityCopy[filters.availability];
   const issueCountText =
     total === 0
@@ -414,8 +542,29 @@ function BrowseContent({
     abortRef.current?.abort();
   };
 
+  const contextualControls = (
+    <BrowseContextControls
+      activeFilterCount={activeFilterCount}
+      panelOpen={panelOpen}
+      onToggleFilters={() => setPanelVisibility(!panelOpen)}
+      sort={filters.sort}
+      dir={filters.dir}
+      onSortChange={setSortChoice}
+      selectionEnabled={selectionEnabled}
+      onToggleSelection={() => (selectionEnabled ? disableSelection() : enableSelection())}
+      view={filters.view}
+      onViewChange={setView}
+    />
+  );
+
   return (
-    <main className="relative flex-1">
+    <div className="flex min-h-screen flex-col">
+      <Header
+        navigation={navigation}
+        contextualControls={contextualControls}
+        contextualControlsVisible={controlsDocked}
+      />
+      <main className="relative flex-1">
       <HeaderSearchDropdown />
 
       <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-8 lg:px-8 lg:py-9">
@@ -427,7 +576,7 @@ function BrowseContent({
             </div>
             <AvailabilityTabs
               value={filters.availability}
-              onChange={setAvailability}
+              onChange={handleAvailabilityChange}
               onPrefetch={prefetchAvailability}
             />
           </div>
@@ -441,7 +590,7 @@ function BrowseContent({
           initial={false}
           animate={{ width: panelOpen ? 280 : 0 }}
           transition={{ type: 'spring', damping: 30, stiffness: 240, mass: 0.8 }}
-          className="sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 self-start overflow-hidden md:block"
+          className="sticky top-20 hidden h-[calc(100vh-5rem)] shrink-0 self-start overflow-hidden md:block"
           aria-hidden={!panelOpen}
         >
           <div
@@ -453,10 +602,9 @@ function BrowseContent({
               facets={facets}
               filters={filters}
               onToggle={toggleArray}
-              onAvailabilityChange={setAvailability}
               onClearAll={clearAll}
               hasActiveFilters={hasActiveFilters}
-              onClose={() => setPanelOpen(false)}
+              onClose={() => setPanelVisibility(false)}
             />
           </div>
         </motion.aside>
@@ -470,7 +618,7 @@ function BrowseContent({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              onClick={() => setPanelOpen(false)}
+              onClick={() => setPanelVisibility(false)}
               className="fixed inset-0 z-40 bg-black/40 md:hidden"
             />
           )}
@@ -489,10 +637,9 @@ function BrowseContent({
                 facets={facets}
                 filters={filters}
                 onToggle={toggleArray}
-                onAvailabilityChange={setAvailability}
                 onClearAll={clearAll}
                 hasActiveFilters={hasActiveFilters}
-                onClose={() => setPanelOpen(false)}
+                onClose={() => setPanelVisibility(false)}
               />
             </motion.aside>
           )}
@@ -500,12 +647,13 @@ function BrowseContent({
 
         {/* Grid area */}
         <div ref={gridTopRef} className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div ref={toolbarRef} className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               {!panelOpen && (
                 <button
-                  onClick={() => setPanelOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
+                  type="button"
+                  onClick={() => setPanelVisibility(true)}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
                 >
                   <Filter className="h-4 w-4" />
                   Filters
@@ -524,8 +672,9 @@ function BrowseContent({
             <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
               <SortMenu sort={filters.sort} dir={filters.dir} onChange={setSortChoice} />
               <button
+                type="button"
                 onClick={() => (selectionEnabled ? disableSelection() : enableSelection())}
-                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                className={`inline-flex h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors ${
                   selectionEnabled
                     ? 'border-flame-300 bg-flame-50 text-flame-700'
                     : 'border-gray-200 bg-white text-gray-600 hover:border-flame-200 hover:bg-flame-50/50 hover:text-flame-700'
@@ -544,7 +693,7 @@ function BrowseContent({
             filters={filters}
             magazines={magazines}
             onRemove={toggleArray}
-            onRemoveAvailability={() => setAvailability('read')}
+            onRemoveAvailability={() => handleAvailabilityChange('read')}
             onRemoveQuery={() => setQuery('')}
             onClearAll={clearAll}
           />
@@ -610,7 +759,9 @@ function BrowseContent({
           </motion.button>
         )}
       </AnimatePresence>
-    </main>
+      </main>
+      <Footer navigation={navigation} />
+    </div>
   );
 }
 
@@ -628,6 +779,75 @@ function buildYearSeparatedGridItems(issues: NormalizedIssue[], showSeparators: 
   });
 
   return items;
+}
+
+function BrowseContextControls({
+  activeFilterCount,
+  panelOpen,
+  onToggleFilters,
+  sort,
+  dir,
+  onSortChange,
+  selectionEnabled,
+  onToggleSelection,
+  view,
+  onViewChange,
+}: {
+  activeFilterCount: number;
+  panelOpen: boolean;
+  onToggleFilters: () => void;
+  sort: SortColumn | null;
+  dir: 'asc' | 'desc';
+  onSortChange: (sort: SortColumn | null, dir: 'asc' | 'desc') => void;
+  selectionEnabled: boolean;
+  onToggleSelection: () => void;
+  view: 'grid' | 'list';
+  onViewChange: (view: 'grid' | 'list') => void;
+}) {
+  return (
+    <div className="flex w-max shrink-0 items-center justify-between gap-0.5 min-[600px]:gap-2 sm:justify-end">
+      <button
+        type="button"
+        onClick={onToggleFilters}
+        aria-expanded={panelOpen}
+        aria-label={panelOpen ? 'Close filters' : 'Open filters'}
+        title={panelOpen ? 'Close filters' : 'Open filters'}
+        className={`relative inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl border px-2.5 text-sm font-medium transition-colors sm:px-3 ${
+          panelOpen
+            ? 'border-flame-300 bg-flame-50 text-flame-700'
+            : 'border-flame-200 bg-white text-flame-700 hover:border-flame-300 hover:bg-flame-50'
+        }`}
+      >
+        <Filter className="h-4 w-4 shrink-0" />
+        <span className="hidden sm:inline">Filters</span>
+        {activeFilterCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-flame-600 px-1 text-[10px] font-bold text-white sm:static sm:h-auto sm:min-w-0 sm:px-1.5 sm:py-0.5">
+            {activeFilterCount > 99 ? '99+' : activeFilterCount}
+          </span>
+        )}
+      </button>
+
+      <SortMenu sort={sort} dir={dir} onChange={onSortChange} compact />
+
+      <button
+        type="button"
+        onClick={onToggleSelection}
+        className={`inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-sm font-medium transition-colors xl:px-3 ${
+          selectionEnabled
+            ? 'border-flame-300 bg-flame-50 text-flame-700'
+            : 'border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50'
+        }`}
+        aria-pressed={selectionEnabled}
+        aria-label={selectionEnabled ? 'Exit selection mode' : 'Select multiple issues'}
+        title={selectionEnabled ? 'Exit selection mode' : 'Select multiple issues to download'}
+      >
+        <CheckSquare className="h-4 w-4 shrink-0" />
+        <span className="hidden xl:inline">{selectionEnabled ? 'Done' : 'Select'}</span>
+      </button>
+
+      <ViewToggle view={view} onChange={onViewChange} compact />
+    </div>
+  );
 }
 
 function YearSeparator({ year }: { year: number }) {
@@ -709,10 +929,12 @@ function SortMenu({
   sort,
   dir,
   onChange,
+  compact = false,
 }: {
   sort: SortColumn | null;
   dir: 'asc' | 'desc';
   onChange: (sort: SortColumn | null, dir: 'asc' | 'desc') => void;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -747,15 +969,17 @@ function SortMenu({
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 py-2 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        className={`inline-flex h-11 items-center gap-2 rounded-xl border border-flame-200 bg-white px-3 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:px-3.5 ${
+          compact ? 'min-w-11 justify-center' : ''
+        }`}
       >
         <ActiveIcon className="h-4 w-4" />
-        <span>Sort</span>
-        <span className="hidden max-w-28 truncate text-gray-500 sm:inline">
+        <span className={compact ? 'hidden min-[600px]:inline' : undefined}>Sort</span>
+        <span className={`${compact ? 'hidden xl:inline' : 'hidden sm:inline'} max-w-28 truncate text-gray-500`}>
           {activeOption.label}
         </span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${compact ? 'hidden min-[600px]:block' : ''} ${
             open ? 'rotate-180 text-flame-600' : ''
           }`}
         />
@@ -769,7 +993,11 @@ function SortMenu({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute left-0 z-30 mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-flame-100 bg-white p-1.5 shadow-[0_18px_48px_rgba(120,84,28,0.18)] ring-1 ring-white sm:right-0 sm:left-auto"
+            className={`z-[60] overflow-hidden rounded-2xl border border-flame-100 bg-white p-1.5 shadow-[0_18px_48px_rgba(120,84,28,0.18)] ring-1 ring-white ${
+              compact
+                ? 'fixed top-16 right-4 left-4 sm:top-[72px] md:absolute md:top-auto md:right-0 md:left-auto md:mt-2 md:w-[min(21rem,calc(100vw-2rem))]'
+                : 'absolute left-0 mt-2 w-[min(21rem,calc(100vw-2rem))] sm:right-0 sm:left-auto'
+            }`}
             role="menu"
           >
             {sortOptions.map((option) => {

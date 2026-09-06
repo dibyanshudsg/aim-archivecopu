@@ -19,6 +19,7 @@ import { readSiteSettingsFromDb } from './site-settings-repository';
 import { createId, displayableAssetUrl, getDb, nowIso } from './client';
 import { AsyncTtlCache } from './cache';
 import { parseTopics } from './mappers';
+import { enqueueInTransaction } from './indexing-repository';
 
 interface IssueUrlRow {
   id: string;
@@ -315,33 +316,42 @@ export async function createAdminIssueInDb(input: {
 }): Promise<Record<string, unknown>> {
   const id = createId();
   const now = nowIso();
-  await getDb().execute({
-    sql: `
+  const tx = await getDb().transaction('write');
+  let indexingJob: string | null;
+  try {
+    await tx.execute({
+      sql: `
       INSERT INTO issues (
         id, magazine_id, title, theme, year, month, description, topics_json,
         pdf_url, cover_image_url, file_size_bytes, is_published, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    args: [
-      id,
-      input.magazine_id,
-      input.title,
-      input.theme,
-      input.year,
-      input.month,
-      input.description,
-      JSON.stringify(input.topics),
-      input.pdf_url,
-      input.cover_image_url,
-      input.file_size_bytes,
-      input.is_published ? 1 : 0,
-      now,
-      now,
-    ],
-  });
+      args: [
+        id,
+        input.magazine_id,
+        input.title,
+        input.theme,
+        input.year,
+        input.month,
+        input.description,
+        JSON.stringify(input.topics),
+        input.pdf_url,
+        input.cover_image_url,
+        input.file_size_bytes,
+        input.is_published ? 1 : 0,
+        now,
+        now,
+      ],
+    });
+    indexingJob = await enqueueInTransaction(tx, id, false, 'upload');
+    await tx.commit();
+  } finally {
+    tx.close();
+  }
 
   return {
     id,
+    indexing_job_id: indexingJob,
     magazine_id: input.magazine_id,
     title: input.title,
     theme: input.theme,
@@ -379,11 +389,25 @@ export async function getAdminIssueFileRowFromDb(id: string): Promise<{
     : null;
 }
 
-export async function updateIssuePdfInDb(id: string, pdfUrl: string, fileSizeBytes: number): Promise<void> {
-  await getDb().execute({
-    sql: 'UPDATE issues SET pdf_url = ?, file_size_bytes = ?, updated_at = ? WHERE id = ?',
-    args: [pdfUrl, fileSizeBytes, nowIso(), id],
-  });
+export async function updateIssuePdfInDb(
+  id: string,
+  pdfUrl: string,
+  fileSizeBytes: number,
+): Promise<void> {
+  const tx = await getDb().transaction('write');
+  try {
+    await tx.execute({
+      sql: 'UPDATE issues SET pdf_url = ?, file_size_bytes = ?, page_count = NULL, updated_at = ? WHERE id = ?',
+      args: [pdfUrl, fileSizeBytes, nowIso(), id],
+    });
+    // Old page numbers must never point into a different PDF while its job waits.
+    await tx.execute({ sql: 'DELETE FROM issue_search_index WHERE issue_id=?', args: [id] });
+    await tx.execute({ sql: 'DELETE FROM indexing_jobs WHERE issue_id=?', args: [id] });
+    await enqueueInTransaction(tx, id, true, 'replacement');
+    await tx.commit();
+  } finally {
+    tx.close();
+  }
 }
 
 export async function updateIssueCoverInDb(id: string, coverImageUrl: string | null): Promise<void> {
@@ -413,6 +437,7 @@ export async function listReindexCandidatesFromDb(force: boolean): Promise<Array
     SELECT id, title, pdf_url, cover_image_url
     FROM issues
     WHERE pdf_url NOT LIKE '%.supabase.co/%'
+      AND magazine_id IN (SELECT id FROM magazines WHERE language = 'english')
     ORDER BY year DESC, month DESC
   `);
   const issues = result.rows.map((row) => ({
@@ -609,6 +634,7 @@ function rowToAdminIssue(row: Record<string, unknown>): AdminIssue {
     magazine_id: String(row.magazine_id),
     pdf_url: String(row.pdf_url),
     cover_image_url: displayableAssetUrl(row.cover_image_url == null ? null : String(row.cover_image_url)),
+    created_at: row.created_at == null ? null : String(row.created_at),
     updated_at: row.updated_at == null ? null : String(row.updated_at),
     page_count: row.page_count == null ? null : Number(row.page_count),
     magazines: { name: String(row.magazine_name), language: String(row.magazine_language) },
@@ -673,6 +699,8 @@ function buildAdminIssueOrder(sort: AdminIssueSortField, dir: 'asc' | 'desc'): s
       return `ORDER BY i.download_count ${direction}, i.year DESC, i.month DESC`;
     case 'file_size_bytes':
       return `ORDER BY i.file_size_bytes ${direction}, i.year DESC, i.month DESC`;
+    case 'created_at':
+      return `ORDER BY i.created_at ${direction}, i.year DESC, i.month DESC`;
     case 'updated_at':
       return `ORDER BY i.updated_at ${direction}, i.year DESC, i.month DESC`;
     default:

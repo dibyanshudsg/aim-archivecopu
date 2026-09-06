@@ -1,42 +1,58 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Search, BookMarked } from 'lucide-react';
+import { ContinueReadingFab } from './continue-reading-fab';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useBookmarks } from '@/lib/bookmarks-store';
+import {
+  defaultPublicNavigation,
+  isExternalNavigationHref,
+  isNavigationHrefActive,
+  type NavigationItem,
+  type PublicNavigation,
+} from '@/lib/navigation';
 import { useSearchDropdown } from '@/lib/use-search-dropdown';
+import { fetchBookmarkedIssues } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const SEARCH_DROPDOWN_ROUTES = new Set(['/browse', '/bookmarks']);
 
-const navLinks = [
-  { href: '/', label: 'Home' },
-  { href: '/browse', label: 'Browse' },
-  { href: '/search', label: 'Search' },
-  { href: '/bookmarks', label: 'Bookmarks' },
-];
-
 const DEV_PUBLIC_WARM_TARGETS = [
-  '/api/issues?page=1&page_size=24',
-  '/api/magazines',
-  '/api/site-settings',
   '/browse',
   '/search',
   '/bookmarks',
+  '/api/issues?page=1&page_size=24',
+  '/api/magazines',
+  '/api/site-settings',
 ];
+const DEV_BROWSE_ROUTE_WARM_TARGETS = ['/search', '/bookmarks'];
 
-export function Header() {
+export function Header({
+  navigation,
+  contextualControls,
+  contextualControlsVisible = false,
+}: {
+  navigation?: PublicNavigation;
+  contextualControls?: React.ReactNode;
+  contextualControlsVisible?: boolean;
+}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
-  const bookmarkCount = useBookmarks((s) => s.bookmarkedIds.length);
+  const bookmarkedIds = useBookmarks((s) => s.bookmarkedIds);
+  const bookmarkCount = bookmarkedIds.length;
   const pathname = usePathname();
   const dropdownIsOpen = useSearchDropdown((s) => s.isOpen);
   const toggleDropdown = useSearchDropdown((s) => s.toggle);
   const showDropdownTrigger = SEARCH_DROPDOWN_ROUTES.has(pathname ?? '');
   const headerRef = useRef<HTMLElement>(null);
+  const publicNavigation = useMemo(() => navigation ?? defaultPublicNavigation(), [navigation]);
+  const headerLinks = publicNavigation.menus.header.items;
+  const mobileLinks = publicNavigation.menus.mobile.items.length > 0 ? publicNavigation.menus.mobile.items : headerLinks;
 
   /* Click-outside + Escape — closes the mobile menu when the user taps any
      content below the header or hits Esc on a hardware keyboard. The header
@@ -71,12 +87,48 @@ export function Header() {
   }, [pathname]);
 
   useEffect(() => {
+    if (contextualControlsVisible) setMobileMenuOpen(false);
+  }, [contextualControlsVisible]);
+
+  useEffect(() => {
+    if (pathname !== '/browse' || bookmarkedIds.length === 0) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+
+    const timeoutId = window.setTimeout(() => {
+      fetchBookmarkedIssues(bookmarkedIds).catch(() => {
+        /* best-effort warm cache */
+      });
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [bookmarkedIds, pathname]);
+
+  useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
 
     let cancelled = false;
     const timeout = window.setTimeout(async () => {
-      for (const href of navLinks.map((link) => link.href)) {
-        router.prefetch(href);
+      if (pathname === '/browse') {
+        await Promise.allSettled(
+          DEV_BROWSE_ROUTE_WARM_TARGETS.map(async (target) => {
+            if (cancelled) return;
+            router.prefetch(target);
+            try {
+              // Next disables automatic Link prefetching in development. Fetch
+              // the now-lightweight route shells so the first click does not
+              // pay the compile cost while the user waits.
+              await fetch(target, { cache: 'force-cache' });
+            } catch {
+              /* local-only convenience */
+            }
+          }),
+        );
+        return;
+      }
+
+      if (pathname !== '/') return;
+      for (const href of [...headerLinks, ...mobileLinks].map((link) => link.href)) {
+        if (!isExternalNavigationHref(href)) router.prefetch(href);
       }
 
       for (const target of DEV_PUBLIC_WARM_TARGETS) {
@@ -87,95 +139,200 @@ export function Header() {
           // Local-only convenience; the visible route still handles failures.
         }
       }
-    }, 800);
+    }, pathname === '/browse' ? 0 : 800);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [router]);
+  }, [router, headerLinks, mobileLinks, pathname]);
 
   /** Active state — matches exact path or any sub-route (e.g. /browse/[id]
    *  highlights the Browse link too). The home link ("/") is exact-match
    *  only — otherwise it would match every route. */
   function isLinkActive(href: string): boolean {
-    if (!pathname) return false;
-    if (href === '/') return pathname === '/';
-    return pathname === href || pathname.startsWith(`${href}/`);
+    return isNavigationHrefActive(href, pathname);
   }
 
   function prefetchRoute(href: string) {
-    router.prefetch(href);
+    if (!isExternalNavigationHref(href)) router.prefetch(href);
   }
 
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-50 border-b border-flame-100 bg-white/95"
+      data-site-header
+      className="relative sticky top-0 z-50 border-b border-flame-100 bg-white shadow-sm"
     >
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
+      <nav
+        className={cn(
+          'mx-auto flex max-w-7xl items-center',
+          contextualControlsVisible
+            ? 'gap-0.5 px-1 py-2 transition-[gap,padding] duration-200 ease-out min-[600px]:gap-2 min-[600px]:px-3 sm:px-4 sm:py-3 md:gap-3 md:px-6 md:py-4 lg:px-8 motion-reduce:transition-none'
+            : 'gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8',
+        )}
+      >
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3">
-          <Image src="/logo.png" alt="AIM Archive" width={40} height={40} className="rounded-lg object-cover" />
-          <div>
-            <span className="font-heading text-xl font-bold text-gray-900">AIM Archive</span>
-            <span className="hidden text-xs text-gray-500 sm:block">Sri Aurobindo Society</span>
-          </div>
-        </Link>
-
-        {/* Desktop Nav */}
-        <div className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => {
-            const active = isLinkActive(link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onMouseEnter={() => prefetchRoute(link.href)}
-                onFocus={() => prefetchRoute(link.href)}
-                aria-current={active ? 'page' : undefined}
+        <motion.div
+          layout="position"
+          transition={{ layout: { duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] } }}
+          className="shrink-0"
+        >
+          <Link
+            href="/"
+            className={cn(
+              'flex items-center',
+              contextualControlsVisible ? 'gap-1 min-[600px]:gap-3' : 'gap-3',
+            )}
+          >
+            <Image
+              src="/logo.png"
+              alt="AIM Archive"
+              width={40}
+              height={40}
+              className={cn(
+                'rounded-lg object-cover transition-[width,height] duration-200 ease-out motion-reduce:transition-none',
+                contextualControlsVisible
+                  ? 'h-9 w-9 min-[600px]:h-10 min-[600px]:w-10'
+                  : 'h-10 w-10',
+              )}
+            />
+            <div
+              className={cn(
+                contextualControlsVisible &&
+                  'hidden max-w-16 overflow-hidden min-[390px]:block min-[600px]:max-w-none min-[600px]:overflow-visible',
+              )}
+            >
+              <span
                 className={cn(
-                  'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
-                    : 'text-gray-600 hover:bg-flame-50 hover:text-flame-700',
+                  'font-heading font-bold whitespace-nowrap text-gray-900 transition-[font-size] duration-200 ease-out motion-reduce:transition-none',
+                  contextualControlsVisible
+                    ? 'block text-[10px] tracking-[-0.02em] min-[600px]:text-xl min-[600px]:tracking-normal'
+                    : 'text-xl',
                 )}
               >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
+                AIM Archive
+              </span>
+              <AnimatePresence initial={false}>
+                {!contextualControlsVisible && (
+                  <motion.span
+                    initial={reduceMotion ? false : { opacity: 0, y: -2 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -2 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.16 }}
+                    className="hidden text-xs text-gray-500 sm:block"
+                  >
+                    Sri Aurobindo Society
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+          </Link>
+        </motion.div>
+
+        {/* The centre slot becomes a contextual toolbar on long Browse pages. */}
+        <motion.div
+          layout="position"
+          transition={{ layout: { duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] } }}
+          className={cn(
+            'min-w-0 flex-1 items-center justify-end',
+            contextualControlsVisible ? 'flex' : 'hidden md:flex',
+          )}
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            {contextualControlsVisible && contextualControls ? (
+              <motion.div
+                key="contextual-controls"
+                initial={reduceMotion ? false : { opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 8 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+                className="flex min-w-0 flex-1 justify-end"
+              >
+                {contextualControls}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="desktop-navigation"
+                initial={reduceMotion ? false : { opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
+                transition={{ duration: reduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+                className="flex items-center gap-1"
+              >
+                {headerLinks.map((link) => {
+                  const active = isLinkActive(link.href);
+                  return (
+                    <NavigationAnchor
+                      key={link.id}
+                      item={link}
+                      onMouseEnter={() => prefetchRoute(link.href)}
+                      onFocus={() => prefetchRoute(link.href)}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
+                          : 'text-gray-600 hover:bg-flame-50 hover:text-flame-700',
+                      )}
+                    >
+                      {link.label}
+                    </NavigationAnchor>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
 
         {/* Actions cluster — search icon shows on every viewport (when on a
             search-eligible route); bookmarks icon is desktop-only; the
             hamburger menu replaces those nav links on mobile. */}
-        <div className="flex items-center gap-1 md:gap-2">
+        <motion.div
+          layout="position"
+          transition={{ layout: { duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] } }}
+          className={cn(
+            'ml-auto shrink-0 items-center gap-1 md:ml-0 md:flex md:gap-2',
+            contextualControlsVisible ? 'flex gap-0.5 min-[600px]:gap-2' : 'flex',
+          )}
+        >
           {showDropdownTrigger && (
             <button
               type="button"
               onClick={toggleDropdown}
               aria-label={dropdownIsOpen ? 'Close search' : 'Open search'}
               aria-expanded={dropdownIsOpen}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+              className={`flex shrink-0 items-center justify-center transition-colors ${
+                contextualControlsVisible
+                  ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
+                  : 'h-10 w-10 rounded-lg'
+              } ${
                 dropdownIsOpen
                   ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
-                  : 'text-gray-500 hover:bg-flame-50 hover:text-flame-700'
+                  : contextualControlsVisible
+                    ? ''
+                    : 'text-gray-500 hover:bg-flame-50 hover:text-flame-700'
               }`}
             >
               <Search className="h-5 w-5" />
             </button>
           )}
+          <ContinueReadingFab inline />
           <Link
             href="/bookmarks"
             onMouseEnter={() => prefetchRoute('/bookmarks')}
             onFocus={() => prefetchRoute('/bookmarks')}
             aria-current={isLinkActive('/bookmarks') ? 'page' : undefined}
             className={cn(
-              'relative hidden h-10 w-10 items-center justify-center rounded-lg transition-colors md:flex',
+              'relative hidden shrink-0 items-center justify-center transition-colors md:flex',
+              contextualControlsVisible
+                ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white shadow-sm focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
+                : 'h-10 w-10 rounded-lg',
               isLinkActive('/bookmarks')
                 ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
-                : 'text-gray-500 hover:bg-flame-50 hover:text-flame-700',
+                : contextualControlsVisible
+                  ? 'text-flame-700 hover:border-flame-300 hover:bg-flame-50'
+                  : 'text-gray-500 hover:bg-flame-50 hover:text-flame-700',
             )}
             aria-label={`Bookmarks${bookmarkCount > 0 ? ` (${bookmarkCount})` : ''}`}
           >
@@ -195,13 +352,19 @@ export function Header() {
               )}
             </AnimatePresence>
           </Link>
-          <button
-            type="button"
-            className="relative h-10 w-10 rounded-lg text-gray-600 md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileMenuOpen}
-          >
+          <motion.div layout="position" className="shrink-0 md:hidden">
+                <button
+                  type="button"
+                  className={cn(
+                    'relative shrink-0 transition-colors',
+                    contextualControlsVisible
+                      ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
+                      : 'h-10 w-10 rounded-lg text-gray-600',
+                  )}
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                  aria-expanded={mobileMenuOpen}
+                >
             {/* Three-line hamburger that morphs into an X. The top + bottom
                 bars rotate ±45° while sliding to the vertical centre; the
                 middle bar fades out. The mirrored animation runs in reverse
@@ -237,8 +400,9 @@ export function Header() {
                 />
               </span>
             </span>
-          </button>
-        </div>
+                </button>
+          </motion.div>
+        </motion.div>
       </nav>
 
       {/* Mobile Menu — absolute-positioned overlay below the header so we can
@@ -259,12 +423,12 @@ export function Header() {
             className="absolute left-0 right-0 top-full origin-top border-t border-flame-100 bg-white shadow-lg md:hidden"
           >
             <div className="space-y-1 px-6 py-4">
-              {navLinks.map((link) => {
+              {mobileLinks.map((link) => {
                 const active = isLinkActive(link.href);
                 return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
+                  <NavigationAnchor
+                    key={link.id}
+                    item={link}
                     onMouseEnter={() => prefetchRoute(link.href)}
                     onFocus={() => prefetchRoute(link.href)}
                     aria-current={active ? 'page' : undefined}
@@ -277,7 +441,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     {link.label}
-                  </Link>
+                  </NavigationAnchor>
                 );
               })}
             </div>
@@ -285,5 +449,54 @@ export function Header() {
         )}
       </AnimatePresence>
     </header>
+  );
+}
+
+function NavigationAnchor({
+  item,
+  children,
+  className,
+  onClick,
+  onMouseEnter,
+  onFocus,
+  'aria-current': ariaCurrent,
+}: {
+  item: NavigationItem;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+  onMouseEnter?: () => void;
+  onFocus?: () => void;
+  'aria-current'?: 'page';
+}) {
+  const external = isExternalNavigationHref(item.href) || item.opens_new_tab;
+  if (external) {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        onFocus={onFocus}
+        aria-current={ariaCurrent}
+        className={className}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onFocus={onFocus}
+      aria-current={ariaCurrent}
+      className={className}
+    >
+      {children}
+    </Link>
   );
 }

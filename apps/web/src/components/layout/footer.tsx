@@ -4,10 +4,20 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MessageSquareText } from 'lucide-react';
+import {
+  defaultPublicNavigation,
+  isExternalNavigationHref,
+  type NavigationItem,
+  type PublicNavigation,
+} from '@/lib/navigation';
 
-export function Footer() {
+export function Footer({ navigation }: { navigation?: PublicNavigation }) {
   const currentYear = new Date().getFullYear();
   const [feedbackFormUrl, setFeedbackFormUrl] = useState('');
+  const publicNavigation = navigation ?? defaultPublicNavigation();
+  const archiveLinks = publicNavigation.menus.footer_archive.items;
+  const magazineLinks = publicNavigation.menus.footer_magazines.items;
+  const aboutLinks = publicNavigation.menus.footer_about.items.filter((item) => !item.href.startsWith('/admin'));
 
   useEffect(() => {
     fetch('/api/site-settings')
@@ -38,21 +48,11 @@ export function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Archive</h3>
             <ul className="mt-4 space-y-3">
-              <li>
-                <Link href="/browse" className="text-sm text-gray-500 hover:text-flame-700">
-                  Browse All Issues
-                </Link>
-              </li>
-              <li>
-                <Link href="/search" className="text-sm text-gray-500 hover:text-flame-700">
-                  Search Archive
-                </Link>
-              </li>
-              <li>
-                <Link href="/bookmarks" className="text-sm text-gray-500 hover:text-flame-700">
-                  My Bookmarks
-                </Link>
-              </li>
+              {archiveLinks.map((item) => (
+                <li key={item.id}>
+                  <FooterNavLink item={item} />
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -60,22 +60,11 @@ export function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Magazines</h3>
             <ul className="mt-4 space-y-3">
-              <li>
-                <Link
-                  href="/browse?magazine=all-india-magazine"
-                  className="text-sm text-gray-500 hover:text-flame-700"
-                >
-                  All India Magazine
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/browse?magazine=agnishikha"
-                  className="text-sm text-gray-500 hover:text-flame-700"
-                >
-                  Agnishikha
-                </Link>
-              </li>
+              {magazineLinks.map((item) => (
+                <li key={item.id}>
+                  <FooterNavLink item={item} />
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -83,26 +72,11 @@ export function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">About</h3>
             <ul className="mt-4 space-y-3">
-              <li>
-                <a
-                  href="https://aurosociety.org"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-gray-500 hover:text-flame-700"
-                >
-                  Sri Aurobindo Society
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://aim.aurosociety.org"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-gray-500 hover:text-flame-700"
-                >
-                  AIM Website
-                </a>
-              </li>
+              {aboutLinks.map((item) => (
+                <li key={item.id}>
+                  <FooterNavLink item={item} />
+                </li>
+              ))}
             </ul>
           </div>
         </div>
@@ -121,18 +95,32 @@ export function Footer() {
           </div>
         )}
 
-        <div className={`${feedbackFormUrl ? 'mt-8' : 'mt-12 border-t border-flame-100 pt-8'} flex items-center justify-between`}>
+        <div className={`${feedbackFormUrl ? 'mt-8' : 'mt-12 border-t border-flame-100 pt-8'} flex flex-wrap items-center justify-between gap-4`}>
           <p className="text-sm text-gray-400">
             &copy; {currentYear} Sri Aurobindo Society. All rights reserved.
           </p>
-          <Link
-            href="/admin/login"
-            className="text-xs text-gray-300 transition-colors hover:text-gray-500"
-          >
+          <Link href="/admin" className="inline-flex min-h-10 items-center rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-600 hover:border-flame-300 hover:text-flame-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flame-600">
             Admin
           </Link>
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterNavLink({ item }: { item: NavigationItem }) {
+  const className = 'text-sm text-gray-500 hover:text-flame-700';
+  if (isExternalNavigationHref(item.href) || item.opens_new_tab) {
+    return (
+      <a href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
+        {item.label}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={item.href} className={className}>
+      {item.label}
+    </Link>
   );
 }

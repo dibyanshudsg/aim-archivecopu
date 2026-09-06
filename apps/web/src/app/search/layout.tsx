@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Search',
   description:
-    'Full-text search across every page of every issue in the AIM Archive. Find spiritual wisdom from Sri Aurobindo and The Mother with highlighted snippets.',
+    'Search AIM Archive titles, themes, topics, and indexed page text. Find readable editions and explore the wider catalogue.',
   openGraph: {
     title: 'Search the Archive | AIM Archive',
     description: 'Full-text search across decades of spiritual literature.',

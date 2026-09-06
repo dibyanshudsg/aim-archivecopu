@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchIssueMetadata, searchIssueText } from '@/lib/db';
+import { searchIssueMetadata, searchIssueText, listSearchTopics } from '@/lib/db';
 import { getEmbargoState } from '@/lib/embargo';
+import type { FullTextSearchResult } from '@/lib/api';
 
 interface MagazineRel {
   id: string;
@@ -26,11 +27,13 @@ interface IssueRow {
 interface FtsRow {
   issue_id: string;
   issue_title: string;
+  theme: string | null;
   magazine_name: string;
   magazine_language: string;
   year: number;
   month: number;
-  page_number: number;
+  page_number: number | null;
+  match_kind: FullTextSearchResult['match_kind'];
   snippet: string;
   rank: number;
   cover_image_url: string | null;
@@ -79,38 +82,28 @@ function buildMetaSnippet(issue: IssueRow, query: string): string {
   return escapeHtml(issue.title);
 }
 
-/** Snippet shown in place of any OCR excerpt for embargoed issues. Leaks
- *  metadata only (theme + topics) so the result is discoverable, but the
- *  printed page contents never reach the public. */
-function buildEmbargoSnippet(
-  theme: string | null,
-  topics: string[] | null,
-  liftLabel: string | null,
-): string {
-  const parts: string[] = [];
-  if (theme) parts.push(`Theme: ${escapeHtml(theme)}`);
-  if (topics && topics.length > 0) {
-    parts.push(`Topics: ${topics.slice(0, 4).map(escapeHtml).join(', ')}`);
-  }
-  parts.push(liftLabel ? `Available ${escapeHtml(liftLabel)}` : 'Available to subscribers');
-  return parts.join(' · ');
-}
-
 export async function GET(request: NextRequest) {
   const { searchQuerySchema, parseSearchParams } = await import('@/lib/validations');
 
   const raw = parseSearchParams(request.nextUrl.searchParams);
+  const suggestions = request.nextUrl.searchParams.get('suggestions') === '1';
+  if (suggestions) raw.q = 'topics';
   const parsed = searchQuerySchema.safeParse(raw);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { data: [], total: 0, type: 'none' },
-      { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+      { error: 'Check your query and filters', data: [], total: 0, type: 'none' },
+      { status: 400 },
     );
   }
 
-  const { q: query, magazine_id: magazineId, year_from: yearFrom, year_to: yearTo } = parsed.data;
+  const { q: query, magazine_id: magazineId, year_from: yearFrom, year_to: yearTo, availability } = parsed.data;
 
+  try {
+  if (suggestions) {
+    const topics = await listSearchTopics({ query: '', magazineId, yearFrom, yearTo, availability });
+    return NextResponse.json({ topics }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
+  }
   const [ftsResults, metaIssues] = await Promise.all([
     searchIssueText({
       query,
@@ -118,6 +111,7 @@ export async function GET(request: NextRequest) {
       yearFrom: yearFrom || undefined,
       yearTo: yearTo || undefined,
       limit: 50,
+      availability,
     }),
     searchIssueMetadata({
       query,
@@ -125,6 +119,7 @@ export async function GET(request: NextRequest) {
       yearFrom: yearFrom || undefined,
       yearTo: yearTo || undefined,
       limit: 50,
+      availability,
     }),
   ]);
 
@@ -137,14 +132,16 @@ export async function GET(request: NextRequest) {
       return {
         issue_id: i.id,
         issue_title: i.title,
+        theme: i.theme,
         magazine_name: i.magazines.name,
         magazine_language: i.magazines.language,
         year: i.year,
         month: i.month,
-        page_number: 1,
-        snippet: state.isEmbargoed
-          ? buildEmbargoSnippet(i.theme, i.topics, state.embargoLiftLabel)
-          : buildMetaSnippet(i, query),
+        page_number: null,
+        match_kind: i.theme?.toLowerCase().includes(query.toLowerCase()) ? 'theme'
+          : i.title.toLowerCase().includes(query.toLowerCase()) ? 'title'
+          : i.description?.toLowerCase().includes(query.toLowerCase()) ? 'description' : 'topic',
+        snippet: buildMetaSnippet(i, query) + (state.isEmbargoed ? ` · Public reading opens ${state.embargoLiftLabel}` : ''),
         rank: 0,
         cover_image_url: i.cover_image_url,
         pdf_url: state.isEmbargoed ? null : i.pdf_url,
@@ -160,7 +157,8 @@ export async function GET(request: NextRequest) {
     {
       data: combined,
       total: combined.length,
-      type: combined.length > 0 ? 'fulltext' : 'none',
+      type: combined.length > 0 ? 'matches' : 'none',
+      limited: ftsResults.length >= 50 || metaIssues.length >= 50,
     },
     {
       headers: {
@@ -168,4 +166,7 @@ export async function GET(request: NextRequest) {
       },
     },
   );
+  } catch {
+    return NextResponse.json({ error: 'Search is temporarily unavailable' }, { status: 503 });
+  }
 }

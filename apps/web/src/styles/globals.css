@@ -97,6 +97,19 @@ html {
    is being fetched and no cover JPEG is available yet. The shimmer sweeps
    from left to right across the skeleton lines, suggesting the page is
    being inked in. */
+@keyframes reader-search-arrival {
+  from { opacity: 0; background-color: rgb(252 211 77 / 0.7); }
+  to { opacity: 1; background-color: rgb(252 211 77 / 0.35); }
+}
+
+.reader-search-highlight {
+  animation: reader-search-arrival 1.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-search-highlight { animation: none; }
+}
+
 @keyframes aim-shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }

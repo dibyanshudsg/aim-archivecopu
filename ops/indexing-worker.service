@@ -1,0 +1,27 @@
+# Example systemd unit. Install Node 22+ and the checkout at /opt/aim-archive.
+# Create the dedicated aim-archive account and a protected environment file first.
+[Unit]
+Description=AIM Archive search indexing worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aim-archive
+Group=aim-archive
+WorkingDirectory=/opt/aim-archive
+EnvironmentFile=/etc/aim-archive/indexing.env
+Environment=INDEXING_OCR_CACHE_PATH=/var/cache/aim-archive
+CacheDirectory=aim-archive
+ExecStart=/usr/bin/node /opt/aim-archive/scripts/indexing-worker.cjs
+Restart=always
+RestartSec=30
+TimeoutStopSec=30
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
