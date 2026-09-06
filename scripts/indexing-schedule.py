@@ -23,6 +23,11 @@ def execute(sql, args=()):
 
 def main():
     command = sys.argv[1]
+    if command == 'verify':
+        result = execute('SELECT (SELECT COUNT(*) FROM issues), (SELECT COUNT(*) FROM issue_search_index)')
+        row = result['rows'][0]
+        print('Database access verified: ' + row[0]['value'] + ' issues, ' + row[1]['value'] + ' indexed pages. No rows changed.')
+        return
     now = int(time.time() * 1000)
     run_url = 'https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID']
     if command == 'check':
