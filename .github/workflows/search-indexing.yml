@@ -53,6 +53,12 @@ jobs:
         run: |
           node scripts/test-indexing-runner.cjs
           node scripts/test-indexing-worker-pdf.cjs
+      - name: Verify production database access without changes
+        if: inputs.verify_worker
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
+        run: python3 scripts/indexing-schedule.py verify
       - name: Process queued issues
         if: steps.queue.outputs.pending == 'true'
         env:
