@@ -1,6 +1,6 @@
 # Durable search indexing
 
-Implemented and verified locally: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. Production worker hosting remains a separate, unprovisioned step.
+Implemented and verified: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. GitHub Actions worker verification and read-only production database access pass; hourly activation remains gated on the owner's free-only billing confirmation.
 
 Final release and integrity evidence: [Production release — 6 September 2026](PRODUCTION_RELEASE_2026-09-06.md).
 
@@ -61,9 +61,9 @@ node scripts/indexing-worker.cjs --once
 
 Requirements: Node 22+, installed workspace dependencies including TypeScript, native `canvas`, PDF.js standard fonts, and network access to Turso and source PDFs. Tesseract downloads English language data on first use. Set `INDEXING_OCR_CACHE_PATH` to a writable cache directory when the checkout is read-only. Environment variables already set by the launcher take precedence over `.env.local`.
 
-## Production worker operation — hosting pending
+## Continuous-worker alternative
 
-The Next/Vercel web process only enqueues jobs. A continuously running Node worker is required on a chosen host; `next start`, Vercel `after()`, and an open browser do not provide it.
+The Next/Vercel web process only enqueues jobs. The selected GitHub Actions setup is described in `GITHUB_INDEXING.md`. The instructions below are an alternative for a continuously running host; `next start`, Vercel `after()`, and an open browser do not provide a durable worker.
 
 1. Deploy the migration and the web/worker code from the same release. Install the worker checkout with `pnpm install --frozen-lockfile` including development dependencies (the standalone TypeScript loader requires TypeScript).
 2. Supply `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` through the host's protected environment settings. Public R2 PDF downloads do not require R2 write credentials. Do not commit environment files.
@@ -72,9 +72,9 @@ The Next/Vercel web process only enqueues jobs. A continuously running Node work
 
 Multiple workers are allowed and leases prevent duplicate ownership, but each adds OCR CPU/memory load. Start with one. A stopped worker does not lose queued jobs. Stopping a service may interrupt the current page; already checkpointed pages resume after its lease expires.
 
-### Hosting decision pending
+### Hosting decision background
 
-No production worker host is configured in the repository or local hosting setup. The connected worker currently runs on the development computer. The owner requested free alternatives before choosing a host; no paid service has been provisioned.
+The owner selected GitHub Actions after reviewing free alternatives. No paid service has been provisioned. Until hourly execution is activated, the connected worker still runs on the development computer. The following comparison records the original options; current setup and verification are in `GITHUB_INDEXING.md`.
 
 A scheduled GitHub Actions worker is a possible alternative to continuous hosting for occasional uploads. It would require a bounded queue-draining mode, protected database secrets, concurrency control, dependency/OCR caching, an on-demand trigger, and health copy that distinguishes scheduled operation from an offline continuous worker. GitHub Free includes 2,000 monthly runner minutes for private repositories; standard public-repository runners are free. Check the account's remaining allowance and block overages before enabling it. Scheduled runs can be delayed, so an hourly check does not guarantee indexing starts within one hour. This alternative is proposed, not implemented. Sources: [billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [schedule behavior](https://docs.github.com/en/actions/tutorials/manage-your-work/schedule-issue-creation).
 
@@ -89,4 +89,4 @@ Railway is the paid continuous-host option considered: Hobby has a $5 monthly mi
 - Local browser QA verifies the Admin footer/login path, real admin authentication, unauthorized API rejection, live empty queue, desktop/mobile progress/failure/review fixtures, retry requests, and no page errors or phone overflow. Fixture screenshots are not evidence of production processing.
 - Combined local development launcher was restarted and verified: full catalogue remains 104 listed editions, the worker reports connected, and unauthenticated indexing access returns HTTP 401. Finish review accepted the desktop/mobile panel and rendered Admin footer control.
 
-GitHub Actions has now been selected and its hourly/manual workflow implemented. Execution remains disabled pending explicit authorization for the two encrypted database secrets and confirmation that paid overages are blocked. See [GitHub indexing setup](GITHUB_INDEXING.md). Cloud execution verification remains outstanding. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.
+GitHub Actions has been selected, PR #1 merged, and the two encrypted database secrets configured with explicit authorization. Hosted native/scanned PDF verification and read-only access to the live database pass. Normal queue execution remains disabled pending confirmation that paid overages are blocked. See [GitHub indexing setup](GITHUB_INDEXING.md). After activation, verify a normal queue check and scheduled status. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.
