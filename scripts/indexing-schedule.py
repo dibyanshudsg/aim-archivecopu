@@ -31,6 +31,14 @@ def main():
     now = int(time.time() * 1000)
     run_url = 'https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID']
     if command == 'check':
+        request_id = os.environ.get('INDEXING_REQUEST_ID', '')
+        if request_id:
+            admitted = execute("UPDATE indexing_dispatches SET status='running',run_id=?,checked_at=?,message='Indexing worker started.' WHERE id=? AND active=1", [os.environ['GITHUB_RUN_ID'], now, request_id])
+            if int(admitted.get('affected_row_count', 0)) == 0:
+                with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf8') as output:
+                    output.write('pending=false\n')
+                print('This Admin request was released. No indexing work started.')
+                return
         result = execute("SELECT COUNT(*) FROM indexing_jobs WHERE (status='queued' AND available_at<=?) OR (status='processing' AND lease_until<?)", [now, now])
         pending = int(result['rows'][0][0]['value']) > 0
         execute("INSERT INTO indexing_schedule VALUES('github-actions',?,?,?) ON CONFLICT(id) DO UPDATE SET last_checked_at=excluded.last_checked_at,last_result=excluded.last_result,run_url=excluded.run_url", [now, 'pending' if pending else 'idle', run_url])
@@ -40,6 +48,9 @@ def main():
     elif command in ('success', 'failure', 'cancelled'):
         # Do not overwrite a newer run's record with a delayed completion.
         execute("UPDATE indexing_schedule SET last_result=? WHERE id='github-actions' AND run_url=?", [command, run_url])
+        request_id = os.environ.get('INDEXING_REQUEST_ID', '')
+        if request_id:
+            execute("UPDATE indexing_dispatches SET status=?,active=NULL,checked_at=?,message=? WHERE id=? AND active=1", ['complete' if command == 'success' else 'failed', now, 'Run finished. Check the queue for remaining issues.' if command == 'success' else 'The run stopped. Saved pages and queued work are retained.', request_id])
     else:
         raise ValueError('Unsupported schedule command')
 

@@ -5,12 +5,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { RefreshCw, Search, X, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useUI } from '@/components/ui/toast';
+import { PageReviewEditor } from './page-review-editor';
 import {
   indexingStatusLabels as labels,
   type CoverageIssue,
   type IndexingCatalogue,
   type IndexingFilters,
   type IndexingRun,
+  type PageReview,
+  type DispatchState,
 } from '@/lib/indexing-workspace';
 
 const endpoint = '/api/admin/indexing/catalogue';
@@ -100,6 +103,7 @@ function Pager({
 export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
   const { confirm, toast } = useUI();
   const [data, setData] = useState(initial);
+  const [dispatch, setDispatch] = useState<DispatchState | null>(null);
   const [filters, setFilters] = useState<IndexingFilters>({ status: 'attention', page: 1 });
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'coverage' | 'history'>('coverage');
@@ -133,6 +137,7 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
           if (value != null) params.set(key, String(value));
         const requests = [
           fetch(endpoint + '?' + params, { signal: controller.signal, cache: 'no-store' }),
+          fetch('/api/admin/indexing/start', { signal: controller.signal, cache: 'no-store' }),
         ];
         if (tab === 'history')
           requests.push(
@@ -151,7 +156,8 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
         const values = await Promise.all(responses.map((r) => r.json()));
         if (!controller.signal.aborted) {
           setData(values[0]);
-          if (values[1]) setHistory(values[1]);
+          setDispatch(values[1]);
+          if (values[2]) setHistory(values[2]);
           setError('');
         }
       } catch (e) {
@@ -190,8 +196,8 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
             : 'Index missing issues?',
       message:
         kind === 'selected'
-          ? `${chosen.length} selected issue(s) will be queued. Existing indexes will be rebuilt; active jobs and unsupported editions are skipped. Start Run workflow on GitHub to process this queue.`
-          : `Up to 100 ${kind === 'retry' ? 'failed' : 'missing'} eligible English issues across the catalogue will be queued. The current filters do not limit this action. Start Run workflow on GitHub to process this queue.`,
+          ? `${chosen.length} selected issue(s) will be queued. Existing indexes will be rebuilt; active jobs and unsupported editions are skipped. Verified page decisions are preserved for unchanged PDFs. Use Start indexing to process this queue.`
+          : `Up to 100 ${kind === 'retry' ? 'failed' : 'missing'} eligible English issues across the catalogue will be queued. The current filters do not limit this action. Use Start indexing to process this queue.`,
       confirmLabel: kind === 'retry' ? 'Queue retries' : 'Queue indexing',
     });
     if (!ok) return;
@@ -227,6 +233,48 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
     }
   }
   const active = (data.counts.queued || 0) + (data.counts.processing || 0);
+  const pending = dispatch?.pending ?? (data.counts.missing || 0) + (data.counts.queued || 0);
+  async function start() {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/admin/indexing/start', { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Could not start indexing.');
+      setDispatch(result);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not start indexing.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function releaseStart() {
+    if (
+      !(await confirm({
+        title: 'Release unconfirmed start?',
+        message:
+          'Only an unconfirmed request that has not admitted a worker can be released. Saved pages and queued issues are retained. A delayed worker for this request will exit.',
+        confirmLabel: 'Release request',
+      }))
+    )
+      return;
+    setBusy(true);
+    try {
+      const response = await fetch('/api/admin/indexing/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'release' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error);
+      setDispatch(result);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not release the request.');
+    } finally {
+      setBusy(false);
+    }
+  }
   const attention = ['missing', 'failed', 'review', 'unverified', 'unavailable'].reduce(
     (n, s) => n + (data.counts[s] || 0),
     0,
@@ -236,7 +284,7 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
     ['missing', 'Need indexing', data.counts.missing || 0],
     ['active', 'Queued / Processing', active],
     ['failed', 'Failed', data.counts.failed || 0],
-    ['review', 'Need page review', data.counts.review || 0],
+    ['review', 'Indexed · text needs review', data.counts.review || 0],
   ] as const;
   const canSelect = (i: CoverageIssue) =>
     !['excluded', 'unavailable', 'queued', 'processing'].includes(i.status);
@@ -261,10 +309,16 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
           </button>
           <button
             className={primary}
-            disabled={busy || !data.counts.missing}
-            onClick={() => void queue('missing')}
+            disabled={
+              busy || loading || !!error || !dispatch?.configured || dispatch.active || !pending
+            }
+            onClick={() => void start()}
           >
-            Index missing issues ({data.counts.missing || 0})
+            {busy
+              ? 'Please wait…'
+              : dispatch?.active
+                ? 'Indexing run active'
+                : `Start indexing (${pending})`}
           </button>
         </div>
       </div>
@@ -281,16 +335,22 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
                 ' The last run did not finish successfully.'}{' '}
             </p>
           )}
-          <p className="mt-1 text-gray-600">
-            <a
-              className="text-flame-700 underline underline-offset-2"
-              href="https://github.com/MugdhanilK/aim-archive/actions/workflows/search-indexing.yml"
-              target="_blank"
-              rel="noopener noreferrer"
+          <p className="mt-1 max-w-2xl text-gray-600" role="status">
+            {dispatch?.message || 'Checking the worker connection…'}
+          </p>
+          {dispatch?.status === 'unknown' && (
+            <button
+              className={action + ' mt-2'}
+              disabled={busy}
+              onClick={() => void releaseStart()}
             >
-              Open GitHub to run indexing
-            </a>{' '}
-            Choose Run workflow on main after uploading or queuing issues.
+              Release unconfirmed request
+            </button>
+          )}
+          <p className="mt-1 text-gray-600">
+            {pending
+              ? `${pending} issues waiting to be indexed. Each run handles up to 3 issues.`
+              : 'No new indexing work. Page reviews and failed issues are handled separately.'}
           </p>
         </div>
         <button className={action} disabled={loading} onClick={refresh}>
@@ -324,18 +384,22 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
         <summary className="cursor-pointer font-medium text-gray-900">How indexing works</summary>
         <div className="mt-3 max-w-3xl space-y-2 leading-relaxed">
           <p>
-            English uploads and PDF replacements queue automatically. Start Run workflow on GitHub
-            to process the queue. Imports may need to be queued here first. Metadata edits do not rebuild the PDF text.
+            English uploads and PDF replacements queue automatically. Use Start indexing here to
+            process queued and missing issues. Completed indexes are skipped. Metadata edits do not
+            rebuild the PDF text.
           </p>
           <p>
             Queued → Downloading PDF → Extracting text / OCR → Saving index → Complete. Completed
             pages are saved. Each run handles up to three issues and stops starting new issues after
-            20 minutes. If work remains, start another run. Failed work gets up to three attempts across runs before a manual retry is needed.
+            20 minutes. If work remains, start another run. Failed work gets up to three attempts
+            across runs before a manual retry is needed.
           </p>
           <p>
-            Blank pages and uncertain pages are tracked separately. Uncertain pages stay out of
-            search. An existing index without enough evidence is marked “verification needed”.
-            Public search may take a cache refresh to show a completed change.
+            Blank pages and uncertain pages are tracked separately. Open an issue’s details to
+            inspect uncertain pages, add verified text, or record an intentional exclusion. Reviews
+            do not start a full rebuild. An existing index without enough evidence is marked
+            “verification needed”. Public search may take a cache refresh to show a completed
+            change.
           </p>
           <p>
             Hindi and other languages remain outside the current indexing scope. Earlier verified
@@ -651,6 +715,10 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
           revision={revision}
           onClose={() => setDetail(null)}
           busy={busy}
+          onReviewed={() => {
+            toast.success('Page review saved.');
+            refresh();
+          }}
           onQueue={(id) => {
             setDetail(null);
             void queue('selected', [id]);
@@ -667,15 +735,21 @@ function IssueDetails({
   onClose,
   onQueue,
   busy,
+  onReviewed,
 }: {
   id: string;
   revision: number;
   onClose: () => void;
   onQueue: (id: string) => void;
   busy: boolean;
+  onReviewed: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [data, setData] = useState<{ issue: CoverageIssue; runs: IndexingRun[] } | null>(null);
+  const [data, setData] = useState<{
+    issue: CoverageIssue;
+    runs: IndexingRun[];
+    reviews: PageReview[];
+  } | null>(null);
   const [error, setError] = useState('');
   const close = useCallback(onClose, [onClose]);
   useEffect(() => {
@@ -826,22 +900,49 @@ function IssueDetails({
               <div>
                 <h3 className="font-semibold text-gray-900">Review withheld pages</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  These pages were uncertain and stay out of search. Check the PDF source before
-                  rebuilding.
+                  These pages have unreliable extracted text. The issue is indexed and its PDF
+                  remains available. Inspect each page before saving a decision.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {i.review_pages.map((n) => (
-                    <Link
-                      key={n}
-                      href={`/admin/indexing/${id}/preview?page=${n}`}
-                      target="_blank"
-                      rel="noopener"
-                      className={action}
-                    >
-                      Page {n}
-                    </Link>
+                    <PageReviewEditor
+                      key={`${i.source_hash}-${n}`}
+                      issue={i}
+                      page={n}
+                      onSaved={onReviewed}
+                    />
                   ))}
                 </div>
+              </div>
+            )}
+            {!!data?.reviews.length && (
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="font-semibold text-gray-900">Page review history</h3>
+                <ol className="mt-2 space-y-3 text-sm text-gray-700">
+                  {data.reviews.map((review) => (
+                    <li key={review.id}>
+                      <p className="font-medium">
+                        Page {review.page_number} ·{' '}
+                        {review.decision === 'transcribe'
+                          ? 'Verified text added'
+                          : 'Intentionally excluded'}
+                      </p>
+                      <p>{review.note}</p>
+                      <p className="text-xs text-gray-600">
+                        {dates(review.reviewed_at)} IST
+                        {review.source_hash !== i.source_hash || review.pdf_url !== i.pdf_url
+                          ? ' · Previous PDF source'
+                          : ''}
+                      </p>
+                      {review.content && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer">Saved text</summary>
+                          <p className="mt-2 whitespace-pre-wrap break-words">{review.content}</p>
+                        </details>
+                      )}
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
             <div className="flex flex-wrap gap-2">

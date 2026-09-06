@@ -12,7 +12,7 @@ The workspace defaults to issues needing attention. It lists the entire catalogu
 
 Coverage distinguishes missing text, queued/processing/failed jobs, verified indexes, withheld pages, existing indexes requiring verification, unavailable sources, and languages outside scope. Summary counts cover the full catalogue including drafts. Job status and current searchable coverage are separate: a failed rebuild can still have an earlier searchable index.
 
-The details drawer includes processing stage, saved pages, attempts, errors, coverage evidence, withheld-page links, and 30 recent runs. The paginated Activity / History tab retains previous manual runs, upload/replacement triggers, automatic-attempt counts, failures and superseded work. Earlier rebuilds are labelled as reconciled records; their attempt/start times are not invented.
+The details drawer includes processing stage, saved pages, attempts, errors, coverage evidence, withheld-page review forms, and 30 recent runs. A review records verified text or an intentional exclusion, a note, reviewer ID, timestamp, and PDF fingerprint. The paginated Activity / History tab retains previous manual runs, upload/replacement triggers, automatic-attempt counts, failures and superseded work. Earlier rebuilds are labelled as reconciled records; their attempt/start times are not invented.
 
 Withheld-page links open `/admin/indexing/[id]/preview`, an authenticated PDF preview supporting drafts and restricted editions without changing publication, public embargo rules, or reader analytics.
 
@@ -63,7 +63,7 @@ Requirements: Node 22+, installed workspace dependencies including TypeScript, n
 
 ## Continuous-worker alternative
 
-The Next/Vercel web process only enqueues jobs. The selected GitHub Actions setup is described in `GITHUB_INDEXING.md`. The instructions below are an alternative for a continuously running host; `next start`, Vercel `after()`, and an open browser do not provide a durable worker.
+The Next/Vercel web process enqueues jobs and dispatches the separate GitHub worker when the Admin connection is configured. OCR still runs outside Vercel. The selected GitHub Actions setup and outstanding credential configuration are described in `GITHUB_INDEXING.md`. The instructions below are an alternative for a continuously running host; `next start`, Vercel `after()`, and an open browser do not provide a durable worker.
 
 1. Deploy the migration and the web/worker code from the same release. Install the worker checkout with `pnpm install --frozen-lockfile` including development dependencies (the standalone TypeScript loader requires TypeScript).
 2. Supply `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` through the host's protected environment settings. Public R2 PDF downloads do not require R2 write credentials. Do not commit environment files.
@@ -74,7 +74,7 @@ Multiple workers are allowed and leases prevent duplicate ownership, but each ad
 
 ### Hosting decision background
 
-The owner selected GitHub Actions after reviewing free alternatives. No paid service has been provisioned. Until hourly execution is activated, the connected worker still runs on the development computer. The following comparison records the original options; current setup and verification are in `GITHUB_INDEXING.md`.
+The owner selected manual-only GitHub Actions after reviewing free alternatives. No paid service has been provisioned and hourly execution is not planned. The following comparison records the original options; current setup and verification are in `GITHUB_INDEXING.md`.
 
 A scheduled GitHub Actions worker is a possible alternative to continuous hosting for occasional uploads. It would require a bounded queue-draining mode, protected database secrets, concurrency control, dependency/OCR caching, an on-demand trigger, and health copy that distinguishes scheduled operation from an offline continuous worker. GitHub Free includes 2,000 monthly runner minutes for private repositories; standard public-repository runners are free. Check the account's remaining allowance and block overages before enabling it. Scheduled runs can be delayed, so an hourly check does not guarantee indexing starts within one hour. This alternative is proposed, not implemented. Sources: [billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [schedule behavior](https://docs.github.com/en/actions/tutorials/manage-your-work/schedule-issue-creation).
 
@@ -89,4 +89,4 @@ Railway is the paid continuous-host option considered: Hobby has a $5 monthly mi
 - Local browser QA verifies the Admin footer/login path, real admin authentication, unauthorized API rejection, live empty queue, desktop/mobile progress/failure/review fixtures, retry requests, and no page errors or phone overflow. Fixture screenshots are not evidence of production processing.
 - Combined local development launcher was restarted and verified: full catalogue remains 104 listed editions, the worker reports connected, and unauthenticated indexing access returns HTTP 401. Finish review accepted the desktop/mobile panel and rendered Admin footer control.
 
-GitHub Actions is configured, PR #1 is merged, and the two encrypted database secrets are installed with explicit authorization. The owner approved manual-only production indexing. Use Admin → Search Indexing → Open GitHub to run indexing, select main, and leave verify_worker unchecked. Existing indexes remain searchable between runs. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.
+GitHub Actions is configured, PR #1 is merged, and the two encrypted database secrets are installed with explicit authorization. The owner approved manual-only production indexing. The Admin Start indexing control requires INDEXING_GITHUB_TOKEN in Vercel; it was not present at the 6 September environment inspection. Direct repository dispatch remains available to maintainers. Existing indexes remain searchable between runs. Inspection and resolution of the 17 withheld covers remain separate from missing indexing work.

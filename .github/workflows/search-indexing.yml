@@ -1,8 +1,13 @@
 name: Search indexing
+run-name: ${{ inputs.request_id && format('Admin indexing {0}', inputs.request_id) || 'Manual search indexing' }}
 
 on:
   workflow_dispatch:
     inputs:
+      request_id:
+        description: Admin request identifier (leave empty for a direct manual run)
+        type: string
+        default: ''
       verify_worker:
         description: Run an isolated native-text and scanned-PDF worker test
         type: boolean
@@ -22,6 +27,7 @@ jobs:
     timeout-minutes: ${{ inputs.verify_worker && 15 || 75 }}
     env:
       INDEXING_OCR_CACHE_PATH: ${{ github.workspace }}/.ocr-cache
+      INDEXING_REQUEST_ID: ${{ inputs.request_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Check for queued issues
@@ -50,6 +56,8 @@ jobs:
         if: inputs.verify_worker
         run: |
           node scripts/test-indexing-runner.cjs
+          node scripts/test-indexing-controls.cjs
+          python3 scripts/test-indexing-schedule.py
           node scripts/test-indexing-worker-pdf.cjs
       - name: Verify production database access without changes
         if: inputs.verify_worker
@@ -64,7 +72,7 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
         run: node scripts/indexing-worker.cjs --drain
       - name: Record completion
-        if: always() && steps.queue.outputs.pending == 'true'
+        if: always() && !inputs.verify_worker
         env:
           TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}

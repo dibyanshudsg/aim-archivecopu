@@ -49,6 +49,7 @@ async function createIssue(month = 1, language = 'aim') {
   );
   await db.executeMultiple(fs.readFileSync(path.join(root, 'packages/turso/migrations/00004_indexing_workspace.sql'), 'utf8'));
   await db.executeMultiple(fs.readFileSync(path.join(root, 'packages/turso/migrations/00005_indexing_schedule.sql'), 'utf8'));
+  await db.executeMultiple(fs.readFileSync(path.join(root, 'packages/turso/migrations/00006_indexing_controls.sql'), 'utf8'));
   await execute(
     "INSERT INTO magazines(id,name,language,created_at,updated_at) VALUES('aim','AIM','english','now','now'),('agni','Agni','hindi','now','now')",
   );

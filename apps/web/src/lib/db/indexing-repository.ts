@@ -3,6 +3,7 @@ import { createId, getDb, nowIso } from './client';
 import type { ExtractedDocument, ExtractedPage } from '../pdf-extract';
 import { prepareSearchIndex } from '../search-indexer';
 import { startIndexingRun, syncIndexingRun } from './indexing-history';
+import { applyPageReviews } from './indexing-page-reviews';
 
 export const LEASE_MS = 120_000;
 export const MAX_ATTEMPTS = 3;
@@ -165,11 +166,21 @@ export async function saveIndexingPage(job: IndexingJob, page: ExtractedPage, to
 }
 
 export async function completeIndexingJob(job: IndexingJob, document: ExtractedDocument) {
-  const { statements, indexedPages } = prepareSearchIndex(job.issue_id, document);
-  const reviewPages = document.pages.filter((page) => page.status === 'review').length;
   const tx = await getDb().transaction('write');
   try {
     await assertLease(tx, job);
+    const source = (
+      await tx.execute({ sql: 'SELECT source_hash FROM indexing_jobs WHERE id=?', args: [job.id] })
+    ).rows[0];
+    document = await applyPageReviews(
+      tx,
+      job.issue_id,
+      String(source.source_hash),
+      job.pdf_url,
+      document,
+    );
+    const { statements, indexedPages } = prepareSearchIndex(job.issue_id, document);
+    const reviewPages = document.pages.filter((page) => page.status === 'review').length;
     await tx.batch(statements);
     await tx.execute({
       sql: `UPDATE indexing_jobs SET status=?,indexed_pages=?,review_pages=?,completed_pages=?,total_pages=?,error=NULL,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=?`,

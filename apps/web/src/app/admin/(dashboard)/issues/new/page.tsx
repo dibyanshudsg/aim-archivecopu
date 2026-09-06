@@ -703,8 +703,8 @@ export default function UploadIssuePage() {
               />
             </div>
             <p className="text-[11px] text-gray-500">
-              English editions are queued after upload. Open Search Indexing and start Run workflow
-              on GitHub to process them, then follow progress here.
+              English editions are queued after upload. Open Search Indexing and choose Start
+              indexing to process them, then follow progress here.
             </p>
           </div>
         )}

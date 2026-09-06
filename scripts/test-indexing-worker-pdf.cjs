@@ -25,6 +25,7 @@ const { processNextIndexingJob } = require('../apps/web/src/lib/indexing-worker.
     fs.readFileSync(path.join(root, 'packages/turso/migrations/00003_indexing_jobs.sql'), 'utf8'),
   );
   await db.executeMultiple(fs.readFileSync(path.join(root, 'packages/turso/migrations/00004_indexing_workspace.sql'), 'utf8'));
+  await db.executeMultiple(fs.readFileSync(path.join(root, 'packages/turso/migrations/00006_indexing_controls.sql'), 'utf8'));
   const { createCanvas } = fromWeb('canvas');
   const pdf = createCanvas(612, 792, 'pdf');
   const ctx = pdf.getContext('2d');

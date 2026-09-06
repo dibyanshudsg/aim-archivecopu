@@ -8,14 +8,15 @@ import type {
   IndexingRun,
 } from '../indexing-workspace';
 import { enqueueInTransaction } from './indexing-repository';
+import { listPageReviews } from './indexing-page-reviews';
 
-const coverageSql = `WITH base AS (
+export const coverageSql = `WITH base AS (
   SELECT i.id,i.title,i.theme,i.magazine_id,i.year,i.month,i.is_published,i.cover_image_url,i.pdf_url,
     m.name AS magazine_name,m.language,
     (SELECT COUNT(DISTINCT page_number) FROM issue_search_index WHERE issue_id=i.id) AS indexed_pages,
     COALESCE(j.total_pages,i.page_count) AS total_pages,
     c.total_pages AS verified_total,c.indexed_pages AS verified_count,c.pdf_url AS verified_url,c.extraction_version,
-    c.blank_pages_json,c.review_pages_json,c.indexed_at,c.evidence,
+    c.blank_pages_json,c.review_pages_json,c.indexed_at,c.evidence,c.source_hash,
     j.status AS job_status,j.pdf_url AS job_url,COALESCE(j.completed_pages,0) AS completed_pages,
     COALESCE(j.attempts,0) AS attempts,j.error,COALESCE(j.available_at,0) AS available_at,
     (SELECT stage FROM indexing_runs WHERE job_id=j.id ORDER BY created_at DESC LIMIT 1) AS stage
@@ -150,7 +151,11 @@ export async function getIndexingIssueDetails(id: string) {
     sql: `SELECT r.*,i.title,i.theme FROM indexing_runs r JOIN issues i ON i.id=r.issue_id WHERE r.issue_id=? ORDER BY r.created_at DESC LIMIT 30`,
     args: [id],
   });
-  return { issue: mapIssue(result.rows[0]), runs: runs.rows as unknown as IndexingRun[] };
+  return {
+    issue: mapIssue(result.rows[0]),
+    runs: runs.rows as unknown as IndexingRun[],
+    reviews: await listPageReviews(id),
+  };
 }
 
 export async function listIndexingHistory(page = 1) {

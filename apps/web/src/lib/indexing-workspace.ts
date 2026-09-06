@@ -3,7 +3,7 @@ export const indexingStatusLabels: Record<string, string> = {
   queued: 'Queued',
   processing: 'Indexing',
   failed: 'Failed',
-  review: 'Needs page review',
+  review: 'Indexed — page text needs review',
   indexed: 'Indexed',
   unverified: 'Indexed — verification needed',
   unavailable: 'PDF unavailable',
@@ -42,6 +42,25 @@ export type CoverageIssue = {
   stage: string | null;
   available_at: number;
   verified: boolean;
+  source_hash: string | null;
+};
+export type PageReview = {
+  id: string;
+  page_number: number;
+  pdf_url: string;
+  source_hash: string;
+  decision: 'transcribe' | 'exclude';
+  content: string;
+  note: string;
+  reviewed_by: string;
+  reviewed_at: string;
+};
+export type DispatchState = {
+  configured: boolean;
+  active: boolean;
+  status: string;
+  message: string;
+  pending: number;
 };
 export type IndexingRun = {
   id: string;
