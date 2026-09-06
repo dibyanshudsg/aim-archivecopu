@@ -1,15 +1,17 @@
 # Scheduled search indexing
 
+[PR #1](https://github.com/MugdhanilK/aim-archive/pull/1) is merged with the owner's explicit approval. The two encrypted database secrets are configured. Production deployments are healthy. The hosted native/scanned PDF test and read-only production credential check [passed on GitHub](https://github.com/MugdhanilK/aim-archive/actions/runs/34040576130). Hourly execution remains gated only on confirmation that paid Actions usage is blocked.
+
 The workflow is `.github/workflows/search-indexing.yml`. It checks hourly at minute 23 UTC and supports a manual **Run workflow** from GitHub Actions. Scheduled starts may be delayed. Existing search reads saved database rows independently of this workflow.
 
 ## Activation requirements
 
-Execution is gated by the repository variable `INDEXING_ENABLED=true`. An unset or false variable skips the job, including manually dispatched runs. Keep it disabled until both requirements are satisfied:
+Production queue execution is gated by the repository variable `INDEXING_ENABLED=true`. An unset or false variable skips hourly and normal manual runs. An explicit manual `verify_worker` run bypasses that gate for isolated PDF testing and read-only database verification, capped at 15 minutes; it neither processes the production queue nor records a scheduled heartbeat. Keep production execution disabled until both requirements are satisfied:
 
 1. Confirm GitHub Actions paid overages are blocked in the owner's billing settings. This private repository uses the account's shared included allowance; the saved Git credential cannot read the current allowance. Do not assume an empty usage counter or promise a zero bill without that check.
-2. Authorize and configure `INDEXING_TURSO_DATABASE_URL` and `INDEXING_TURSO_AUTH_TOKEN` as encrypted repository Actions secrets. These grant the worker access to the existing archive database. No R2 write key or admin password is needed. The automatic approval reviewer rejected their upload pending destination-specific user authorization; they were not uploaded.
+2. **Complete:** the owner explicitly authorized `INDEXING_TURSO_DATABASE_URL` and `INDEXING_TURSO_AUTH_TOKEN` as encrypted repository Actions secrets. Both are uploaded and their database access is verified on GitHub. No R2 write key or admin password was uploaded.
 
-After activation, manually run with **verify_worker** enabled. This runs the real native/scanned PDF test against an isolated temporary database, then processes any currently queued production work. Verify the successful run and scheduled status in `/admin/indexing` before declaring cloud indexing live.
+After the billing check, set `INDEXING_ENABLED=true` and manually run with **verify_worker unchecked**. This checks the queue and processes due production work. Confirm a successful normal run and its scheduled status in `/admin/indexing` before declaring hourly automation live. The separate worker verification is already complete.
 
 ## Execution
 
@@ -27,7 +29,8 @@ After activation, manually run with **verify_worker** enabled. This runs the rea
 - `node scripts/test-indexing-runner.cjs`: immediate empty exit, three-job cap, claiming deadline and heartbeat cleanup.
 - `node scripts/test-indexing-jobs.cjs`: existing transaction/lease/retry/checkpoint regression suite.
 - `node scripts/test-indexing-worker-pdf.cjs`: real native-text and scanned-PDF extraction locally in an isolated database.
-- Production build; browser-only scheduled/overdue fixtures for desktop and phone. These are not evidence of execution on GitHub.
+- Production build; browser-only scheduled/overdue fixtures for desktop and phone.
+- GitHub standard Ubuntu runner: native/scanned PDF verification and bounded-run tests passed in runs 34040429579 and 34040576130. The latter also verified encrypted credentials against the live database without modifying rows.
 
 ## Ongoing operation
 
