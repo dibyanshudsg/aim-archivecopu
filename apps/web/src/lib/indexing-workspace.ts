@@ -71,7 +71,7 @@ export type IndexingCatalogue = {
   eligible: number;
   workerOnline: boolean;
   lastHeartbeat: number | null;
-  schedule?: { lastCheckedAt: number; lastResult: string; overdue: boolean } | null;
+  schedule?: { lastCheckedAt: number; lastResult: string } | null;
   magazines: { id: string; name: string }[];
   years: number[];
 };

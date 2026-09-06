@@ -133,7 +133,6 @@ export async function listIndexingCatalogue(
       ? {
           lastCheckedAt: Number(schedule.rows[0].last_checked_at),
           lastResult: String(schedule.rows[0].last_result),
-          overdue: Number(schedule.rows[0].last_checked_at) < Date.now() - 3 * 60 * 60_000,
         }
       : null,
     magazines: magazines.rows as unknown as { id: string; name: string }[],

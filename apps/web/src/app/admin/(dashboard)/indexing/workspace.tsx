@@ -190,8 +190,8 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
             : 'Index missing issues?',
       message:
         kind === 'selected'
-          ? `${chosen.length} selected issue(s) will be queued. Existing indexes will be rebuilt; active jobs and unsupported editions are skipped. This continues after you leave the page.`
-          : `Up to 100 ${kind === 'retry' ? 'failed' : 'missing'} eligible English issues across the catalogue will be queued. The current filters do not limit this action.`,
+          ? `${chosen.length} selected issue(s) will be queued. Existing indexes will be rebuilt; active jobs and unsupported editions are skipped. Start Run workflow on GitHub to process this queue.`
+          : `Up to 100 ${kind === 'retry' ? 'failed' : 'missing'} eligible English issues across the catalogue will be queued. The current filters do not limit this action. Start Run workflow on GitHub to process this queue.`,
       confirmLabel: kind === 'retry' ? 'Queue retries' : 'Queue indexing',
     });
     if (!ok) return;
@@ -270,42 +270,28 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <div className="min-w-0">
-          <p
-            className={
-              data.workerOnline || (data.schedule && !data.schedule.overdue)
-                ? 'text-green-800'
-                : 'text-amber-900'
-            }
-          >
-            {data.workerOnline
-              ? 'Worker connected'
-              : data.schedule
-                ? data.schedule.overdue
-                  ? 'Scheduled check overdue — queued work is saved'
-                  : 'Scheduled indexing — checks hourly'
-                : 'Worker offline — queued work is saved'}
-            <span className="ml-2 text-gray-600">
-              {data.lastHeartbeat
-                ? `Last seen ${new Date(data.lastHeartbeat).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`
-                : 'No heartbeat recorded'}
-            </span>
+          <p className="text-gray-900">
+            Manual indexing — runs only when started
+            {data.workerOnline && <span className="ml-2 text-green-800">Worker connected</span>}
           </p>
           {data.schedule && (
             <p className="mt-1 text-gray-600">
-              Last scheduled check {dates(new Date(data.schedule.lastCheckedAt).toISOString())} IST.
+              Last manual check {dates(new Date(data.schedule.lastCheckedAt).toISOString())} IST.
               {['failure', 'cancelled'].includes(data.schedule.lastResult) &&
                 ' The last run did not finish successfully.'}{' '}
-              <a
-                className="text-flame-700 underline underline-offset-2"
-                href="https://github.com/MugdhanilK/aim-archive/actions/workflows/search-indexing.yml"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View runs or start a check
-              </a>{' '}
-              Scheduled starts may be delayed.
             </p>
           )}
+          <p className="mt-1 text-gray-600">
+            <a
+              className="text-flame-700 underline underline-offset-2"
+              href="https://github.com/MugdhanilK/aim-archive/actions/workflows/search-indexing.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open GitHub to run indexing
+            </a>{' '}
+            Choose Run workflow on main after uploading or queuing issues.
+          </p>
         </div>
         <button className={action} disabled={loading} onClick={refresh}>
           <RefreshCw className="mr-2 inline h-4 w-4" />
@@ -338,13 +324,13 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
         <summary className="cursor-pointer font-medium text-gray-900">How indexing works</summary>
         <div className="mt-3 max-w-3xl space-y-2 leading-relaxed">
           <p>
-            English uploads and PDF replacements queue automatically. Imports may need manual
-            indexing. Metadata edits do not rebuild the PDF text.
+            English uploads and PDF replacements queue automatically. Start Run workflow on GitHub
+            to process the queue. Imports may need to be queued here first. Metadata edits do not rebuild the PDF text.
           </p>
           <p>
             Queued → Downloading PDF → Extracting text / OCR → Saving index → Complete. Completed
-            pages are saved; failed work gets three total automatic attempts before a manual retry
-            is needed.
+            pages are saved. Each run handles up to three issues and stops starting new issues after
+            20 minutes. If work remains, start another run. Failed work gets up to three attempts across runs before a manual retry is needed.
           </p>
           <p>
             Blank pages and uncertain pages are tracked separately. Uncertain pages stay out of

@@ -1,4 +1,4 @@
-"""Dependency-free queue probe and scheduled-run status for GitHub Actions."""
+"""Dependency-free queue probe and manual-run status for GitHub Actions."""
 import json
 import os
 import sys
@@ -48,5 +48,5 @@ if __name__ == '__main__':
     try:
         main()
     except Exception:
-        print('Scheduled indexing status failed. Check database access and migration 00005.', file=sys.stderr)
+        print('Indexing run status failed. Check database access and migration 00005.', file=sys.stderr)
         sys.exit(1)

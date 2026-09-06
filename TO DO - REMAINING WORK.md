@@ -22,7 +22,7 @@ Complete this section before declaring the migration finished or expanding admin
 
 ### Production indexing rollout
 
-- [ ] Choose and provision production indexing execution: a continuous Node worker or the proposed free scheduled GitHub Actions alternative. The website and dedicated coverage/history workspace are deployed; migrations are applied to both databases. The currently connected worker runs on the development computer. Scheduled execution would need bounded runs and appropriate status copy before rollout. See [Indexing Worker](INDEXING_WORKER.md).
+- Manual-only GitHub indexing is the selected operating mode. The hourly trigger is removed and normal manual runs are enabled on main; local development no longer starts a worker automatically. See [GitHub indexing](GITHUB_INDEXING.md). Monitor shared Actions usage; account billing settings remain outside the verified setup.
 - [ ] On that deployment, verify a controlled English upload, worker interruption/resume, retry, PDF replacement, and the resulting public page-text search. Local transaction tests, real native/scanned PDF extraction, and browser UI checks already pass.
 
 ### 1.2 Public browser verification

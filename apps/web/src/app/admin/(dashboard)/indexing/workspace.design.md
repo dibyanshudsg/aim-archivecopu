@@ -41,7 +41,7 @@ Section containers use 12px corners; controls use 8px corners and at least 40px 
 
 ## Do's and Don'ts
 
-Scheduled indexing adds hourly/overdue status based on actual saved GitHub check timestamps, with a link to workflow runs and manual dispatch. A missing schedule record retains the original worker status. Browser fixtures exercise scheduled idle and overdue states without inventing production activity.
+Indexing is manual-only. The status and GitHub run link are always visible, including before the first run. The last actual manual check appears when recorded; old checks do not become overdue. Queue confirmations and upload guidance explicitly tell the operator to start Run workflow on main. Existing layout and admin theme are preserved.
 
 - Keep catalogue coverage and individual run history distinct.
 - Preserve explicit bulk-action scope, evidence qualifications, and withheld-page review instructions.

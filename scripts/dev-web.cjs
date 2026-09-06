@@ -1,4 +1,4 @@
-// Keep development indexing alive independently of Next request lifetimes.
+// Local indexing is opt-in; production indexing is started manually on GitHub.
 const { spawn } = require('node:child_process');
 const { createRequire } = require('node:module');
 const path = require('node:path');
@@ -41,4 +41,5 @@ const next = start(
   web,
 );
 next.on('exit', (code) => stop(code ?? 1));
-startWorker();
+if (process.env.INDEXING_LOCAL_WORKER === '1') startWorker();
+else console.info('Indexing is manual. Use Admin > Search Indexing to open GitHub runs.');

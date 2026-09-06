@@ -1,8 +1,6 @@
 name: Search indexing
 
 on:
-  schedule:
-    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       verify_worker:
@@ -19,7 +17,7 @@ concurrency:
 
 jobs:
   index:
-    if: vars.INDEXING_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.verify_worker)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.verify_worker && 15 || 75 }}
     env:

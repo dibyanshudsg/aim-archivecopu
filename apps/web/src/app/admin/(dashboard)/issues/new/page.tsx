@@ -41,7 +41,9 @@ export default function UploadIssuePage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [coverDims, setCoverDims] = useState<{ w: number; h: number } | null>(null);
-  const [coverOrientation, setCoverOrientation] = useState<'front-right' | 'front-left'>('front-right');
+  const [coverOrientation, setCoverOrientation] = useState<'front-right' | 'front-left'>(
+    'front-right',
+  );
 
   async function refetchTopics() {
     try {
@@ -205,8 +207,14 @@ export default function UploadIssuePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) { setError('Please select a PDF file'); return; }
-    if (file.size > MAX_PDF_BYTES) { setError('PDF must be under 100MB'); return; }
+    if (!file) {
+      setError('Please select a PDF file');
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      setError('PDF must be under 100MB');
+      return;
+    }
 
     setUploading(true);
     setProgress('Starting upload…');
@@ -231,7 +239,10 @@ export default function UploadIssuePage() {
         effectiveCoverFile = await renderPdfFirstPageCoverFromFile(file);
         coverSource = effectiveCoverFile ? 'pdf-first-page' : null;
       } catch (coverErr) {
-        console.warn('Client cover generation failed; server fallback will try PDF page 1:', coverErr);
+        console.warn(
+          'Client cover generation failed; server fallback will try PDF page 1:',
+          coverErr,
+        );
       }
     }
 
@@ -382,7 +393,10 @@ export default function UploadIssuePage() {
         <h1 className="font-heading text-2xl font-bold text-gray-900">Upload New Issue</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-gray-100 bg-white p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6 rounded-2xl border border-gray-100 bg-white p-6"
+      >
         {error && (
           <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
         )}
@@ -393,7 +407,9 @@ export default function UploadIssuePage() {
           <div
             onClick={() => fileRef.current?.click()}
             className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors ${
-              file ? 'border-flame-300 bg-gradient-to-r from-gold-50/60 to-flame-50/60' : 'border-gray-200 hover:border-flame-300 hover:bg-flame-50/40'
+              file
+                ? 'border-flame-300 bg-gradient-to-r from-gold-50/60 to-flame-50/60'
+                : 'border-gray-200 hover:border-flame-300 hover:bg-flame-50/40'
             }`}
           >
             {file ? (
@@ -405,7 +421,10 @@ export default function UploadIssuePage() {
                 </div>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                  }}
                   className="ml-2 rounded-lg p-1 text-gray-400 hover:text-red-500"
                 >
                   <X className="h-4 w-4" />
@@ -431,7 +450,10 @@ export default function UploadIssuePage() {
         {/* Cover Image (optional, with auto-crop preview) */}
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-700">
-            Cover Image <span className="text-xs font-normal text-gray-400">(optional — overrides PDF page 1)</span>
+            Cover Image{' '}
+            <span className="text-xs font-normal text-gray-400">
+              (optional — overrides PDF page 1)
+            </span>
           </label>
 
           {!coverPreviewUrl ? (
@@ -441,7 +463,9 @@ export default function UploadIssuePage() {
             >
               <Upload className="h-7 w-7 text-gray-400" />
               <p className="mt-2 text-sm font-medium text-gray-600">Click to select cover image</p>
-              <p className="text-xs text-gray-400">JPG / PNG · max 4MB · combined front+back spread is fine</p>
+              <p className="text-xs text-gray-400">
+                JPG / PNG · max 4MB · combined front+back spread is fine
+              </p>
             </div>
           ) : (
             <div className="space-y-3 rounded-2xl border border-flame-200 bg-gradient-to-br from-gold-50/50 to-flame-50/50 p-4">
@@ -451,7 +475,8 @@ export default function UploadIssuePage() {
                   Source ({coverDims ? `${coverDims.w} × ${coverDims.h} px` : 'loading...'})
                   {isSpread && (
                     <span className="ml-2 rounded-full bg-gradient-to-r from-gold-100 to-flame-100 px-2 py-0.5 text-[10px] font-semibold text-flame-700">
-                      Spread detected · cropping {coverOrientation === 'front-right' ? 'right' : 'left'} half
+                      Spread detected · cropping{' '}
+                      {coverOrientation === 'front-right' ? 'right' : 'left'} half
                     </span>
                   )}
                   {coverDims && !isSpread && (
@@ -483,15 +508,15 @@ export default function UploadIssuePage() {
               {isSpread && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-gray-500">
-                      Front cover position in the spread:
-                    </p>
+                    <p className="text-xs text-gray-500">Front cover position in the spread:</p>
                     <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white text-xs">
                       <button
                         type="button"
                         onClick={() => setCoverOrientation('front-left')}
                         className={`px-3 py-1.5 transition-colors ${
-                          coverOrientation === 'front-left' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                          coverOrientation === 'front-left'
+                            ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white'
+                            : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         Left
@@ -500,7 +525,9 @@ export default function UploadIssuePage() {
                         type="button"
                         onClick={() => setCoverOrientation('front-right')}
                         className={`px-3 py-1.5 transition-colors ${
-                          coverOrientation === 'front-right' ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                          coverOrientation === 'front-right'
+                            ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white'
+                            : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         Right
@@ -565,7 +592,9 @@ export default function UploadIssuePage() {
               className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
             >
               {magazines.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
               ))}
             </select>
           </div>
@@ -577,7 +606,9 @@ export default function UploadIssuePage() {
               className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
             >
               {Object.entries(MONTH_NAMES).map(([num, name]) => (
-                <option key={num} value={num}>{name}</option>
+                <option key={num} value={num}>
+                  {name}
+                </option>
               ))}
             </select>
           </div>
@@ -596,7 +627,8 @@ export default function UploadIssuePage() {
         {/* Magazine Title (auto-generated) */}
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Magazine Title <span className="text-xs font-normal text-gray-400">(auto-generated)</span>
+            Magazine Title{' '}
+            <span className="text-xs font-normal text-gray-400">(auto-generated)</span>
           </label>
           <input
             type="text"
@@ -610,7 +642,10 @@ export default function UploadIssuePage() {
         {/* Theme Title (the issue's overarching theme — printed on the cover) */}
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Theme Title <span className="text-xs font-normal text-gray-400">(the overarching theme of this issue)</span>
+            Theme Title{' '}
+            <span className="text-xs font-normal text-gray-400">
+              (the overarching theme of this issue)
+            </span>
           </label>
           <input
             type="text"
@@ -668,7 +703,8 @@ export default function UploadIssuePage() {
               />
             </div>
             <p className="text-[11px] text-gray-500">
-              English editions are queued for search indexing after upload. Follow progress and retry failures on the Search Indexing page.
+              English editions are queued after upload. Open Search Indexing and start Run workflow
+              on GitHub to process them, then follow progress here.
             </p>
           </div>
         )}

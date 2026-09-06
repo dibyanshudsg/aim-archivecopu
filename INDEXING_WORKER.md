@@ -1,6 +1,6 @@
 # Durable search indexing
 
-Implemented and verified: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. GitHub Actions worker verification and read-only production database access pass; hourly activation remains gated on the owner's free-only billing confirmation.
+Implemented and verified: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. The owner selected manual-only GitHub indexing: there is no hourly trigger or shared activation gate. Hosted PDF extraction and production database access are verified. See `GITHUB_INDEXING.md` for the current operator workflow.
 
 Final release and integrity evidence: [Production release — 6 September 2026](PRODUCTION_RELEASE_2026-09-06.md).
 
@@ -49,7 +49,7 @@ Migration 00004 adds persistent run history and source-bound coverage evidence. 
 
 ## Local operation
 
-Run `pnpm.cmd dev` from `apps/web` as usual. The development launcher starts Next and the indexing worker using the same inherited database configuration. `pnpm.cmd dev:local-db` from the root explicitly selects the smoke database for both. The normal `.env.local` selects the full catalogue.
+Run `pnpm.cmd dev` from `apps/web` as usual. The development launcher starts Next only; indexing is manual. Set `INDEXING_LOCAL_WORKER=1` only when deliberately opting into a continuous local worker. `pnpm.cmd dev:local-db` from the root explicitly selects the smoke database. The normal `.env.local` selects the full catalogue. The previously running automatic local worker was stopped when switching to manual-only operation.
 
 To run only the worker from the repository root:
 
@@ -89,4 +89,4 @@ Railway is the paid continuous-host option considered: Hobby has a $5 monthly mi
 - Local browser QA verifies the Admin footer/login path, real admin authentication, unauthorized API rejection, live empty queue, desktop/mobile progress/failure/review fixtures, retry requests, and no page errors or phone overflow. Fixture screenshots are not evidence of production processing.
 - Combined local development launcher was restarted and verified: full catalogue remains 104 listed editions, the worker reports connected, and unauthenticated indexing access returns HTTP 401. Finish review accepted the desktop/mobile panel and rendered Admin footer control.
 
-GitHub Actions has been selected, PR #1 merged, and the two encrypted database secrets configured with explicit authorization. Hosted native/scanned PDF verification and read-only access to the live database pass. Normal queue execution remains disabled pending confirmation that paid overages are blocked. See [GitHub indexing setup](GITHUB_INDEXING.md). After activation, verify a normal queue check and scheduled status. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.
+GitHub Actions is configured, PR #1 is merged, and the two encrypted database secrets are installed with explicit authorization. The owner approved manual-only production indexing. Use Admin → Search Indexing → Open GitHub to run indexing, select main, and leave verify_worker unchecked. Existing indexes remain searchable between runs. Earlier cover-page review (17 withheld covers) and unrecoverable legacy sources are separate remaining tasks.
