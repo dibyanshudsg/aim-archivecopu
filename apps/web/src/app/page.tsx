@@ -2,20 +2,29 @@ import {
   getPublicNavigationFromDb,
   getPublicCollectionSummary,
   listHomeShelfIssues,
+  listHomeShelfYears,
   listLatestEmbargoedIssues,
   listMagazines,
   listPublicIssuesForMonths,
 } from '@/lib/db';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import type { ShelfIssue } from '@/lib/home-shelf';
 import { HomeClient } from './home-client';
 import { readableCutoffIssueMonth } from '@/lib/embargo';
+import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
 /** Readable shelf; restricted editions have their own section. */
-async function fetchShelfIssues(): Promise<ApiIssue[]> {
-  return listHomeShelfIssues();
-}
+const fetchShelfIssues = unstable_cache(async (_window: string): Promise<{ issues: ShelfIssue[]; years: Awaited<ReturnType<typeof listHomeShelfYears>> }> => {
+  void _window; // Included in Next's persistent cache key at embargo rollover.
+  const years = await listHomeShelfYears();
+  const year = years.at(-1)?.year;
+  return { years, issues: year === undefined ? [] : await listHomeShelfIssues(240, year) };
+}, ['home-shelf'], { revalidate: 30, tags: ['public-archive'] });
+
+const fetchCollectionSummary = unstable_cache(async (_window: string) => { void _window; return getPublicCollectionSummary(); },
+  ['home-collection'], { revalidate: 30, tags: ['public-archive'] });
 
 async function fetchLatestSubscriberEditions(): Promise<ApiIssue[]> {
   return listLatestEmbargoedIssues(4, 32);
@@ -66,17 +75,20 @@ async function fetchCarouselData(): Promise<CarouselData> {
 }
 
 export default async function HomePage() {
+  const cutoff = readableCutoffIssueMonth();
+  const windowKey = `${cutoff.year}-${cutoff.month}`;
   const [recentIssues, latestSubscriberEditions, carousel, navigation, collection] = await Promise.all([
-    fetchShelfIssues(),
+    fetchShelfIssues(windowKey),
     fetchLatestSubscriberEditions(),
     fetchCarouselData(),
     getPublicNavigationFromDb(),
-    getPublicCollectionSummary(),
+    fetchCollectionSummary(windowKey),
   ]);
 
   return (
     <HomeClient
-      recentIssues={recentIssues}
+      recentIssues={recentIssues.issues}
+      shelfYears={recentIssues.years}
       latestSubscriberEditions={latestSubscriberEditions}
       carouselMagazines={carousel.magazines}
       carouselIssues={carousel.issues}

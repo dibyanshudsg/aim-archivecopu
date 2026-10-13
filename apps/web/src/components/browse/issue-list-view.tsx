@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import { motion } from 'framer-motion';
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Heart, Info, Lock, Share2 } from 'lucide-react';
 import type { IssueWithMagazine } from '@aim-archive/shared';

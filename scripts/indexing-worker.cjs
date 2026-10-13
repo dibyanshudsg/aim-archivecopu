@@ -23,6 +23,9 @@ process.on('SIGTERM', () => {
   stopping = true;
 });
 (async () => {
+  for (const name of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL']) {
+    if (!process.env[name]) throw new Error('Missing private storage configuration');
+  }
   await heartbeatIndexingWorker(id);
   heartbeat = setInterval(
     () =>
@@ -53,7 +56,7 @@ process.on('SIGTERM', () => {
   } while (!stopping);
 })()
   .catch(() => {
-    console.error('Indexing worker stopped. Check database access and indexing migrations.');
+    console.error('Indexing worker stopped. Check database access, indexing migrations and private R2 credentials.');
     process.exitCode = 1;
   })
   .finally(async () => {

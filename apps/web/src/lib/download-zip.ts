@@ -6,6 +6,7 @@
  * compression) — much faster CPU, near-zero size penalty.
  */
 
+import { fetchPublicPdf } from './public-pdf-fetch';
 export type ZipPhase = 'fetching' | 'zipping' | 'done' | 'error';
 
 export interface ZipDownloadProgress {
@@ -24,6 +25,7 @@ export interface ZipFileSpec {
   /** Becomes the filename inside the ZIP (sanitized; `.pdf` appended if not present). */
   name: string;
   url: string;
+  sizeBytes?: number;
 }
 
 export interface DownloadZipOptions {
@@ -37,6 +39,18 @@ export interface DownloadZipOptions {
 
 export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
   const { files, zipName, concurrency = 3, onProgress, signal } = opts;
+  // Includes headroom for JSZip's final output and transient copies. Larger
+  // archives should be downloaded in smaller selections on memory-limited phones.
+  const maxBytes = 50 * 1024 * 1024;
+  const budgetMessage = 'This selection is too large for a ZIP. Select fewer issues (up to 50 MB), or download them individually.';
+  if (files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0) > maxBytes) throw new Error(budgetMessage);
+  signal?.throwIfAborted();
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener('abort', cancel, { once: true });
+  let receivedBytes = 0;
+  let budgetExceeded = false;
+  try {
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
 
@@ -54,8 +68,7 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
 
   emit('fetching');
 
-  // Worker-pool over a shared queue. Concurrency caps simultaneous fetches so
-  // we don't hammer storage and so memory peaks stay bounded.
+  // Concurrency bounds active downloads; the byte counter bounds their total.
   const queue = files.map((f, idx) => ({ ...f, idx }));
   let aborted = false;
 
@@ -65,9 +78,28 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
       const item = queue.shift();
       if (!item) return;
       try {
-        const res = await fetch(item.url, { signal });
+        const res = await fetchPublicPdf(item.url, controller.signal);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('Download stream unavailable');
+        const chunks: Uint8Array<ArrayBuffer>[] = [];
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            receivedBytes += value.byteLength;
+            if (receivedBytes > maxBytes) {
+              budgetExceeded = true;
+              controller.abort();
+              throw new Error(budgetMessage);
+            }
+            chunks.push(new Uint8Array(value));
+          }
+        } finally {
+          if (controller.signal.aborted) await reader.cancel().catch(() => {});
+          reader.releaseLock();
+        }
+        const blob = new Blob(chunks, { type: 'application/pdf' });
         const filename = ensurePdfExt(safeFilename(item.name));
         // Append a numeric suffix if a duplicate name slipped in.
         let key = filename;
@@ -78,7 +110,7 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
         }
         zip.file(key, blob);
       } catch (err) {
-        if (signal?.aborted) {
+        if (controller.signal.aborted) {
           aborted = true;
           return;
         }
@@ -93,10 +125,12 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
   };
 
   const workers: Promise<void>[] = [];
-  for (let i = 0; i < Math.min(concurrency, total); i++) {
+  for (let i = 0; i < Math.min(Math.max(1, concurrency), 3, total); i++) {
     workers.push(worker());
   }
   await Promise.all(workers);
+
+  if (budgetExceeded) throw new Error(budgetMessage);
 
   if (aborted || signal?.aborted) {
     emit('error', 0, 'Cancelled');
@@ -114,7 +148,7 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
   const blob = await zip.generateAsync(
     { type: 'blob', compression: 'STORE' },
     (meta) => {
-      if (signal?.aborted) return;
+      signal?.throwIfAborted();
       emit('zipping', Math.round(meta.percent));
     },
   );
@@ -126,6 +160,7 @@ export async function downloadAsZip(opts: DownloadZipOptions): Promise<void> {
 
   triggerBrowserDownload(blob, `${safeFilename(zipName)}.zip`);
   emit('done', 100);
+  } finally { signal?.removeEventListener('abort', cancel); controller.abort(); }
 }
 
 function safeFilename(name: string): string {

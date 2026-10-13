@@ -1,0 +1,21 @@
+// Tests source/deployment exclusions without creating credentials or fixture files.
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {execFileSync,spawnSync}=require('node:child_process');
+const {root,fromWeb}=require('./register-web-typescript.cjs');
+const ignore=require('node:module').createRequire(fromWeb.resolve('eslint/package.json'))('ignore');
+const privatePaths=['.cache/browser/Default/Cookies','.agents/skills/local/SKILL.md','.impeccable/session.json','.aws/credentials','.ocr-cache/eng.traineddata','scripts/__pycache__/test.pyc','.env.staging','apps/web/.env.preview','.env.r2.local','.codex-logs/evidence.json','output/playwright/browser.json','output/other/result.json','tmp/private.json','AIM Issues/example.pdf'];
+const git=(args,input)=>execFileSync('git',['-c','safe.directory='+root.replace(/\\/g,'/'),...args],{cwd:root,input,encoding:'utf8'});
+const ignored=new Set(git(['check-ignore','--no-index','--stdin'],privatePaths.join('\n')+'\n').trim().split('\n'));
+for(const file of privatePaths)assert.ok(ignored.has(file),'Git must exclude '+file);
+const required=['apps/web/.env.local.example','apps/web/src/lib/pdf-delivery.ts','.github/workflows/search-indexing.yml','packages/turso/migrations/00008_metadata_search.sql','apps/web/public/pdf.worker-4.8.69.min.mjs','docs/handover/P2-08_STAGING_READINESS.md'];
+required.push('.node-version', 'apps/web/src/app/fonts/Inter-variable.woff2', 'apps/web/src/app/fonts/inter-OFL.txt');
+const result=spawnSync('git',['-c','safe.directory='+root.replace(/\\/g,'/'),'check-ignore','--no-index','--stdin'],{cwd:root,input:required.join('\n')+'\n',encoding:'utf8'});
+if(result.error)throw result.error;assert.equal(result.status,1);assert.equal(result.stdout,'');
+const deployment=ignore().add(fs.readFileSync(path.join(root,'.vercelignore'),'utf8'));
+for(const file of [...privatePaths,'docs/handover/HANDOVER_EMAIL_DRAFT.md','.github/workflows/search-indexing.yml','apps/web/.env.local.example','apps/web/.next/server/app.js','node_modules/secret.txt'])assert.ok(deployment.ignores(file),'Deployment must exclude '+file);
+for(const file of ['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','turbo.json','apps/web/package.json','apps/web/next.config.ts','apps/web/src/lib/pdf-delivery.ts','apps/web/public/pdf.worker-4.8.69.min.mjs','packages/shared/src/index.ts'])assert.equal(deployment.ignores(file),false,'Deployment requires '+file);
+for(const file of ['.node-version','apps/web/src/app/fonts/Inter-variable.woff2','apps/web/src/app/fonts/inter-OFL.txt'])assert.equal(deployment.ignores(file),false,'Deployment requires '+file);
+const tracked=git(['ls-files','-z']).split('\0').filter(Boolean);
+const privateTracked=tracked.filter(file=>ignore().add(fs.readFileSync(path.join(root,'.gitignore'),'utf8')).ignores(file));
+assert.deepEqual(privateTracked,[],'Ignore rules alone cannot remove already tracked private artifacts');
+console.log('PASS Git exclusions, retained source/examples/workflow/docs, deployment-only documentation/cache exclusions and no already-tracked ignored files. Gitignore-compatible matching; actual Vercel upload inventory remains a staging check.');

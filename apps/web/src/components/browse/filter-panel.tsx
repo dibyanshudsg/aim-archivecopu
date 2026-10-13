@@ -76,7 +76,7 @@ export function FilterPanel({
           {hasActiveFilters && (
             <button
               onClick={onClearAll}
-              className="rounded-md px-2 py-1 bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-medium text-transparent transition-colors"
+              className="min-h-11 rounded-md px-2 py-1 text-xs font-medium text-flame-800 transition-colors"
             >
               Clear all
             </button>
@@ -84,7 +84,7 @@ export function FilterPanel({
           <button
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
           >
             <X className="h-4 w-4" />
           </button>

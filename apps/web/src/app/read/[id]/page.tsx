@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
 import { Document, pdfjs } from 'react-pdf';
+import { usePdfRetry } from '@/lib/use-pdf-retry';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
@@ -91,6 +92,7 @@ function ReaderContent({ params }: { params: Promise<{ id: string }> }) {
   const [scale, setScale] = useState(1.0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState(false);
+  const pdfRetry = usePdfRetry(issue?.pdfUrl ?? null);
   // Cover-JPEG-as-LCP-candidate: shown over the PDF viewer area while the
   // first page is rasterizing so Lighthouse pins LCP to the cover image
   // (~200ms) instead of waiting for the canvas paint (~3-5s on cold load).
@@ -436,7 +438,17 @@ function ReaderContent({ params }: { params: Promise<{ id: string }> }) {
       let bestIdx = -1;
       let bestDist = Infinity;
 
-      for (let i = 0; i < pageRefs.current.length; i++) {
+      // Slots stay in document order even when canvases are virtualized.
+      // Binary-search the first visible slot instead of measuring from page 1.
+      let low = 0;
+      let high = pageRefs.current.length;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        const el = pageRefs.current[mid];
+        if (el && el.getBoundingClientRect().bottom < containerRect.top) low = mid + 1;
+        else high = mid;
+      }
+      for (let i = low; i < pageRefs.current.length; i++) {
         const el = pageRefs.current[i];
         if (!el) continue;
         const r = el.getBoundingClientRect();
@@ -1397,9 +1409,11 @@ function ReaderContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
           ) : (
             <Document
+              key={`${issue.id}:${pdfRetry.revision}`}
               file={issue.pdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={() => setError(true)}
+              onLoadError={(error) => { if (!pdfRetry.retry(error)) setError(true); }}
+              onSourceError={(error) => { if (!pdfRetry.retry(error)) setError(true); }}
               loading={
                 <div className="mt-20 flex flex-col items-center gap-3">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-flame-100 border-t-flame-500" />

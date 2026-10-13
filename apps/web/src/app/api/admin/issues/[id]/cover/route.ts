@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
-import { storageKeyFromUrl, uploadToR2 } from '@/lib/r2-client';
+import { uploadToR2 } from '@/lib/r2-client';
+import { pdfKeyFromLocator } from '@/lib/pdf-access';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
+import { deliverCover } from '@/lib/cover-delivery';
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return deliverCover(request, (await params).id, false, true);
+}
+export const HEAD = GET;
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -22,7 +29,8 @@ export async function POST(
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
-  const storageKey = storageKeyFromUrl(issue.pdf_url);
+  const sourceKey = pdfKeyFromLocator(issue.pdf_url);
+  const storageKey = sourceKey?.replace(/\.pdf$/i, `-cover-revision-${crypto.randomUUID()}.pdf`);
   if (!storageKey) {
     return NextResponse.json({ error: 'Could not derive storage key' }, { status: 500 });
   }

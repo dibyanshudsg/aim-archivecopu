@@ -8,9 +8,8 @@ import {
   type BrowseFacets,
 } from '@/lib/public-issues';
 
-// Edge-cache the server-rendered HTML for a minute. Stale-while-revalidate
-// behavior is implicit with Next's ISR — visitors past the 60 s mark get a
-// stale render instantly while the next request rebuilds in the background.
+// searchParams makes this route dynamic. Repository caches bound query work;
+// this declaration does not turn every filtered HTML response into ISR.
 export const revalidate = 60;
 
 async function fetchInitialBrowseData(

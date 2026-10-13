@@ -305,7 +305,7 @@ export function Header({
               className={`flex shrink-0 items-center justify-center transition-colors ${
                 contextualControlsVisible
                   ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
-                  : 'h-10 w-10 rounded-lg'
+                  : 'h-11 w-11 rounded-lg'
               } ${
                 dropdownIsOpen
                   ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
@@ -327,7 +327,7 @@ export function Header({
               'relative hidden shrink-0 items-center justify-center transition-colors md:flex',
               contextualControlsVisible
                 ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white shadow-sm focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
-                : 'h-10 w-10 rounded-lg',
+                : 'h-11 w-11 rounded-lg',
               isLinkActive('/bookmarks')
                 ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
                 : contextualControlsVisible
@@ -359,7 +359,7 @@ export function Header({
                     'relative shrink-0 transition-colors',
                     contextualControlsVisible
                       ? 'h-11 w-11 rounded-xl border border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2'
-                      : 'h-10 w-10 rounded-lg text-gray-600',
+                      : 'h-11 w-11 rounded-lg text-gray-600',
                   )}
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}

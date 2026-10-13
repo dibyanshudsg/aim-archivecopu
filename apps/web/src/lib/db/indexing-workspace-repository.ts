@@ -1,3 +1,4 @@
+import { supportedAssetSql } from '../asset-url';
 import type { InValue, Transaction } from '@libsql/client';
 import { displayableAssetUrl, getDb } from './client';
 import { EXTRACTION_VERSION } from '../pdf-extract';
@@ -10,10 +11,12 @@ import type {
 import { enqueueInTransaction } from './indexing-repository';
 import { listPageReviews } from './indexing-page-reviews';
 
-export const coverageSql = `WITH base AS (
+export const coverageSql = `WITH page_counts AS (
+  SELECT issue_id, COUNT(DISTINCT page_number) AS indexed_pages FROM issue_search_index GROUP BY issue_id
+), base AS (
   SELECT i.id,i.title,i.theme,i.magazine_id,i.year,i.month,i.is_published,i.cover_image_url,i.pdf_url,
     m.name AS magazine_name,m.language,
-    (SELECT COUNT(DISTINCT page_number) FROM issue_search_index WHERE issue_id=i.id) AS indexed_pages,
+    COALESCE(pc.indexed_pages,0) AS indexed_pages,
     COALESCE(j.total_pages,i.page_count) AS total_pages,
     c.total_pages AS verified_total,c.indexed_pages AS verified_count,c.pdf_url AS verified_url,c.extraction_version,
     c.blank_pages_json,c.review_pages_json,c.indexed_at,c.evidence,c.source_hash,
@@ -21,12 +24,13 @@ export const coverageSql = `WITH base AS (
     COALESCE(j.attempts,0) AS attempts,j.error,COALESCE(j.available_at,0) AS available_at,
     (SELECT stage FROM indexing_runs WHERE job_id=j.id ORDER BY created_at DESC LIMIT 1) AS stage
   FROM issues i JOIN magazines m ON m.id=i.magazine_id
+  LEFT JOIN page_counts pc ON pc.issue_id=i.id
   LEFT JOIN indexing_jobs j ON j.issue_id=i.id LEFT JOIN issue_indexing_coverage c ON c.issue_id=i.id
 ), coverage AS (
   SELECT *, CASE WHEN verified_url=pdf_url AND extraction_version=? AND verified_count=indexed_pages AND verified_total=total_pages THEN 1 ELSE 0 END AS verified,
     CASE
       WHEN language!='english' THEN 'excluded'
-      WHEN pdf_url='' OR pdf_url LIKE '%.supabase.co/%' THEN 'unavailable'
+      WHEN NOT ${supportedAssetSql('pdf_url')} THEN 'unavailable'
       WHEN job_url=pdf_url AND job_status IN ('queued','processing','failed') THEN job_status
       WHEN indexed_pages=0 OR (verified_url IS NOT NULL AND verified_url!=pdf_url) THEN 'missing'
       WHEN verified_url=pdf_url AND extraction_version=? AND verified_count=indexed_pages AND verified_total=total_pages THEN

@@ -1,8 +1,9 @@
 import { uploadToR2 } from './r2-client';
+import { readPrivatePdf } from './private-pdf';
 
 /**
  * Render the first page of a PDF to a JPEG thumbnail and upload it to R2.
- * Returns the public URL of the uploaded thumbnail.
+ * Returns the stored locator of the uploaded thumbnail.
  *
  * `storagePath` is the source PDF's object key (e.g.
  * `agnishikha-2026/Agnishikha-Jan-2026.pdf`); the thumbnail is uploaded
@@ -47,20 +48,14 @@ export async function generateAndUploadThumbnail(
 
 /**
  * Generate a thumbnail from a PDF URL (used by backfill / reindex routes).
- * The PDF may currently live on R2 or Supabase Storage — `pdfUrl` is just
- * fetched over HTTPS — but the thumbnail is always written to R2.
+ * The stored locator is resolved to an authenticated R2 object read.
+ * Public storage access is not required.
  */
 export async function generateThumbnailFromUrl(
   pdfUrl: string,
   storagePath: string,
 ): Promise<string> {
-  const response = await fetch(pdfUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download PDF: ${response.status}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const buffer = await readPrivatePdf(pdfUrl);
 
   return generateAndUploadThumbnail(buffer, storagePath);
 }

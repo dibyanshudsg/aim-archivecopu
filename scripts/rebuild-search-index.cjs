@@ -20,6 +20,8 @@ require.extensions['.ts'] = (module, file) =>
     file,
   );
 const { extractPdfText, EXTRACTION_VERSION } = require('../apps/web/src/lib/pdf-extract.ts');
+const { isSupportedAssetUrl } = require('../apps/web/src/lib/asset-url.ts');
+const { readPrivatePdf } = require('../apps/web/src/lib/private-pdf.ts');
 const { createClient } = fromWeb('@libsql/client');
 process.loadEnvFile(path.join(root, 'apps/web/.env.local'));
 const local = process.argv.includes('--local');
@@ -115,7 +117,7 @@ async function main() {
     `SELECT i.id,i.title,i.pdf_url,i.updated_at,i.page_count,i.is_published,m.language FROM issues i JOIN magazines m ON m.id=i.magazine_id ORDER BY i.year DESC,i.month DESC,i.id`,
   );
   const eligible = rows.filter(
-    (row) => row.language === 'english' && row.pdf_url && !row.pdf_url.includes('.supabase.co/'),
+    (row) => row.language === 'english' && row.pdf_url && isSupportedAssetUrl(row.pdf_url),
   );
   const selected = eligible.filter((row) => !ids || ids.includes(row.id)).slice(0, limit);
   if (ids?.some((id) => !eligible.some((row) => row.id === id)))
@@ -157,25 +159,11 @@ async function main() {
     const out = { id: issue.id, title: issue.title };
     try {
       const sourceFile = path.join(dir, hash(issue.pdf_url) + '.pdf');
-      // Revalidate source on every run; 304 reuses cached bytes while still
-      // detecting replacements at an unchanged URL.
+      // Authenticated fresh bytes on every run; checkpoint identity remains byte-based.
       const sourceMetaFile = sourceFile + '.json';
-      let previous;
-      try {
-        previous = JSON.parse(fs.readFileSync(sourceMetaFile, 'utf8'));
-      } catch {}
-      const headers =
-        previous?.etag && fs.existsSync(sourceFile) ? { 'If-None-Match': previous.etag } : {};
-      const response = await fetch(issue.pdf_url, { headers, signal: AbortSignal.timeout(90000) });
-      let buffer;
-      if (response.status === 304) buffer = fs.readFileSync(sourceFile);
-      else {
-        if (!response.ok) throw new Error(`PDF download HTTP ${response.status}`);
-        buffer = Buffer.from(await response.arrayBuffer());
-        if (buffer.subarray(0, 1024).indexOf('%PDF-') < 0) throw new Error('Source is not a PDF');
-        fs.writeFileSync(sourceFile, buffer);
-        json(sourceMetaFile, { etag: response.headers.get('etag'), sourceUrl: issue.pdf_url });
-      }
+      const buffer = await readPrivatePdf(issue.pdf_url);
+      fs.writeFileSync(sourceFile, buffer);
+      json(sourceMetaFile, { sourceUrl: issue.pdf_url });
       const sourceHash = hash(buffer);
       const checkpointFile = path.join(dir, `${issue.id}-${sourceHash}-${EXTRACTION_VERSION}.json`);
       let checkpoint;

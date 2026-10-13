@@ -1,9 +1,14 @@
+import { supportedAssetSql, isSupportedAssetUrl } from '../asset-url';
+import { publicPdfRoute, publicCoverRoute } from '../public-asset-routes';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import type { ShelfIssue, ShelfYear } from '@/lib/home-shelf';
+import { normalizePublicAssetUrl } from '../asset-url';
+import { hasSearchIndex, literalFtsPhrase } from './search-capabilities';
 import { applyEmbargoToIssueRow, readableCutoffIssueMonth } from '@/lib/embargo';
 import type { BrowseFacets, PublicIssueListInput, PublicIssueListResult } from '@/lib/public-issues';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
 import type { ResultSet } from '@libsql/client';
-import { getDb, isSupabaseHostedUrl } from './client';
+import { getDb } from './client';
 import { AsyncTtlCache } from './cache';
 import { issueSelectSql, rowToIssue, rowToMagazine, type IssueJoinedRow, type MagazineRow } from './mappers';
 
@@ -15,12 +20,20 @@ const publicListCache = new AsyncTtlCache<PublicIssueListResult>(SHORT_PUBLIC_CA
 const magazineCache = new AsyncTtlCache<ApiMagazine[]>(PUBLIC_LOOKUP_CACHE_MS);
 const issueArrayCache = new AsyncTtlCache<ApiIssue[]>(PUBLIC_LOOKUP_CACHE_MS);
 const issueCache = new AsyncTtlCache<ApiIssue | null>(ISSUE_DETAIL_CACHE_MS);
+const facetCache = new AsyncTtlCache<ResultSet[]>(SHORT_PUBLIC_CACHE_MS, 64);
+const summaryCache = new AsyncTtlCache<{ listed: number; readable: number; languages: string[] }>(PUBLIC_LOOKUP_CACHE_MS, 2);
+const shelfCache = new AsyncTtlCache<ShelfIssue[]>(PUBLIC_LOOKUP_CACHE_MS, 32);
+const shelfYearCache = new AsyncTtlCache<ShelfYear[]>(PUBLIC_LOOKUP_CACHE_MS, 2);
 
 export function clearPublicRepositoryCaches(): void {
   publicListCache.clear();
   magazineCache.clear();
   issueArrayCache.clear();
   issueCache.clear();
+  facetCache.clear();
+  summaryCache.clear();
+  shelfCache.clear();
+  shelfYearCache.clear();
 }
 
 function embargoWindowCacheKey(): string {
@@ -44,7 +57,7 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
         ORDER BY i.created_at DESC
         LIMIT ?
       `,
@@ -54,7 +67,6 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
     const now = new Date();
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
       .map((issue) => applyEmbargoToIssueRow(issue, now))
       .filter((issue) => !issue.is_embargoed)
       .slice(0, limit);
@@ -69,7 +81,7 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
         ORDER BY i.year DESC, i.month DESC, m.created_at ASC
         LIMIT ?
       `,
@@ -79,36 +91,52 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
     const now = new Date();
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
       .map((issue) => applyEmbargoToIssueRow(issue, now))
       .filter((issue) => issue.is_embargoed)
       .slice(0, limit);
   });
 }
 
-export async function listHomeShelfIssues(limit = 240): Promise<ApiIssue[]> {
-  return issueArrayCache.get(`home-shelf:${limit}:${embargoWindowCacheKey()}`, async () => {
+export async function listHomeShelfIssues(limit = 240, year?: number): Promise<ShelfIssue[]> {
+  return shelfCache.get(`home-shelf:${limit}:${year ?? 'all'}:${embargoWindowCacheKey()}`, async () => {
     const cutoff = readableCutoffIssueMonth();
     const result = await getDb().execute({
       sql: `
-        SELECT ${issueSelectSql()}
+        SELECT i.id, i.title, i.year, i.month, i.pdf_url, i.cover_image_url,
+          i.page_count, i.created_at, m.id AS magazine_id, m.name AS magazine_name
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
           AND trim(i.pdf_url) <> ''
           AND (i.year < ? OR (i.year = ? AND i.month <= ?))
+          ${year === undefined ? '' : 'AND i.year = ?'}
         ORDER BY i.year DESC, i.month DESC, m.created_at ASC
         LIMIT ?
       `,
-      args: [cutoff.year, cutoff.year, cutoff.month, limit],
+      args: [cutoff.year, cutoff.year, cutoff.month, ...(year === undefined ? [] : [year]), limit],
     });
 
-    const now = new Date();
-    return result.rows
-      .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .filter((issue) => !isSupabaseHostedUrl(issue.pdf_url))
-      .map((issue) => applyEmbargoToIssueRow(issue, now));
+    return result.rows.map((row) => ({
+      id: String(row.id), title: String(row.title), year: Number(row.year), month: Number(row.month),
+      pdf_url: publicPdfRoute(String(row.id)), cover_image_url: isSupportedAssetUrl(row.cover_image_url == null ? null : String(row.cover_image_url)) ? publicCoverRoute(String(row.id)) : null,
+      page_count: row.page_count == null ? null : Number(row.page_count), created_at: String(row.created_at),
+      is_embargoed: false, embargo_lift_label: null,
+      magazines: { id: String(row.magazine_id), name: String(row.magazine_name) },
+    }));
+  });
+}
+
+export function listHomeShelfYears(): Promise<ShelfYear[]> {
+  return shelfYearCache.get(embargoWindowCacheKey(), async () => {
+    const cutoff = readableCutoffIssueMonth();
+    const result = await getDb().execute({
+      sql: `SELECT year, count(*) AS count FROM issues WHERE is_published = 1
+        AND ${supportedAssetSql('pdf_url')} AND trim(pdf_url) <> ''
+        AND (year < ? OR (year = ? AND month <= ?)) GROUP BY year ORDER BY year`,
+      args: [cutoff.year, cutoff.year, cutoff.month],
+    });
+    return result.rows.map(row => ({ year: Number(row.year), count: Number(row.count) }));
   });
 }
 
@@ -118,12 +146,13 @@ export async function getPublicCollectionSummary(): Promise<{
   readable: number;
   languages: string[];
 }> {
+  return summaryCache.get(embargoWindowCacheKey(), async () => {
   const cutoff = readableCutoffIssueMonth();
   const result = await getDb().execute({
     sql: `SELECT m.language, count(*) AS listed,
       sum(CASE WHEN i.year < ? OR (i.year = ? AND i.month <= ?) THEN 1 ELSE 0 END) AS readable
       FROM issues i JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1 AND i.pdf_url NOT LIKE '%.supabase.co/%'
+      WHERE i.is_published = 1 AND ${supportedAssetSql('i.pdf_url')}
         AND trim(i.pdf_url) <> ''
       GROUP BY m.language ORDER BY m.language`,
     args: [cutoff.year, cutoff.year, cutoff.month],
@@ -133,6 +162,7 @@ export async function getPublicCollectionSummary(): Promise<{
     readable: result.rows.reduce((sum, row) => sum + Number(row.readable), 0),
     languages: result.rows.map((row) => LANGUAGE_NAMES[String(row.language) as Language] ?? String(row.language)),
   };
+  });
 }
 
 export async function listPublicIssuesForMonths(months: Array<{ year: number; month: number }>): Promise<ApiIssue[]> {
@@ -147,7 +177,7 @@ export async function listPublicIssuesForMonths(months: Array<{ year: number; mo
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
           AND (${clauses})
         ORDER BY m.created_at ASC, i.year DESC, i.month DESC
       `,
@@ -175,7 +205,7 @@ export async function listPublicIssuesByIds(ids: string[]): Promise<ApiIssue[]> 
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.id IN (${placeholders(uniqueIds.length)})
           AND i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
       `,
       args: uniqueIds,
     });
@@ -196,7 +226,7 @@ export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.id = ?
           AND i.is_published = 1
-          AND i.pdf_url NOT LIKE '%.supabase.co/%'
+          AND ${supportedAssetSql('i.pdf_url')}
         LIMIT 1
       `,
       args: [id],
@@ -213,7 +243,7 @@ export async function listRelatedReadableIssues(issue: ApiIssue, limit = 3): Pro
   const result = await getDb().execute({
     sql: `SELECT ${issueSelectSql()} FROM issues i JOIN magazines m ON m.id = i.magazine_id
       WHERE i.is_published = 1 AND i.id <> ? AND m.language = ?
-        AND i.pdf_url NOT LIKE '%.supabase.co/%' AND trim(i.pdf_url) <> ''
+        AND ${supportedAssetSql('i.pdf_url')} AND trim(i.pdf_url) <> ''
         AND (i.year < ? OR (i.year = ? AND i.month <= ?))
       ORDER BY EXISTS (SELECT 1 FROM json_each(i.topics_json) topic
         JOIN json_each(?) selected ON topic.value = selected.value) DESC,
@@ -236,7 +266,7 @@ export async function getPublicIssueMetadataById(id: string): Promise<{
       JOIN magazines m ON m.id = i.magazine_id
       WHERE i.id = ?
         AND i.is_published = 1
-        AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        AND ${supportedAssetSql('i.pdf_url')}
       LIMIT 1
     `,
     args: [id],
@@ -256,7 +286,7 @@ export async function listSitemapIssues(): Promise<Array<{ id: string; updated_a
     SELECT id, updated_at
     FROM issues
     WHERE is_published = 1
-      AND pdf_url NOT LIKE '%.supabase.co/%'
+      AND ${supportedAssetSql('pdf_url')}
     ORDER BY year DESC, month DESC
   `);
   return result.rows.map((row) => ({
@@ -273,7 +303,7 @@ export async function getPublicIssueDownloadTarget(id: string): Promise<{ id: st
       WHERE id = ?
         AND is_published = 1
         AND pdf_url IS NOT NULL
-        AND pdf_url NOT LIKE '%.supabase.co/%'
+        AND ${supportedAssetSql('pdf_url')}
       LIMIT 1
     `,
     args: [id],
@@ -283,7 +313,7 @@ export async function getPublicIssueDownloadTarget(id: string): Promise<{ id: st
   if (!row || typeof row.pdf_url !== 'string') return null;
   return {
     id: String(row.id),
-    pdf_url: row.pdf_url,
+    pdf_url: normalizePublicAssetUrl(row.pdf_url),
     year: Number(row.year),
     month: Number(row.month),
   };
@@ -323,9 +353,9 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
   const facetQueries = FACET_DIMENSIONS.map((dimension) =>
     facetCountQuery(buildIssueWhere(input, magazines, dimension, searchIssueIds), dimension),
   );
-  const [rowsResult, countResult, ...facetResults] = await getDb().batch(
-    [
-      {
+  const filterInput = { ...input, page: undefined, pageSize: undefined, sort: undefined, dir: undefined };
+  const [rowsResult, [countResult, ...facetResults]] = await Promise.all([
+    getDb().execute({
       sql: `
         SELECT ${issueSelectSql()}
         FROM issues i
@@ -335,7 +365,8 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
         LIMIT ? OFFSET ?
       `,
       args: [...where.args, input.pageSize, offset],
-      },
+      }),
+    facetCache.get(`${JSON.stringify(filterInput)}:${embargoWindowCacheKey()}`, () => getDb().batch([
       {
       sql: `
         SELECT COUNT(*) AS count
@@ -348,7 +379,8 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
       ...facetQueries,
     ],
     'read',
-  );
+  )),
+  ]);
   const facets = buildFacets(input, magazines, facetResults);
 
   const now = new Date();
@@ -388,11 +420,11 @@ function buildIssueWhere(
   input: PublicIssueListInput,
   magazines: ApiMagazine[],
   exclude?: FacetDimension,
-  searchIssueIds?: string[] | null,
+  searchIssueIds?: SqlPart | null,
 ): SqlPart {
   const clauses = [
     'i.is_published = 1',
-    "i.pdf_url NOT LIKE '%.supabase.co/%'",
+    supportedAssetSql('i.pdf_url'),
     "trim(i.pdf_url) <> ''",
   ];
   const args: SqlArg[] = [];
@@ -420,8 +452,9 @@ function buildIssueWhere(
     args.push(...input.subjects);
   }
 
-  if (input.q) {
-    addIn(clauses, args, 'i.id', searchIssueIds && searchIssueIds.length > 0 ? searchIssueIds : [IMPOSSIBLE_ID]);
+  if (searchIssueIds) {
+    clauses.push(searchIssueIds.sql);
+    args.push(...searchIssueIds.args);
   }
 
   return { sql: `WHERE ${clauses.join(' AND ')}`, args };
@@ -581,32 +614,25 @@ function stringCountMap(counts: Map<FacetCountValue, number>): Map<string, numbe
   return strings;
 }
 
-async function queryIssueIdsMatchingSearch(rawQuery: string): Promise<string[] | null> {
+async function queryIssueIdsMatchingSearch(rawQuery: string): Promise<SqlPart | null> {
   const query = rawQuery.toLowerCase().replace(/\s+/g, ' ').trim();
   if (!query) return null;
   const pattern = `%${escapeLike(query)}%`;
+  const indexed = Array.from(query).length >= 3 && await hasSearchIndex('issue_metadata_fts');
 
-  const result = await getDb().execute({
+  return {
     sql: `
-      SELECT DISTINCT i.id
-      FROM issues i
-      JOIN magazines m ON m.id = i.magazine_id
-      LEFT JOIN json_each(i.topics_json) topic ON true
-      WHERE i.is_published = 1
-        AND i.pdf_url NOT LIKE '%.supabase.co/%'
-        AND (
-          lower(i.title) LIKE ?
-          OR lower(coalesce(i.theme, '')) LIKE ?
-          OR lower(coalesce(i.description, '')) LIKE ?
-          OR lower(m.name) LIKE ?
-          OR lower(coalesce(topic.value, '')) LIKE ?
+        ${indexed ? 'i.rowid IN (SELECT rowid FROM issue_metadata_fts WHERE issue_metadata_fts MATCH ?) AND' : ''}
+        (
+          lower(i.title) LIKE ? ESCAPE '\\'
+          OR lower(coalesce(i.theme, '')) LIKE ? ESCAPE '\\'
+          OR lower(coalesce(i.description, '')) LIKE ? ESCAPE '\\'
+          OR lower(m.name) LIKE ? ESCAPE '\\'
+          OR EXISTS (SELECT 1 FROM json_each(i.topics_json) topic WHERE lower(coalesce(topic.value, '')) LIKE ? ESCAPE '\\')
         )
-      LIMIT 10000
     `,
-    args: [pattern, pattern, pattern, pattern, pattern],
-  });
-
-  return result.rows.map((row) => String(row.id));
+    args: [...(indexed ? [literalFtsPhrase(query)] : []), pattern, pattern, pattern, pattern, pattern],
+  };
 }
 
 function escapeLike(value: string): string {

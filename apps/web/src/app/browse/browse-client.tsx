@@ -1,4 +1,5 @@
 'use client';
+import { TtlCache } from '@/lib/ttl-cache';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -139,8 +140,8 @@ function BrowseContent({
   const gridTopRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const currentCacheKey = useMemo(() => browseCacheKey(filters), [filters]);
-  const responseCacheRef = useRef(new Map<string, BrowseCacheEntry>());
-  const inFlightRequestRef = useRef(new Map<string, Promise<BrowseCacheEntry>>());
+  const responseCacheRef = useRef(new TtlCache<BrowseCacheEntry>(60_000, 32));
+  const inFlightRequestRef = useRef(new Map<string, { promise: Promise<BrowseCacheEntry>; controller: AbortController }>());
   const cacheSeededRef = useRef(false);
   if (!cacheSeededRef.current) {
     responseCacheRef.current.set(currentCacheKey, {
@@ -179,7 +180,8 @@ function BrowseContent({
       if (cached) return Promise.resolve(cached);
 
       const inFlight = inFlightRequestRef.current.get(key);
-      if (inFlight) return inFlight;
+      if (inFlight && !inFlight.controller.signal.aborted) return inFlight.promise;
+      const controller = new AbortController();
 
       const request = fetchIssues({
         years: requestFilters.years,
@@ -193,6 +195,7 @@ function BrowseContent({
         page: requestFilters.page,
         pageSize: PAGE_SIZE,
         availability: requestFilters.availability,
+        signal: controller.signal,
       })
         .then((result) => {
           const entry = {
@@ -201,20 +204,28 @@ function BrowseContent({
             totalPages: result.totalPages,
             facets: result.facets ?? initialFacets,
           };
-          responseCacheRef.current.set(key, entry);
+          if (!controller.signal.aborted) responseCacheRef.current.set(key, entry);
           return entry;
         })
         .finally(() => {
-          if (inFlightRequestRef.current.get(key) === request) {
+          if (inFlightRequestRef.current.get(key)?.promise === request) {
             inFlightRequestRef.current.delete(key);
           }
         });
 
-      inFlightRequestRef.current.set(key, request);
+      inFlightRequestRef.current.set(key, { promise: request, controller });
       return request;
     },
     [initialFacets],
   );
+
+  useEffect(() => {
+    const requests = inFlightRequestRef.current;
+    return () => {
+      for (const { controller } of requests.values()) controller.abort();
+      requests.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -237,15 +248,18 @@ function BrowseContent({
   }, [issues, loading]);
 
   const [panelOpen, setPanelOpen] = useState(true);
+  const [panelReady, setPanelReady] = useState(false);
+  const filterDialogRef = useRef<HTMLDialogElement>(null);
   const panelScrollRestoreRef = useRef<number | null>(null);
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(PANEL_STORAGE_KEY) : null;
-    if (stored !== null) setPanelOpen(stored === 'true');
-    else if (window.matchMedia('(max-width: 767px)').matches) setPanelOpen(false);
+    if (window.matchMedia('(max-width: 767px)').matches) setPanelOpen(false);
+    else if (stored !== null) setPanelOpen(stored === 'true');
+    setPanelReady(true);
   }, []);
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
-  }, [panelOpen]);
+    if (panelReady) localStorage.setItem(PANEL_STORAGE_KEY, String(panelOpen));
+  }, [panelOpen, panelReady]);
 
   useLayoutEffect(() => {
     const scrollTop = panelScrollRestoreRef.current;
@@ -258,6 +272,37 @@ function BrowseContent({
     panelScrollRestoreRef.current = window.scrollY;
     setPanelOpen(open);
   }, []);
+
+  useEffect(() => {
+    if (!panelReady || !panelOpen) return;
+    const dialog = filterDialogRef.current;
+    if (!dialog) return;
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    let opened = false;
+    const syncDialog = () => {
+      if (mobile.matches) {
+        if (!dialog.open) dialog.showModal();
+        document.body.style.overflow = 'hidden';
+        opened = true;
+      } else {
+        dialog.close();
+        document.body.style.overflow = previousOverflow;
+      }
+    };
+    syncDialog();
+    mobile.addEventListener('change', syncDialog);
+    return () => {
+      mobile.removeEventListener('change', syncDialog);
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      if (opened) requestAnimationFrame(() => {
+        const target = previousFocus?.isConnected && previousFocus !== document.body ? previousFocus : document.querySelector<HTMLElement>('[data-filter-trigger]');
+        target?.focus({ preventScroll: true });
+      });
+    };
+  }, [panelOpen, panelReady]);
 
   useEffect(() => {
     let frame = 0;
@@ -312,6 +357,7 @@ function BrowseContent({
     }
 
     let cancelled = false;
+    const requests = inFlightRequestRef.current;
     setLoading(true);
     loadBrowseEntry(filters, currentCacheKey)
       .then((entry) => {
@@ -326,11 +372,14 @@ function BrowseContent({
 
     return () => {
       cancelled = true;
+      requests.get(currentCacheKey)?.controller.abort();
     };
   }, [applyBrowseEntry, currentCacheKey, filters, loadBrowseEntry]);
 
   const prefetchAvailability = useCallback(
     (availability: AvailabilityFilter) => {
+      const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+      if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType ?? '')) return;
       if (availability === filters.availability || !shouldPrefetchAvailability(filters)) return;
       const key = browseCacheKey(filters, { availability, page: 1 });
       const requestFilters = { ...filters, availability, page: 1 };
@@ -342,21 +391,7 @@ function BrowseContent({
     [filters, loadBrowseEntry],
   );
 
-  // Desktop visitors can switch availability views before a hover prefetch
-  // finishes. Warm both alternate first pages immediately after hydration;
-  // the shared in-flight map lets a quick click join this exact request.
-  useEffect(() => {
-    if (!window.matchMedia('(min-width: 768px)').matches || !shouldPrefetchAvailability(filters)) {
-      return;
-    }
-    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    if (connection?.saveData) return;
-
-    const timeoutId = window.setTimeout(() => {
-      for (const option of availabilityOptions) prefetchAvailability(option.id);
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [filters, prefetchAvailability]);
+  // Alternate lists are warmed on hover/focus intent, not every filter change.
 
   const handleAvailabilityChange = useCallback(
     (availability: AvailabilityFilter) => {
@@ -514,7 +549,7 @@ function BrowseContent({
     setDownloadOpen(true);
     try {
       await downloadAsZip({
-        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url })),
+        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url, sizeBytes: i.file_size_bytes })),
         zipName: `AIM Archive — ${downloadable.length} issue${downloadable.length === 1 ? '' : 's'}`,
         onProgress: (p) => setProgress({ ...p, skipped: [...preSkipped, ...p.skipped] }),
         signal: abortRef.current.signal,
@@ -592,6 +627,7 @@ function BrowseContent({
           transition={{ type: 'spring', damping: 30, stiffness: 240, mass: 0.8 }}
           className="sticky top-20 hidden h-[calc(100vh-5rem)] shrink-0 self-start overflow-hidden md:block"
           aria-hidden={!panelOpen}
+          inert={!panelOpen}
         >
           <div
             className={`absolute inset-y-0 right-0 w-[280px] border-r border-gray-100 transition-opacity duration-200 ${
@@ -609,29 +645,19 @@ function BrowseContent({
           </div>
         </motion.aside>
 
-        {/* Mobile drawer — overlay with backdrop */}
-        <AnimatePresence>
+        {/* Native modal contains focus and makes the background inert. */}
           {panelOpen && (
-            <motion.div
-              key="mobile-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => setPanelVisibility(false)}
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
-            />
-          )}
-        </AnimatePresence>
-        <AnimatePresence initial={false}>
-          {panelOpen && (
-            <motion.aside
-              key="mobile-drawer"
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-              className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] shadow-xl md:hidden"
+            <dialog
+              ref={filterDialogRef}
+              aria-label="Archive filters"
+              aria-modal="true"
+              onCancel={(event) => { event.preventDefault(); setPanelVisibility(false); }}
+              onClick={(event) => {
+                if (event.target !== event.currentTarget) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setPanelVisibility(false);
+              }}
+              className="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-80 max-w-[85vw] border-0 p-0 shadow-xl backdrop:bg-black/40 md:hidden"
             >
               <FilterPanel
                 facets={facets}
@@ -641,9 +667,8 @@ function BrowseContent({
                 hasActiveFilters={hasActiveFilters}
                 onClose={() => setPanelVisibility(false)}
               />
-            </motion.aside>
+            </dialog>
           )}
-        </AnimatePresence>
 
         {/* Grid area */}
         <div ref={gridTopRef} className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
@@ -653,6 +678,7 @@ function BrowseContent({
                 <button
                   type="button"
                   onClick={() => setPanelVisibility(true)}
+                  data-filter-trigger
                   className="inline-flex h-11 items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 text-sm font-medium text-flame-700 shadow-sm transition-colors hover:border-flame-300 hover:bg-flame-50"
                 >
                   <Filter className="h-4 w-4" />
@@ -664,7 +690,7 @@ function BrowseContent({
                   )}
                 </button>
               )}
-              <span className="min-w-0 truncate text-sm font-medium text-gray-400">
+              <span className="min-w-0 truncate text-sm font-medium text-gray-600">
                 {issueCountText}
               </span>
             </div>
@@ -809,6 +835,7 @@ function BrowseContextControls({
       <button
         type="button"
         onClick={onToggleFilters}
+        data-filter-trigger
         aria-expanded={panelOpen}
         aria-label={panelOpen ? 'Close filters' : 'Open filters'}
         title={panelOpen ? 'Close filters' : 'Open filters'}
@@ -1037,7 +1064,7 @@ function SortMenu({
                     <span className="block text-sm font-semibold leading-tight">
                       {option.label}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-gray-400">
+                    <span className="mt-0.5 block truncate text-xs text-gray-600">
                       {option.helper}
                     </span>
                   </span>
@@ -1104,11 +1131,11 @@ function AvailabilityTabs({
                 <span className="block truncate text-sm font-semibold leading-snug sm:inline sm:whitespace-nowrap sm:text-[13px]">
                   {label}
                 </span>
-                <span className={`block text-[11px] font-medium sm:hidden ${active ? 'text-white/80' : 'text-gray-400'}`}>
+                <span className={`block text-[11px] font-medium sm:hidden ${active ? 'text-white' : 'text-gray-600'}`}>
                   {helper}
                 </span>
               </span>
-              <span className={`hidden whitespace-nowrap text-[11px] font-medium leading-none sm:block ${active ? 'text-white/80' : 'text-gray-400'}`}>
+              <span className={`hidden whitespace-nowrap text-[11px] font-medium leading-none sm:block ${active ? 'text-white' : 'text-gray-600'}`}>
                 {helper}
               </span>
             </button>
@@ -1185,7 +1212,7 @@ function EmptyState({
 }) {
   return (
     <div className="py-20 text-center">
-      <p className="text-lg text-gray-400">No issues match your filters</p>
+      <p className="text-lg text-gray-600">No issues match your filters</p>
       {hasActiveFilters && (
         <button
           onClick={onClearAll}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { Inter, Aboreto, Tiro_Devanagari_Hindi, Tangerine } from 'next/font/google';
+import localFont from 'next/font/local';
+import { WebVitals } from '@/components/web-vitals';
 import '@/styles/globals.css';
 import { ContinueReadingFab } from '@/components/layout/continue-reading-fab';
 import { PageTransition } from '@/components/layout/page-transition';
@@ -11,30 +12,34 @@ import { PageTransition } from '@/components/layout/page-transition';
 // into the cascade at render time. Without this composition, only the
 // primary font of each token would actually load — fallback fonts
 // (e.g. Tiro Devanagari Hindi for Hindi glyphs) would silently miss.
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: './fonts/Inter-variable.woff2',
+  weight: '100 900',
   variable: '--font-inter',
   display: 'swap',
 });
 
-const aboreto = Aboreto({
-  subsets: ['latin'],
-  weight: ['400'],
+const aboreto = localFont({
+  src: './fonts/Aboreto-Regular.woff2',
+  weight: '400',
   variable: '--font-aboreto',
   display: 'swap',
 });
 
-const tiroDevanagari = Tiro_Devanagari_Hindi({
-  subsets: ['devanagari'],
-  weight: ['400'],
+const tiroDevanagari = localFont({
+  src: './fonts/TiroDevanagariHindi-Regular.woff2',
+  weight: '400',
   variable: '--font-tiro-deva',
   display: 'swap',
 });
 
-const tangerine = Tangerine({
-  subsets: ['latin'],
-  weight: ['400', '700'],
+const tangerine = localFont({
+  src: [
+    { path: './fonts/Tangerine-Regular.woff2', weight: '400' },
+    { path: './fonts/Tangerine-Bold.woff2', weight: '700' },
+  ],
   variable: '--font-tangerine',
+  preload: false,
   display: 'swap',
 });
 
@@ -126,6 +131,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <PageTransition>{children}</PageTransition>
         <ContinueReadingFab />
+        {process.env.NEXT_PUBLIC_ENABLE_WEB_VITALS === 'true' && <WebVitals />}
       </body>
     </html>
   );

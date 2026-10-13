@@ -1,4 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
+import { isSupportedAssetUrl, normalizePublicAssetUrl } from '../asset-url';
 
 let cachedClient: Client | null = null;
 
@@ -31,11 +32,7 @@ export function createId(): string {
   return crypto.randomUUID();
 }
 
-export function isSupabaseHostedUrl(url: string | null | undefined): boolean {
-  return typeof url === 'string' && url.includes('.supabase.co/');
-}
-
 export function displayableAssetUrl(url: string | null | undefined): string | null {
-  if (!url || isSupabaseHostedUrl(url)) return null;
-  return url;
+  if (!url || !isSupportedAssetUrl(url)) return null;
+  return normalizePublicAssetUrl(url);
 }

@@ -7,12 +7,12 @@
 ## 1. Project Overview
 
 ### What
-A modern, beautiful digital archive platform to preserve and provide free public access to decades of monthly magazine publications by Sri Aurobindo Society. The platform serves as the definitive archive for magazines published in English, Hindi, Tamil, Marathi, Bengali, and other Indian languages.
+A modern, beautiful digital archive platform to preserve and provide free public access to decades of monthly magazine publications by Sri Aurobindo Society. Current public catalogue scope is English and Hindi; additional languages require an editorial decision.
 
 ### Who
 - **Organization**: Sri Aurobindo Society (linked to Sri Aurobindo Ashram / Auroville)
 - **Parent Website**: https://aim.aurosociety.org/ (legacy — this project is a fresh, modern rebuild)
-- **Target Subdomain**: https://aimarchive.aurosociety.org/ (tentative)
+- **Target Subdomain**: https://aimarchive.aurosociety.org/ (preferred; setup/spending deferred)
 - **Audience**: Devotees, spiritual seekers, researchers, and all people worldwide
 - **Admin Team**: Multiple admins (no role hierarchy — all admins have equal access)
 
@@ -21,22 +21,21 @@ The magazines — especially **All India Magazine** (English) and **Agnishikha**
 
 ### Platforms
 - **Web App** (primary) — responsive for desktop, tablet, mobile browsers
-- **Android App** — native feel, mirrors web features, supports offline reading
-- **iOS App** — same as Android (shared codebase via React Native/Expo)
+- **Android App** — planned; current Expo implementation is a skeleton
+- **iOS App** — planned through the shared React Native/Expo codebase
 
 ---
 
 ## 2. Magazines & Content
 
-### Magazine Editions (5–6 languages)
+### Current Magazine Editions
 | Magazine Name | Language | Status |
 |---|---|---|
 | All India Magazine (AIM) | English | Primary |
-| Agnishikha | Hindi | Active |
-| (TBD) | Tamil | Active |
-| (TBD) | Marathi | Active |
-| (TBD) | Bengali | Active |
-| (TBD) | Other | Potential |
+| Agnishikha | Hindi | Existing catalogue retained; new uploads on hold by owner decision, 8 October 2026 |
+Additional languages are optional future scope, not currently promised editions.
+
+Current ingestion focuses on English All India Magazine issues only. Do not resume Agnishikha uploads without a new owner/editorial decision. Dynamic Pages is excluded from the planned handover; it is not an outstanding implementation commitment.
 
 - **Branding is unified** across all language editions (same logo, same identity)
 - Magazine names may differ per language, but they belong to the same family
@@ -58,199 +57,54 @@ Magazine
 ### File Handling
 - **Source format**: Always PDF (uploaded by admin)
 - **Auto-conversion**: PDF → EPUB and PDF → MOBI (planned — Phase 2)
-- **Bulk import**: Support uploading multiple PDFs at once with metadata assignment (planned)
+- **Bulk import**: Multiple-PDF bulk upload with metadata assignment is implemented
 - **Naming convention**: `{Magazine Name} {Month}-{Year}.pdf` (e.g., `All India Magazine Apr-2026.pdf`)
-- **Note**: Current PDFs are Chrome print-to-PDF (Skia renderer) — no selectable text layer. OCR is required for text extraction.
+- **Text extraction**: source PDFs vary; use native text where readable and OCR only where needed. Do not infer text-layer quality from the PDF producer alone.
 
 ---
 
 ## 3. Tech Stack
 
-### Web Frontend
-- **Framework**: Next.js 15 (App Router, React 19, TypeScript)
-- **Styling**: Tailwind CSS 4
-- **Animations**: Framer Motion (smooth, modern, slick transitions)
-- **PDF Viewer**: react-pdf (pdf.js wrapper) — in-app reading experience
-- **State Management**: Zustand (lightweight, bookmarks store with localStorage persistence)
-- **Icons**: Lucide React
-
-### Mobile App
-- **Framework**: React Native with Expo (SDK 52+)
-- **Navigation**: Expo Router (file-based, 4 tabs: Home, Browse, Search, Library)
-- **PDF Viewer**: react-native-pdf
-- **Offline Storage**: expo-file-system + SQLite (expo-sqlite)
-- **Shared Logic**: Shared TypeScript types/utilities with web via @aim-archive/shared
-
-### Backend & Infrastructure
-- **API**: Next.js API Routes (Route Handlers) — 24 route handlers
-- **Database**: Supabase (PostgreSQL) — free tier, South Asia (Mumbai) region
-- **Project ID**: `glduurfsjyxpkdnxgdqz`
-- **Authentication**: Session cookie-based admin auth (admin email + shared password)
-- **File Storage**: Cloudflare R2 (`aim-archive` bucket, public via `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev`, custom domain planned) — all new uploads go here. Legacy Supabase Storage (`magazines` bucket) still holds the original 8 pre-May-2026 issues; Phase 3 migration script will move them. Access pattern: server-side uploads via `@aws-sdk/client-s3` pointed at R2, public reads direct from the `pub-*.r2.dev` URL. Helpers in `apps/web/src/lib/r2-client.ts` (`uploadToR2`, `deleteFromR2`, `storageKeyFromUrl`, `isR2Url`, `isSupabaseStorageUrl`) handle both backends so the DELETE/replace routes work on either-era issues.
-- **Full-Text Search**: PostgreSQL Full-Text Search via Supabase RPC function (`search_issues`)
-  - Uses `plainto_tsquery`, `ts_rank` for relevance, `ts_headline` for highlighted snippets
-  - Fallback to ILIKE on titles/topics when no full-text results
-- **PDF Text Extraction**: OCR pipeline — Tesseract.js + pdfjs-dist (v4) + node-canvas
-  - Renders each PDF page to PNG via pdfjs-dist → node-canvas
-  - OCR via Tesseract.js (eng+hin languages)
-  - ~3-5 seconds per page, runs synchronously during admin upload
-  - Supports scanned/image-based PDFs (no text layer required)
-- **Hosting**: Vercel (web app) — free tier, **deployed at `aim-archive.vercel.app`**
-- **CDN**: Vercel Edge Network (automatic with Vercel hosting)
-
-### DevOps
-- **Version Control**: Git + GitHub (`MugdhanilK/aim-archive`, private repo)
-- **CI/CD**: GitHub Actions (planned)
-- **Monorepo**: Turborepo (manages web + mobile + shared packages)
-- **Package Manager**: pnpm 10.33.0
-- **Linting**: ESLint + Prettier (Tailwind plugin)
-- **Testing**: Vitest (unit) + Playwright (e2e for web) — planned
+- Web candidate (10 October, not deployed): Next.js 15.5.27, Node 22.23.3, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Zustand, Lucide and Zod. See SETUP.md for the tested runtime contract.
+- Database: Turso/libSQL through `@libsql/client` and server repositories in `apps/web/src/lib/db/`.
+- Storage: Cloudflare R2 for PDFs and covers. Catalogue assets use the configured R2 base; unsupported locations are excluded from public queries.
+- Search: FTS5 trigram indexes for page text and metadata, with SQL fallback when unavailable. Migrations 00007 and 00008 were applied for the September 19 release.
+- Extraction: native English text first, English OCR where needed, using PDF.js v4, canvas and Tesseract.js. Hindi OCR is excluded by owner decision.
+- Indexing: durable database jobs and checkpoints processed outside Vercel by a manual GitHub Actions worker. See [worker guide](INDEXING_WORKER.md) and [GitHub setup](GITHUB_INDEXING.md).
+- Reader: react-pdf and pdfjs-dist 4.8.69, with a self-hosted browser worker.
+- Mobile: Expo/React Native skeleton with Home, Browse, Search and Library tabs; reader/offline/sync features remain planned.
+- Tooling: pnpm/Turborepo, ESLint, TypeScript, Node regression scripts and Playwright browser verification. See root `package.json` for available tests.
+- Hosting: Vercel website; GitHub worker code deployment is separate from a Vercel deployment.
 
 ---
 
 ## 4. Current Implementation Status
 
-### 4.1 What's Built and Working
+13 October owner update: Society acceptance is reported and the owner will continue participating. Immediate delivery is the complete reviewed Git source for Dibyanshu Ji. Operational access, final release acceptance and hosted checks remain open. See the tracker; earlier withdrawal/acceptance-pending text in dated correspondence is historical.
 
-#### Public Web Pages (All Live)
-- **Homepage** — hero section, animated bookshelf, **Continue Reading shelf** (with theme), features grid, archive stats, CTA
-- **Browse page** — collapsible side filter panel (5 multi-select sections: Year, Month, Magazine, Language, Subjects with live facet counts), grid/list view toggle (sortable list table on md+), URL-synced filter state (`?year=…&subject=…&view=list&page=2`), pagination with smooth scroll, active filter chips, animated row stagger, `localStorage`-remembered panel state, drawer overlay on mobile. **Grid is responsive 2/3/3/4/4/5 across breakpoints up to 2xl. Theme Title displayed below Magazine Title in both card and list view (gold-flame gradient with vertical accent bar).**
-- **Issue detail page** — cover thumbnail, **Theme Title prominently below the Magazine Title with accent bar**, metadata, topics (alphabetically sorted, link to `?subject=`), download/read/bookmark buttons
-- **In-app PDF reader** — page navigation, zoom, fullscreen, page scrubber, bookmark, contextual back-link, **info drawer (shows theme + cover + progress + topics)**
-- **Search page** — full-text OCR search **plus theme/title/topic metadata search merged into one ranked list**, highlighted snippets, page numbers, advanced filters
-- **Bookmarks page** — saved issues list with clear all (persisted via Zustand + localStorage). Same grid breakpoints as Browse (2/3/3/4/4/5).
-- **Header** — responsive nav, mobile hamburger menu, search/bookmark icons (bookmark icon shows live count badge)
-- **Footer** — links, branding, discreet admin link
-- **Issue card** (used on browse + bookmarks): whole-card click navigates to reader, hover lift via Framer, **Theme Title shown below Magazine Title (gold-flame gradient + accent bar)**, native Web Share button (with cover thumbnail attached as a `File` via `navigator.share({files})`, clipboard fallback with green ✓ feedback)
+Deployed release evidence: [19 September 2026](PRODUCTION_RELEASE_2026-09-19.md). The 10 October local candidate includes private PDF delivery, patched dependencies and locally verified CI; publication, hosted CI and origin closure remain open. Start with the [Society discussion package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) for handover context. Active unfinished work belongs in [TO DO LIST.md](TO%20DO%20LIST.md).
 
-#### Admin Panel (All Live)
-- **Login** (`/admin/login`) — email + password authentication, session cookies
-- **Sidebar** — collapsible (icons-only rail at 64px when collapsed) and resizable (drag right edge, 200–360px range). Both states persisted to `localStorage` under `aim-admin-sidebar`. Toggle is a flame-bordered chevron button at the top of the sidebar header. Mobile keeps the existing hamburger drawer untouched. See `apps/web/src/app/admin/(dashboard)/layout.tsx`.
-- **Dashboard** (`/admin`) — stat cards (magazines, issues, reads, downloads), popular issues, quick links
-- **Magazine management** (`/admin/magazines`) — add/edit/delete with language selector
-- **Issue management** (`/admin/issues`) — Each issue is rendered as **a 2-row card unit** (one `<tbody>` per issue) with:
-  - **Cover thumbnail in the leftmost column** (36×48 px) with a portal-rendered hover preview (240×320 px) that escapes the table's `overflow-x-auto` clipping via `react-dom`'s `createPortal` — see `CoverThumbnail` in `issues/page.tsx`. Position auto-clamps to the viewport.
-  - **Main row** with checkbox, cover, Magazine Title, Theme Title (gold-flame gradient column at lg+), Magazine (2xl+ only), Topic Tags, Reads/Downloads/Size/Modified (numeric columns hidden at smaller breakpoints).
-  - **Actions row** beneath each main row — Cover · Duplicate · Status (publish toggle with emerald/amber dot) grouped in a soft-bordered toolbar; **Edit** as a primary flame-gradient button; **Delete** kept separate with red-tinted hover.
-  - **Hover effect**: each issue card scales by 1.006, lifts with a soft gold-flame shadow, and z-raises so the lift doesn't get clipped. Smooth 200ms ease-out.
-  - **Edit panel** slides down inline below the issue (no modal): same single-column layout as the upload form (Magazine / Month / Year, Magazine Title, Theme Title, Topic Tags, Description). Save button stays disabled until the form is dirty (`isDirty` memo). Auto-regenerates Magazine Title when magazine/month/year change (skips the first render so a customised title isn't clobbered on open). Click outside the form (on the tinted band) or press Esc to close. Topic Tags dropdown uses `transitionEnd` to flip `overflow: visible` after the slide-in completes so it doesn't clip the dropdown. See `EditRowForm` in `issues/page.tsx`.
-  - Bulk select, status filter, topic filter, CSV export, bulk upload, duplicate-issue prefill, last-modified column, sortable columns (Magazine Title, Reads, Downloads, Size, Modified).
-- **Upload** (`/admin/issues/new`) — drag-drop PDF zone, optional Cover Image override (auto-detects spread vs single, lets admin download front/back halves as PDFs), Magazine / Month / Year, **Magazine Title** (auto-generated), **Theme Title** (the issue's overarching theme — e.g. "Sunlit Path", "सूर्यलोकित पथ"), **Topic Tags**, Description. New uploads go to Cloudflare R2, then OCR indexing and auto-generated cover thumbnail run.
-- **Topics** — managed dropdown (component: `components/admin/tags-input.tsx`) used in upload + inline edit. Pill-style with click-to-toggle, add new (Enter or +Add button), inline rename via pencil icon (renames across every issue), delete via trash icon (removes from every issue with usage-count confirmation). All topic mutations sort alphabetically and dedupe.
+### Public web
 
-#### API Routes (24 route handlers)
-| Route | Methods | Purpose |
-|---|---|---|
-| `/api/magazines` | GET | List all magazines |
-| `/api/issues` | GET | List issues with filters (magazine, year, **month**, language, topic) + pagination |
-| `/api/issues/[id]` | GET | Single issue detail + increment read count |
-| `/api/issues/[id]/download` | GET | Increment download count, redirect to PDF URL |
-| `/api/search` | GET | OCR full-text search (RPC) **merged in parallel with metadata search across title / theme / topics / description**. FTS results take priority for any issue; metadata-only matches are appended with `page_number: 1` and a synthesized snippet (e.g. `Theme: <highlighted>`). Returns unified `FullTextSearchResult` shape. |
-| `/api/pdf/[...path]` | GET | Serve local PDFs during development |
-| `/api/site-settings` | GET | Public-facing settings (feedback form URL, etc.) |
-| `/api/admin/auth` | POST, DELETE | Admin login/logout |
-| `/api/admin/auth/check` | GET | Verify admin session |
-| `/api/admin/stats` | GET | Dashboard statistics |
-| `/api/admin/magazines` | GET, POST | List/create magazines |
-| `/api/admin/magazines/[id]` | PUT, DELETE | Update/delete magazine |
-| `/api/admin/issues` | GET | List all issues (admin view) |
-| `/api/admin/issues/[id]` | PUT, DELETE | Update/delete issue (PUT now accepts `theme`) |
-| `/api/admin/issues/[id]/cover` | POST | Replace cover image for a single issue |
-| `/api/admin/issues/[id]/pdf` | POST | Replace the source PDF, reindex OCR, and refresh storage URLs |
-| `/api/admin/issues/[id]/reindex` | POST | Re-run OCR + regenerate thumbnail on single issue |
-| `/api/admin/upload` | POST | Upload PDF + create issue + OCR index + thumbnail. Now accepts `theme` field. |
-| `/api/admin/reindex` | POST | Batch reindex (one issue per call) |
-| `/api/admin/storage` | GET, DELETE | Inspect and clean Cloudflare R2 objects, including legacy Supabase references |
-| `/api/admin/thumbnails` | POST | Backfill cover thumbnails for issues missing one (one per call) |
-| `/api/admin/topics` | GET, DELETE | List all topics with usage counts / delete a topic from every issue |
-| `/api/admin/topics/rename` | POST | Rename a topic across every issue (`{from, to}`) |
-| `/api/admin/site-settings` | GET, PATCH | Manage public site settings (feedback form URL, etc.) |
+Home, Browse, Search, Bookmarks, issue detail and Reader are deployed. Public pages fetch initial data on the server and pass it to client components. Features include paginated shelves/listings, English indexed search with page links/highlights, local bookmarks and reading history, PDF previews/readers, individual downloads and bounded ZIP downloads. The five-year access policy restricts recent editions.
 
-#### Database (8 tables + `site_settings`, Supabase PostgreSQL)
-- `magazines` — 2 records (All India Magazine, Agnishikha)
-- `issues` — 8+ records (Jan–Apr 2026 × 2 magazines, Feb 2024 reference set, etc.). Now includes a nullable `theme TEXT` column for the issue's cover-printed theme.
-- `issue_search_index` — 384 pages of OCR-extracted text indexed
-- `admins` — 1 admin (admin@aurosociety.org)
-- `users` — empty (for future Google OAuth sync)
-- `user_bookmarks` — empty (for future sync)
-- `user_reading_history` — empty (for future sync)
-- `analytics_visibility` — 5 metric configs seeded
-- `site_settings` — feedback-form URLs and other public knobs
+### Admin
 
-**Search is theme-aware everywhere:**
-- Browse / Bookmarks page filter checks title + **theme** + magazine name + description + partial topic text. Browse now performs this parity search from the server-side listing helper (`apps/web/src/lib/public-issues.ts`) instead of relying on a capped client list.
-- Admin Issues page search box checks title + **theme** + topics.
-- `/api/search` (global Search page + Header search) merges OCR full-text results with metadata results that include `theme.ilike.%q%`.
+Login, dashboard, magazine/issue management, bulk upload/actions, PDF and cover replacement, topics, CSV export, storage inspection, settings, navigation management and the dedicated indexing workspace are implemented. See [navigation guide](NAVIGATION_MANAGEMENT.md). All privileged API work must verify admin authentication.
 
-#### Cover Thumbnail Pipeline
-- New uploads automatically render the first page of the PDF to a 600px JPEG (~85% quality) via `pdfjs-dist` v4 + `node-canvas`, upload alongside the source PDF in the `magazines` bucket as `<slug>-thumb.jpg`, and persist the public URL on `issues.cover_image_url`.
-- Implemented in `apps/web/src/lib/pdf-thumbnail.ts` (`generateAndUploadThumbnail`, `generateThumbnailFromUrl`).
-- Thumbnail generation is **non-blocking**: a failure logs and continues; the issue still gets created without a cover.
-- Backfill via `POST /api/admin/thumbnails` (one issue per call). Drive in a loop from the browser console:
-  ```js
-  async function backfill() {
-    let remaining = 1;
-    while (remaining > 0) {
-      const r = await fetch('/api/admin/thumbnails', { method: 'POST' });
-      const d = await r.json();
-      console.log(d);
-      remaining = d.remaining ?? 0;
-      if (d.error) break;
-    }
-  }
-  backfill();
-  ```
-- **Required Supabase config**: the `magazines` storage bucket must allow `image/jpeg` (and `image/png` for safety) in `allowed_mime_types`. Set via SQL: `UPDATE storage.buckets SET allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png'] WHERE id = 'magazines';`
+### Indexing and release limits
 
-#### OCR + Full-Text Search Pipeline
-- **384 pages** indexed across 8 issues via Tesseract.js OCR
-- Search returns page-level results with highlighted snippets and relevance ranking
-- Example: searching "smile" returns results like:
-  > **All India Magazine Apr-2026** — Page 24
-  > "...light and faith and confidence and joy. If difficulty comes, even that can be faced with a **smile**..."
-- New uploads are automatically OCR-indexed during the upload process
+The English rebuild covered 102 editions and withheld 17 uncertain cover pages; see [rebuild evidence](SEARCH_REBUILD_REPORT.md). The catalogue check recorded 104 issues, supported asset references and no missing themes. These are dated measurements, not permanent totals.
 
-#### Mobile App (Skeleton)
-- Expo project with 4 tab screens (Home, Browse, Search, Library)
-- Tab navigation configured with AIM color scheme
-- Placeholder content on all screens
+Admin **Start indexing** still needs `INDEXING_GITHUB_TOKEN` in Vercel and a controlled live run. Local worker performance changes must also be synced to GitHub main. The latest website deployment alone does not do that.
 
-### 4.2 What's Not Built Yet
+### Route and implementation inventory
 
-#### Admin Enhancements
-- Core admin issue enhancements are implemented: bulk select/actions, manual cover replacement, PDF replacement, download/read columns, pagination, status/topic filters, CSV export, bulk upload, duplicate issue prefill, custom toasts, and custom confirm dialogs.
-- Remaining polish: batch topic editing and deeper server-first data loading for mutation refreshes on very large admin datasets.
+Use `rg --files apps/web/src/app -g 'page.tsx'` and `rg --files apps/web/src/app/api -g 'route.ts'` for the current inventory. Avoid maintaining a second stale route-count table here. Public queries must exclude drafts and enforce access restrictions before exposing asset URLs.
 
-#### Phase 1.5: Polish & Deploy
-- ✅ SEO optimization (meta tags, sitemap, structured data)
-- ✅ Input validation with Zod on all API routes
-- ✅ Deploy to Vercel (`aim-archive.vercel.app`)
-- Performance audit (Lighthouse)
-- Accessibility check
-- Connect domain (aimarchive.aurosociety.org)
+### Deferred scope
 
-#### Phase 2: Enhanced Web Features
-- PDF → EPUB/MOBI auto-conversion (Calibre CLI)
-- Bulk download (select issues → ZIP)
-- Google OAuth sign-in (optional, for cross-device sync)
-- Cross-device sync (bookmarks, history, preferences)
-- Advanced search (within-PDF search, highlighted results in reader)
-- Public analytics display (admin-controlled visibility)
-- Admin analytics dashboard (charts, search query analytics)
-
-#### Phase 3: Mobile App (Android + iOS)
-- Full feature parity with web
-- Offline reading (download + local storage)
-- My Library with storage management
-- Push notifications for new issues
-- Google Play + App Store deployment
-
-#### Phase 4: Polish & Scale
-- Meilisearch upgrade (if PostgreSQL FTS hits limits)
-- "On This Day" historical highlights
-- Guided tour / onboarding
-- Error monitoring (Sentry)
-- CDN optimization for large PDFs
+Domain/CDN setup and spending are explicitly deferred. EPUB/MOBI conversion, public accounts/sync, expanded analytics and a functional native app are future work; consult the active TODO before treating any historical plan as authorization.
 
 ---
 
@@ -272,9 +126,9 @@ Magazine
 - Copied to `apps/web/public/logo.png` for web use
 
 ### Typography
-- **UI font**: Inter (variable, loaded via `next/font/google`)
-- **Heading font**: Playfair Display (variable, loaded via `next/font/google`)
-- Must support Devanagari, Tamil, Bengali, Marathi scripts for multilingual content
+- **UI font**: Inter (variable, bundled via `next/font/local`)
+- **Additional fonts**: Aboreto, Tiro Devanagari Hindi and Tangerine, bundled via `next/font/local`; see `apps/web/src/app/layout.tsx` and the CSS font tokens for actual usage. Pinned WOFF2 sources, hashes and OFL licenses are in `apps/web/src/app/fonts`; builds no longer download Google Fonts. See [setup](SETUP.md).
+- Support English and Devanagari for the current catalogue; validate additional scripts when language expansion is approved.
 
 ### Animation & Feel
 - **Modern, slick, smooth** — not flashy, but refined
@@ -295,303 +149,58 @@ Magazine
 
 ## 6. Database Schema
 
-### Core Tables (Supabase PostgreSQL)
-```sql
-magazines
-  - id UUID PK DEFAULT uuid_generate_v4()
-  - name TEXT NOT NULL
-  - language TEXT NOT NULL DEFAULT 'english'
-  - description TEXT NOT NULL DEFAULT ''
-  - cover_image_url TEXT
-  - created_at TIMESTAMPTZ DEFAULT NOW()
-  - updated_at TIMESTAMPTZ DEFAULT NOW()
+The authoritative schema is [Turso migrations](packages/turso/migrations/00001_initial_schema.sql) plus the ordered additive migrations in `packages/turso/migrations/`.
 
-issues
-  - id UUID PK DEFAULT uuid_generate_v4()
-  - magazine_id UUID FK → magazines(id) ON DELETE CASCADE
-  - title TEXT NOT NULL                   -- "Magazine Title", e.g. "Agnishikha — April 2026"
-  - theme TEXT (nullable)                 -- "Theme Title" — overarching theme printed on the cover (e.g. "Sunlit Path", "सूर्यलोकित पथ")
-  - year INT NOT NULL
-  - month INT NOT NULL CHECK (1-12)
-  - description TEXT
-  - topics TEXT[] DEFAULT '{}'
-  - pdf_url TEXT NOT NULL
-  - epub_url TEXT (nullable)
-  - mobi_url TEXT (nullable)
-  - cover_image_url TEXT (nullable)
-  - page_count INT (nullable)
-  - file_size_bytes BIGINT DEFAULT 0
-  - read_count INT DEFAULT 0
-  - download_count INT DEFAULT 0
-  - is_published BOOLEAN DEFAULT TRUE
-  - created_at, updated_at TIMESTAMPTZ
-  - UNIQUE(magazine_id, year, month)
-  - Indexes: magazine_id, year+month, topics (GIN), is_published (partial)
+- Core catalogue, admin and future account tables: magazines, issues, issue_search_index, admins, users, user_bookmarks, user_reading_history and analytics_visibility; site_settings stores configurable public destinations.
+- Migration 00002 adds navigation management.
+- Migrations 00003–00006 add durable indexing jobs, page checkpoints, worker health, coverage/history and indexing controls.
+- Migrations 00007–00008 add FTS5 trigram search for page text and metadata.
+- Use libSQL-compatible types, parameterized queries and transactions through the repository layer.
+- Enforce public visibility/access in server queries and admin permissions through `verifyAdmin()`. Keep index replacement and associated job/coverage writes atomic.
 
-issue_search_index
-  - id UUID PK
-  - issue_id UUID FK → issues(id) ON DELETE CASCADE
-  - page_number INT NOT NULL
-  - content TEXT NOT NULL
-  - search_vector TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED
-  - Indexes: search_vector (GIN), issue_id
+Use the current [backup and recovery notes](MIGRATION_RECOVERY.md); restore only into an explicitly selected isolated target.
 
-admins
-  - id UUID PK, email TEXT UNIQUE, name TEXT, created_at
-
-users (for future cross-device sync)
-  - id UUID PK, google_id TEXT UNIQUE, email TEXT, display_name TEXT, created_at
-
-user_bookmarks
-  - id UUID PK, user_id FK → users, issue_id FK → issues, UNIQUE(user_id, issue_id)
-
-user_reading_history
-  - id UUID PK, user_id FK → users, issue_id FK → issues, last_page INT, last_read_at
-
-analytics_visibility
-  - id UUID PK, metric_name TEXT UNIQUE, is_public BOOLEAN, updated_by FK → admins
-```
-
-### RPC Functions
-```sql
-search_issues(search_query, filter_magazine_id, filter_year_from, filter_year_to, result_limit, result_offset)
-  → TABLE (issue_id, issue_title, magazine_name, magazine_language, year, month, page_number, snippet, rank, cover_image_url, pdf_url)
-  -- Uses plainto_tsquery, ts_rank, ts_headline with <mark> highlights
-```
-
-### Row Level Security
-- Magazines: public SELECT
-- Issues: public SELECT where is_published = TRUE
-- Search index: public SELECT
-- Analytics visibility: public SELECT
-- Users/bookmarks/history: authenticated users can manage own data
-- Admins: RLS enabled with no public policies — service-role-only access (no anon read/write)
-- Admin writes bypass RLS via service role key
-
-### Auto-update Triggers
-- `magazines.updated_at` and `issues.updated_at` auto-update on row change
+Migration tooling now defaults to read-only status and requires an explicit target, records checksums in `aim_schema_migrations`, and refuses to replay an existing schema without reviewed baselining. The live database still has no ledger; no adoption was performed. See the [migration procedure](docs/handover/P4-07_MIGRATION_PROCEDURE.md).
 
 ---
 
 ## 7. Project Structure (Monorepo)
 
-```
-d:/AIM Project/
-├── CLAUDE.md                    # This file (project bible)
-├── ROADMAP.md                   # Phased development roadmap
-├── TO DO LIST.md                # Task tracking
-├── images/
-│   └── AIM_logo.png             # Brand logo
-├── AIM 2026/                    # Source PDFs (not in git)
-│   ├── All India Magazine Jan-2026.pdf
-│   ├── All India Magazine Feb-2026.pdf
-│   ├── All India Magazine Mar-2026.pdf
-│   └── All India Magazine Apr-2026.pdf
-├── Agnishikha 2026/              # Source PDFs (not in git)
-│   ├── Agnishikha Jan-2026.pdf
-│   ├── Agnishikha Feb-2026.pdf
-│   ├── Agnishikha Mar-2026.pdf
-│   └── Agnishikha Apr-2026.pdf
-├── apps/
-│   ├── web/                     # Next.js 15 web app
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   ├── layout.tsx          # Root layout (Inter + Playfair Display)
-│   │   │   │   ├── page.tsx            # Homepage (hero, bookshelf, features)
-│   │   │   │   ├── icon.png            # Favicon
-│   │   │   │   ├── browse/
-│   │   │   │   │   ├── page.tsx        # Server component — fetches issues + magazines, ISR 60s
-│   │   │   │   │   └── browse-client.tsx # Filters, grid/list, pagination (seeded from server)
-│   │   │   │   ├── search/
-│   │   │   │   │   ├── page.tsx        # Server component — fetches magazines for filter dropdown, ISR 60s
-│   │   │   │   │   └── search-client.tsx # Search input + debounced fetch + results
-│   │   │   │   ├── bookmarks/
-│   │   │   │   │   ├── page.tsx        # Server component — fetches all issues, ISR 60s
-│   │   │   │   │   └── bookmarks-client.tsx # Filters by bookmarked IDs from localStorage
-│   │   │   │   ├── issue/[id]/
-│   │   │   │   │   ├── page.tsx        # Server component — fetches single issue, ISR 60s
-│   │   │   │   │   └── issue-detail-client.tsx # Bookmark button + animations + read-count ping
-│   │   │   │   ├── read/[id]/page.tsx  # PDF reader
-│   │   │   │   ├── admin/
-│   │   │   │   │   ├── login/page.tsx
-│   │   │   │   │   └── (dashboard)/
-│   │   │   │   │       ├── layout.tsx      # Sidebar nav
-│   │   │   │   │       ├── page.tsx        # Dashboard
-│   │   │   │   │       ├── magazines/page.tsx
-│   │   │   │   │       └── issues/
-│   │   │   │   │           ├── page.tsx    # Issue table
-│   │   │   │   │           └── new/page.tsx # Upload
-│   │   │   │   └── api/                # 24 route handlers
-│   │   │   ├── components/
-│   │   │   │   ├── admin/tags-input.tsx       # Pill-style topic editor with master-list CRUD
-│   │   │   │   ├── browse/                    # Browse-page-only components
-│   │   │   │   │   ├── filter-panel.tsx       # Side panel with 5 sections
-│   │   │   │   │   ├── filter-section.tsx     # Single accordion section + checkboxes + counts
-│   │   │   │   │   ├── view-toggle.tsx        # List/Grid pill toggle
-│   │   │   │   │   ├── active-filter-chips.tsx
-│   │   │   │   │   ├── issue-list-view.tsx    # Sortable table (md+) + compact rows (mobile)
-│   │   │   │   │   └── pagination.tsx
-│   │   │   │   ├── home/animated-bookshelf.tsx
-│   │   │   │   ├── layout/header.tsx, footer.tsx
-│   │   │   │   ├── magazine/issue-card.tsx    # Whole-card click + share button
-│   │   │   │   └── search/search-result-item.tsx
-│   │   │   ├── lib/
-│   │   │   │   ├── api.ts              # Client-side API + types
-│   │   │   │   ├── admin-auth.ts       # Session verification
-│   │   │   │   ├── bookmarks-store.ts  # Zustand store
-│   │   │   │   ├── pdf-extract.ts      # OCR pipeline (Tesseract + pdfjs + canvas)
-│   │   │   │   ├── pdf-thumbnail.ts    # Cover thumbnail render + upload
-│   │   │   │   ├── search-indexer.ts   # Index pages into Supabase
-│   │   │   │   ├── share-issue.ts      # Web Share API helper (cover file attached)
-│   │   │   │   ├── supabase-server.ts  # Singleton Supabase clients
-│   │   │   │   ├── use-browse-filters.ts # URL-synced browse filter state hook
-│   │   │   │   ├── validations.ts      # Zod schemas for API inputs
-│   │   │   │   └── utils.ts           # formatFileSize, formatMonthYear, cn
-│   │   │   └── styles/globals.css      # Tailwind theme (gold/flame colors)
-│   │   ├── public/logo.png
-│   │   ├── .env.local                  # Supabase keys (not in git)
-│   │   ├── .env.local.example
-│   │   ├── next.config.ts
-│   │   ├── postcss.config.mjs
-│   │   ├── eslint.config.mjs
-│   │   ├── tsconfig.json
-│   │   └── package.json
-│   └── mobile/                  # React Native (Expo) — skeleton
-│       ├── app/
-│       │   ├── _layout.tsx
-│       │   └── (tabs)/
-│       │       ├── _layout.tsx
-│       │       ├── index.tsx    # Home
-│       │       ├── browse.tsx
-│       │       ├── search.tsx
-│       │       └── library.tsx
-│       ├── app.json
-│       ├── tsconfig.json
-│       └── package.json
-├── packages/
-│   ├── shared/                  # @aim-archive/shared
-│   │   └── src/
-│   │       ├── index.ts
-│   │       ├── types.ts         # Magazine, Issue, SearchResult, etc.
-│   │       └── constants.ts     # MONTH_NAMES, LANGUAGE_NAMES, etc.
-│   ├── supabase/                # @aim-archive/supabase
-│   │   ├── migrations/
-│   │   │   ├── 00001_initial_schema.sql    # All tables + RLS + triggers
-│   │   │   └── 00002_search_rpc.sql        # search_issues() function
-│   │   └── src/
-│   │       ├── index.ts
-│   │       ├── client.ts        # createClient, createServerClient
-│   │       └── database.types.ts
-│   └── eslint-config/           # @aim-archive/eslint-config
-├── turbo.json
-├── pnpm-workspace.yaml
-├── package.json
-└── pnpm-lock.yaml
-```
+- `apps/web/`: Next.js app; routes in `src/app`, UI in `src/components`, repositories and services in `src/lib`.
+- `apps/mobile/`: Expo skeleton.
+- `packages/shared/`: shared types/utilities.
+- `packages/turso/migrations/`: current database migrations.
+- `packages/eslint-config/`: shared lint configuration.
+- `scripts/`: development, regression tests, migrations and indexing operators.
+- `.github/workflows/`: hosted worker workflows.
+- `docs/archive/`: historical plans and verification records.
+- `TO DO LIST.md`: active backlog; operating guides are linked from `AGENTS.md`.
+
+Use the filesystem for the detailed route/component inventory; generated outputs and private configuration are not source documentation.
 
 ---
 
 ## 8. Credentials & Configuration
 
-### Supabase
-- **Project URL**: `https://glduurfsjyxpkdnxgdqz.supabase.co`
-- **Project ID**: `glduurfsjyxpkdnxgdqz`
-- **Region**: South Asia (Mumbai)
-- **Storage bucket**: `magazines` (public)
-- Keys stored in `apps/web/.env.local` (not committed to git)
+Runtime configuration is stored privately in `apps/web/.env.local` and Vercel; never paste values into chat or commit them. Consult `apps/web/.env.local.example` and the relevant source modules for variable names.
 
-### Admin Access
-- **Email**: `admin@aurosociety.org`
-- **Password**: Set via `ADMIN_PASSWORD` in the environment. There is no default password fallback.
-- **Admin panel URL**: `/admin/login`
-
-### GitHub
-- **Repository**: `MugdhanilK/aim-archive` (private)
-- **Branch**: `main`
+- Database: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+- R2: account/bucket credentials and public asset URL configuration.
+- Admin: environment password/session configuration and the admins table; no default password fallback.
+- GitHub repository: `MugdhanilK/aim-archive`, branch `main`. Manual worker dispatch configuration is documented in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
+- `aimarchive.aurosociety.org` is the preferred website domain, with setup/spending deferred. An asset hostname has not been selected. See [asset delivery plan](ASSET_DELIVERY_PLAN.md).
 
 ---
 
-## 9. MVP Definition (Phase 1) — MOSTLY COMPLETE
+## 9. Delivery Status
 
-### MVP Includes ✅
-1. ✅ **Homepage** — hero section, animated bookshelf, archive stats, features
-2. ✅ **Browse page** — filter by magazine, language, year, topic
-3. ✅ **Issue detail page** — cover, metadata, download buttons, read button
-4. ✅ **In-app PDF reader** — smooth, responsive, page navigation, zoom, fullscreen
-5. ✅ **Search** — global full-text OCR search with highlighted snippets + page numbers
-6. ✅ **Bookmarks** — heart icon to save, bookmarks page to view (local storage)
-7. ✅ **Download** — individual PDF download via Supabase Storage CDN
-8. ✅ **Responsive design** — works on desktop, tablet, mobile
-9. ✅ **Admin panel** — login, upload PDFs, edit metadata, manage issues/magazines
-10. ✅ **Database + API** — full backend with Supabase (8 tables, 24 route handlers)
-
-### MVP Remaining
-- Custom domain (aimarchive.aurosociety.org)
-- Performance audit (Lighthouse)
-- Accessibility check
-
-### MVP Excludes (Phase 2+)
-- EPUB/MOBI auto-conversion
-- Bulk download as ZIP
-- Google sign-in & cross-device sync
-- Android/iOS native app
-- Offline reading
-- Public analytics display
-- Advanced analytics dashboard
-- Push notifications
-- "On This Day" feature
-- Bulk import with smart metadata detection
+The public website is deployed at https://aim-archive.vercel.app. Build and browser verification evidence is in the [latest release report](PRODUCTION_RELEASE_2026-09-19.md). A deployed website does not imply completion of admin mutation checks, worker source synchronization or native mobile development.
 
 ---
 
-## 10. Development Phases
+## 10. Planning
 
-### Phase 1: Foundation + MVP Web App ✅ COMPLETE (Vercel deployed)
-- ✅ Project scaffolding (monorepo, configs, tooling)
-- ✅ Supabase setup (database, storage, auth)
-- ✅ Core API routes (magazines, issues, search, upload, topics, thumbnails)
-- ✅ Homepage, browse, issue detail, reader, search, bookmarks
-- ✅ Browse redesign (side panel, list/grid views, pagination, URL state, share)
-- ✅ Admin panel (CRUD + upload + search/filter/sort + managed topics)
-- ✅ PDF OCR text extraction pipeline (Tesseract.js)
-- ✅ PDF cover thumbnail pipeline (pdfjs + node-canvas)
-- ✅ Full-text search with ranked results and snippets
-- ✅ Responsive design + animations
-- ✅ SEO optimization
-- ✅ Zod validation on all API routes
-- ✅ Deployed to Vercel (`aim-archive.vercel.app`)
-- ✅ **Theme Title** column on issues + display across browse, list view, detail page, reader info drawer, continue-reading shelf
-- ✅ **Admin sidebar** collapsible (icons-only rail) + drag-resizable + persisted to localStorage
-- ✅ **Admin issue table redesign** — cover thumbnails with portal-rendered hover preview; 2-row card unit per issue (main row + actions row) with hover scale/lift; inline slide-down edit form
-- ✅ **Theme-aware search** across Browse filter, Bookmarks filter, admin Issues filter, and `/api/search` (FTS + metadata in parallel)
-- ⬜ Custom domain (`aimarchive.aurosociety.org`) — DNS via Dibyanshu, planned
-- ⬜ Cloudflare R2 storage migration — approved by Kaushal Ji, account setup pending Society ownership
-
-### Phase 2: Enhanced Web Features
-- EPUB/MOBI auto-conversion pipeline
-- Bulk download (ZIP)
-- Google OAuth + preference syncing
-- Advanced search filters + sort
-- Public analytics display
-- Admin analytics dashboard
-- Bulk import tool
-
-### Phase 3: Mobile App
-- Expo project build-out (mirrors web features)
-- Offline reading (download + local storage)
-- My Library with storage management
-- Background sync
-- App store deployment
-
-### Phase 4: Polish & Scale
-- Performance optimization
-- SEO optimization
-- Accessibility audit
-- Push notifications
-- "On This Day" / editorial features
-- Meilisearch upgrade (if PostgreSQL FTS hits limits)
-- CDN optimization for large PDF files
-- Guided tour of the system (onboarding)
+[TO DO LIST.md](TO%20DO%20LIST.md) is the single active backlog. [vision.md](vision.md) preserves optional product ideas; these are not automatically approved scope. Completed plans and dated measurements live in [docs/archive](docs/archive/README.md).
 
 ---
 
@@ -614,38 +223,25 @@ d:/AIM Project/
 ### API
 - RESTful conventions
 - Consistent error response format: `{ error: string, code: string }`
-- Input validation with Zod (planned)
+- Input validation with Zod
 - Admin routes protected by `verifyAdmin()` check
 
 ### Database
-- All migrations in `packages/supabase/migrations/`
-- Use Row Level Security (RLS) policies
-- Index frequently queried columns
-- Admin writes use service role key (bypasses RLS)
-- **Explicit GRANTs required for new `public` tables (from Oct 30, 2026)**: Supabase is removing default Data API exposure for tables in `public`. Every migration that creates a table the web/mobile clients need to read must include explicit grants, or supabase-js will return `42501`. The existing 8 tables keep their current grants — this only affects new tables created after Oct 30, 2026. Template:
-  ```sql
-  create table public.foo ( ... );
-
-  -- Public-readable table (anon + authenticated)
-  grant select on public.foo to anon;
-  grant select, insert, update, delete on public.foo to authenticated;
-  grant select, insert, update, delete on public.foo to service_role;
-
-  alter table public.foo enable row level security;
-  -- + RLS policies
-  ```
-  For **admin-only / service-role tables** (matching the `admins` table pattern from commit `de055ac`), omit the `anon` and `authenticated` grants — only `grant ... to service_role`.
+- Runtime migrations belong in `packages/turso/migrations/`.
+- Use parameterized libSQL queries, appropriate indexes and atomic transactions.
+- Enforce public publication/access checks and authenticate admin writes server-side.
+- Keep migration/export tooling distinct from application runtime.
 
 ### Content Conventions
 - **Magazine Title format** (the `title` column): `{Magazine Name} — {Full Month} {Year}` — e.g. `All India Magazine — February 2024`, `Agnishikha — April 2026`.
   - Em dash (`—`, U+2014), **not** a hyphen-minus.
   - **Full** month name only — never abbreviated (`February`, not `Feb`).
   - Space between month and year (no hyphen).
-  - Auto-generated by the upload form and by the inline edit form (skipping first render so a customised title isn't clobbered on open). Also used by `scripts/retitle-issues.mjs` (one-off migration).
+  - Auto-generated by the upload form and by the inline edit form (skipping first render so a customised title isn't clobbered on open).
 - **Theme Title** (the `theme` column, optional): the issue's overarching theme as printed on the cover — e.g. "Sunlit Path", "सूर्यलोकित पथ", "On Education", "Surrender". Displayed in gold-flame gradient with a small vertical accent bar across all surfaces (browse cards, list view, issue detail, reader info drawer, continue-reading shelf, admin table). Nullable — older issues without a printed theme leave this blank.
 - **No italic on theme display** — Devanagari (and other non-Latin scripts) lack a real italic font, so `font-style: italic` is faked via CSS skew. Combined with `bg-clip-text`, the skew bleeds past the original layout box and clips the rightmost glyph's gradient. Mitigation: never use `italic` on `bg-clip-text` content; pad with `pr-1` for safety. See §15 Known Issues.
 - **PDF source quality bar** (per the Feb 2024 reference issues from Hemlata Di):
-  - Vector text required — never Chrome "Print to PDF" (which rasterizes everything and forces OCR).
+  - Prefer PDFs with readable native text; inspect actual text and image quality instead of assuming a producer always rasterizes.
   - Embedded images at ≥ 300 DPI (≈ 1500 px on the long side for a 5″-wide page).
 - **Cover image format**: front + back covers as separate files preferred. Combined front-back spread is also accepted — the upload form auto-detects spreads (aspect ratio > 1.1) and lets the admin pick which half is the front, then crops automatically.
 
@@ -657,98 +253,74 @@ d:/AIM Project/
 |---|---|---|
 | Web framework | Next.js 15 | SSR for SEO, App Router, React ecosystem |
 | Mobile framework | React Native + Expo | Cross-platform, shares React knowledge |
-| Database | Supabase (PostgreSQL) | Free tier, built-in auth/storage/realtime |
+| Database | Turso/libSQL | Current server repository backend |
 | Monorepo | Turborepo + pnpm | Fast builds, shared packages |
 | Styling | Tailwind CSS 4 | Rapid development, consistent design |
 | Animations | Framer Motion | Smooth, declarative, React-native |
-| Search | PostgreSQL FTS + OCR | Free, built-in, works on image PDFs |
-| PDF text extraction | Tesseract.js OCR | PDFs have no text layer (Chrome print-to-PDF) |
+| Search | FTS5 trigram + native-first English extraction/OCR | Indexed page text and metadata with guarded fallback |
+| PDF text extraction | Native text first, English OCR fallback | Preserve readable source text and withhold uncertain pages |
 | PDF viewer | react-pdf | Mature, pdf.js based, customizable |
 | Auth (admin) | Session cookies + admins table | Simple, no external auth provider needed |
-| Auth (public) | Supabase Auth (Google) | Simple, free, works with existing stack — Phase 2 |
-| Hosting | Vercel + Supabase | Free tiers, excellent DX |
+| Auth (public) | Deferred; provider undecided | Preserve local bookmarks/history when sync is added |
+| Hosting | Vercel + Turso + R2 | Website, database and assets; GitHub hosts manual indexing |
 | PDF rendering for OCR | pdfjs-dist v4 + node-canvas | v4 compatible with node-canvas, v5 breaks |
 
 ---
 
 ## 13. Environment & Accounts
 
-- [x] GitHub repository (`MugdhanilK/aim-archive`, private)
-- [x] Supabase project (free tier, Mumbai region)
-- [x] Vercel account & deployed project (`aim-archive.vercel.app`)
-- [ ] Google Cloud Console project (for OAuth client ID — Phase 2)
-- [ ] Expo account (for mobile builds — https://expo.dev — Phase 3)
-- [ ] Domain DNS access (to configure aimarchive.aurosociety.org)
+The website uses Vercel, Turso and R2. Manual indexing uses GitHub Actions. Public OAuth and native app store setup remain future work; custom-domain setup is deferred. Track unfinished configuration in the active TODO, not a second account checklist.
 
 ---
 
 ## 14. Reference Files
 
+- **Current technical handover specification**: [TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)
+- **Handover findings and acceptance**: [HANDOVER_ASSESSMENT_2026-10-08.md](HANDOVER_ASSESSMENT_2026-10-08.md)
+- **DigitalOcean options and migration sequence**: [DIGITALOCEAN_MIGRATION.md](DIGITALOCEAN_MIGRATION.md)
 - **Logo**: `images/AIM_logo.png` — Golden flame with luminous figure
 - **Source PDFs**: `AIM 2026/` and `Agnishikha 2026/` folders (not in git)
 - **TODO**: `TO DO LIST.md` — task tracking
-- **Roadmap**: `ROADMAP.md` — phased development plan
+- **History**: [archived plans and verification](docs/archive/README.md)
 - **Env example**: `apps/web/.env.local.example` — environment variable template
 
 ---
 
 ## 15. Known Issues & Notes
 
-- **PDF text extraction**: PDFs created by Chrome Skia renderer have no selectable text. OCR (Tesseract.js) is required and adds ~3-5 seconds per page during upload.
-- **Hindi OCR**: The PostgreSQL full-text search uses `'english'` language config. Hindi text is tokenized but not stemmed properly. A future enhancement could use `'simple'` config for non-English content.
+- Current limitations and measured fixes: [performance implementation](PERFORMANCE_IMPLEMENTATION.md) and [active TODO](TO%20DO%20LIST.md).
+- Development uses `scripts/dev-web.cjs`; Next runs without starting an indexing worker unless explicitly opted in. See [worker operation](INDEXING_WORKER.md).
+- Public data comes from server repositories; keep initial server data and endpoint-specific cache policies. Detail analytics must not be hidden behind a cached side-effecting response.
+- Asset host aliases, Next image allowlists and R2 CORS must match the selected delivery configuration. Domain setup is deferred.
+
 - **pdfjs-dist version**: Must use v4.x (4.8.69). v5.x breaks compatibility with node-canvas for server-side rendering.
 - **Scroll performance**: Removed `backdrop-blur`, infinite CSS animations, and heavy radial gradients after observing scroll lag. Header uses `bg-white/95` instead of blur.
 - **Tesseract.js trained data**: `eng.traineddata` and `hin.traineddata` files are in `apps/web/` — these are auto-downloaded by Tesseract.js on first use.
 - **React types must be unified across the workspace**: `apps/mobile` declares `@types/react@~18.3.0` while `apps/web` uses `@types/react@^19.1.2`. Without intervention, TypeScript resolves both versions and JSX-element checks (most visibly `Suspense`) fail at build time. Root `package.json` uses `pnpm.overrides` to pin both `@types/react` and `@types/react-dom` to `^19.1.2` workspace-wide. **Do not remove these overrides** — Vercel build will break.
 - **`useSearchParams` requires Suspense in Next 15**: any client page that calls `useSearchParams()` (e.g. `/browse`) must be wrapped in a `<Suspense>` boundary or the production build fails with "useSearchParams should be wrapped in a suspense boundary". The pattern is: keep `app/<route>/page.tsx` as a **server component** that imports a `'use client'` inner component and wraps it in `<Suspense>`. See `apps/web/src/app/browse/page.tsx` (server) + `browse-client.tsx` ('use client').
-- **Topic mutations are cross-row**: `POST /api/admin/topics/rename` and `DELETE /api/admin/topics` iterate every issue containing the topic and rewrite its `topics` array. With the current 8 issues this completes in <100ms. If the archive grows past a few hundred issues, migrate to a Postgres function for atomicity.
-- **Storage bucket MIME types**: the `magazines` bucket must allow `image/jpeg` (and ideally `image/png`) in addition to `application/pdf`, otherwise `generateAndUploadThumbnail` fails on upload. Set via SQL: `UPDATE storage.buckets SET allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png'] WHERE id = 'magazines';`
 - **Browser extensions cause hydration warnings on `<body>`**: Grammarly and similar inject `data-*` attrs before React hydrates. `app/layout.tsx` has `suppressHydrationWarning` on `<body>` to swallow that one specific (and benign) mismatch.
-- **Public-page rendering pattern**: every public route (`/browse`, `/search`, `/bookmarks`, `/issue/[id]`) is a thin **server component** that fetches initial data via `createPublicClient()` and passes it as props to a colocated `*-client.tsx` (`'use client'`). The client never re-fetches just to populate first paint — it seeds state from the server props. Each route exports `revalidate = 60` for ISR. When adding a new public page that needs data, follow this pattern; do **not** introduce a `'use client'` page that fires a `fetch` in `useEffect` on mount.
-- **Public API routes are edge-cached**: `/api/magazines` (10 min + 1 h SWR), `/api/issues` and `/api/search` (60 s + 5 min SWR) set `Cache-Control: public, s-maxage=…, stale-while-revalidate=…` so Vercel's edge serves repeat traffic without hitting Supabase. `/api/issues/[id]` is **not** cached — its GET has the side effect of incrementing `read_count`.
 - **Devanagari + `bg-clip-text` + `italic` clips the rightmost glyph**: non-Latin scripts (Hindi, Bengali, Tamil, Marathi) usually have no real italic font, so `font-style: italic` is faked by the browser as a CSS skew transform. `bg-clip-text` clips the gradient to the text's *original* layout box, not the skewed one — so the rightmost character's tail loses its gradient and visually appears cut off. **Mitigation**: never use `italic` on `bg-clip-text` content. Pad with `pr-1` as belt-and-braces. The Theme Title display follows this rule everywhere (browse cards, list view, issue detail, reader info drawer, continue-reading shelf, admin table).
 - **Animating `<tr>` and `<tbody>` heights**: Framer Motion's `height: auto` animation works on table elements when wrapped in `motion.tr`/`motion.div` with `overflow: hidden` during animation. The admin Issues edit panel uses `transitionEnd: { overflow: 'visible' }` on the `animate` prop so dropdowns inside the panel (e.g. Topic Tags) aren't clipped after the slide-in completes. See `EditRowForm` in `apps/web/src/app/admin/(dashboard)/issues/page.tsx`.
 - **`overflow-x-auto` implicitly clips overflow-y**: per CSS spec, setting `overflow-x` to anything other than `visible` makes `overflow-y` compute to `auto` rather than visible. The admin Issues table wrapper has `overflow-x-auto` for narrow viewports, which means hover previews positioned absolutely inside table rows get vertically clipped at the wrapper's edges. **Mitigation**: render hover previews via `react-dom`'s `createPortal` to `document.body` and position them with `position: fixed` based on `getBoundingClientRect()`. Auto-clamp vertically against the viewport so the preview stays fully on-screen for top/bottom rows. See `CoverThumbnail` in the admin Issues page.
 - **Card-style hover on table rows**: each issue is wrapped in its own `<tbody>` (HTML5 allows multiple tbodies per table) so a `transform: scale()` and `box-shadow` on hover applies as a unit to both the main row and the actions row. `relative` + `z-10` on hover prevents the elevated card from being clipped by adjacent rows. Border separation between issues comes from `border-b border-gray-100` on each tbody (with `last:border-b-0` to keep the bottom of the table clean).
-- **Dev server uses webpack, not Turbopack**: `apps/web/package.json` `dev` script is `next dev -p 3000` (no `--turbopack` flag). Production builds (`pnpm build` → `next build`) are unaffected — webpack vs Turbopack is a dev-only choice. **Why**: on Windows, Turbopack repeatedly emitted transient `Element type is invalid` runtime errors after a few HMR cycles, then cascaded into `ENOENT … _buildManifest.js.tmp.*` and `app-build-manifest.json` failures that made every subsequent request 500 until `.next/` was nuked. The Turbopack warning `⚠ Webpack is configured while Turbopack is not, which may cause problems.` was the root signal — `next.config.ts` has a webpack config that Turbopack silently ignores. Webpack honors that config and HMR is stable. Cold-start cost is ~5s vs Turbopack's ~3.5s; worth it. **If reverting**: re-add `--turbopack` to the dev script, port the webpack config to the `turbopack` key in `next.config.ts` (see Next.js docs), and re-test the full admin nav loop before declaring it fixed.
-- **R2 hostname must be in `next.config.ts` `images.remotePatterns`**: Next's `<Image>` component refuses unconfigured remote hosts at runtime with `Invalid src prop... hostname not configured under images`. Both `*.supabase.co` (legacy) and `pub-3ed08073797148cf93d772ea1eb341f9.r2.dev` (current) are allow-listed. When swapping to a custom domain like `cdn.aimarchive.aurosociety.org`, add it here in the same commit as the env-var change. `next.config.ts` is **not** hot-reloaded — dev server restart is required after editing.
-- **R2 CORS origins must match the actual dev port**: the project's `pnpm dev` listens on `:3000` (per `apps/web/package.json`), which matches the R2 CORS allowlist on the `aim-archive` bucket (`http://localhost:3000`, `aim-archive.vercel.app`, `aimarchive.aurosociety.org`, `aim.aurosociety.org`). If you ever change the local port via `next dev -p <other>`, add that origin to the bucket CORS via Cloudflare dashboard (R2 → bucket → Settings → CORS Policy), otherwise react-pdf cross-origin fetches will silently fail because the response is missing the `Access-Control-Allow-Origin` header.
+- **R2 CORS origins must match the actual application origin**: development uses port 3000. The complete current bucket CORS allowlist is not verified; historical origins are not proof of current settings. Dibyanshu Ji or the storage administrator must inspect and configure actual staging/receiving origins under P2-08 before browser/upload acceptance.
 - **`next.config.ts` images.remotePatterns for R2 — wildcard caveat**: R2 public URLs are of the form `pub-<hex>.r2.dev` and the hex is per-bucket. A bare `*.r2.dev` wildcard would technically work but is broader than needed — pin to the exact `pub-*` hostname for least privilege.
 
 ---
 
 ## 16. Deployment Flow
 
-### Vercel
-- **Project name**: `aim-archive`
-- **Production URL**: https://aim-archive.vercel.app
-- **Project ID**: `prj_0AEgog6GF2u9YM0wpKDT8UDSeRsl` (in `.vercel/project.json`)
-- **Linked Git repo**: `MugdhanilK/aim-archive` on `main`
-- **Auto-deploy**: every push to `main` triggers a production deploy. PR pushes get preview deployments.
-- **Build command**: `next build` (run via `pnpm build` from `apps/web` per the project's Vercel root config)
-- **Environment variables**: managed in the Vercel dashboard; required ones:
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` (Cloudflare R2 — needed for new uploads to land in R2; reads work without these because PDFs are served directly from `pub-*.r2.dev`)
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `ADMIN_PASSWORD`
-  - `NEXT_PUBLIC_APP_URL` (used for OG/SEO tags)
+The existing Vercel project is `aim-archive`, linked through `.vercel/project.json`; production is https://aim-archive.vercel.app.
 
-### Standard deploy flow
-1. Make changes locally.
-2. Run `pnpm build` from `apps/web` to verify the production build passes (catches issues `pnpm tsc` doesn't, like missing Suspense boundaries).
-3. Stage in atomic commits (one logical change per commit) following Conventional Commits.
-4. `git push origin main` → Vercel auto-deploys.
-5. Watch the build in the Vercel Deployments tab.
+1. Verify the intended changes and run `pnpm.cmd build` from `apps/web`, plus checks appropriate to the change.
+2. Check required private configuration: Turso database URL/token, R2 settings, admin password/session secret and public app URL. GitHub Admin dispatch additionally requires the connection described in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
+3. When deployment is authorized, use the existing Vercel project. Git-based deployment requires a verified connection and an authorized push; CLI deployment from the repository root uses `pnpm.cmd dlx vercel --prod`.
+4. Verify deployment readiness and real public flows; record the result in a dated release report.
 
-### Manual / fallback deploy
-If the Git integration is disconnected, deploy from the project root via:
-```bash
-pnpm dlx vercel --prod
-```
-This uses the existing `.vercel/project.json` link.
+The September 19 deployment used the existing project and passed production browser checks. It did not commit/push local changes. GitHub Actions uses its own repository checkout, so worker changes must reach GitHub separately.
 
-### Lessons from initial deploy (April 2026)
-- The Vercel project was previously linked but lost its Git connection at one point — **always verify Git is connected** in the Vercel project before assuming `git push` will deploy.
-- After reconnecting Git, Vercel does **not** automatically deploy the latest commit; trigger via dashboard "Redeploy" or push an empty commit (`git commit --allow-empty -m "chore: trigger deploy"`).
-- The first build after reconnect surfaced the React-types and `useSearchParams`/Suspense issues above; both are now permanently solved via pnpm overrides + the server-wrapper pattern.
+Custom website and asset-domain setup/spending remain deferred. A documentation-only cleanup does not require a website redeploy.
+
+### Retained deployment lessons
+
+Verify the Git integration before assuming a push will deploy. Keep the root React type overrides and server wrappers/Suspense around `useSearchParams()`; prior production builds exposed failures when these were missing.

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readPrivatePdf } from './private-pdf';
 import { extractPdfText, EXTRACTION_VERSION } from './pdf-extract';
 import {
   claimIndexingJob,
@@ -6,7 +7,7 @@ import {
   failIndexingJob,
   prepareIndexingCheckpoint,
   renewIndexingLease,
-  saveIndexingPage,
+  saveIndexingPages,
   setIndexingStage,
 } from './db/indexing-repository';
 
@@ -21,6 +22,15 @@ export async function processNextIndexingJob(
   if (!job) return false;
   let leaseError: Error | null = null;
   let renewing = false;
+  let pending: Parameters<typeof saveIndexingPages>[1] = [];
+  let totalPages = 0;
+  let lastCheckpoint = 0;
+  const flush = async () => {
+    if (!pending.length) return;
+    await saveIndexingPages(job, pending, totalPages);
+    pending = [];
+    lastCheckpoint = Date.now();
+  };
   const heartbeat = setInterval(() => {
     if (renewing) return;
     renewing = true;
@@ -33,7 +43,7 @@ export async function processNextIndexingJob(
       });
   }, 20_000);
   try {
-    const buffer = await (options.download ?? downloadIndexingPdf)(job.pdf_url);
+    const buffer = await (options.download ?? readPrivatePdf)(job.pdf_url);
     if (leaseError) throw leaseError;
     const hash = createHash('sha256').update(buffer).digest('hex');
     const cachedPages = await prepareIndexingCheckpoint(job, hash, EXTRACTION_VERSION);
@@ -43,14 +53,20 @@ export async function processNextIndexingJob(
       ocrCachePath: process.env.INDEXING_OCR_CACHE_PATH,
       onPage: async (page, total) => {
         if (leaseError) throw leaseError;
-        await saveIndexingPage(job, page, total);
+        pending.push(page);
+        totalPages = total;
+        // Fast native extraction amortizes remote transactions; slow OCR still
+        // checkpoints each completed page. At most four fast pages need replay.
+        if (pending.length >= 5 || Date.now() - lastCheckpoint >= 5000) await flush();
       },
     });
     if (leaseError) throw leaseError;
+    await flush();
     await setIndexingStage(job, 'saving');
     await completeIndexingJob(job, document);
     console.info(`Indexing complete: ${job.issue_id} (${document.totalPages} pages)`);
   } catch (error) {
+    try { await flush(); } catch { /* A lost lease must not save stale pages. */ }
     await failIndexingJob(job, error);
     console.error(
       `Indexing attempt ${job.attempts} failed for ${job.issue_id}; see Admin Issues for details.`,
@@ -61,16 +77,3 @@ export async function processNextIndexingJob(
   return true;
 }
 
-async function downloadIndexingPdf(url: string) {
-  const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(120_000) });
-  if (!response.ok) throw new Error(`PDF download failed (HTTP ${response.status})`);
-  if (!response.body) throw new Error('PDF download was empty');
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-    size += chunk.byteLength;
-    if (size > 100 * 1024 * 1024) throw new Error('PDF exceeds the 100MB indexing limit');
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}

@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { CalendarClock, Info, LockKeyhole, Sparkles } from 'lucide-react';
 import type { ApiIssue } from '@/lib/api';

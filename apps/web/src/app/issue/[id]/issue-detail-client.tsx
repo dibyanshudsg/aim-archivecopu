@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {

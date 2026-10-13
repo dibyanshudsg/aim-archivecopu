@@ -1,45 +1,63 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": [
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "PDF_DELIVERY_DISABLED",
     "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_ENABLE_WEB_VITALS",
+    "INDEXING_GITHUB_TOKEN",
+    "INDEXING_OCR_CACHE_PATH",
+    "INDEXING_LOCAL_WORKER",
+    "NEXT_DIST_DIR",
     "DATABASE_PROVIDER",
     "TURSO_DATABASE_URL",
     "TURSO_AUTH_TOKEN",
     "ADMIN_PASSWORD",
     "ADMIN_SESSION_SECRET",
-    "SUPABASE_SERVICE_ROLE_KEY",
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET",
-    "R2_PUBLIC_BASE_URL"
+    "R2_PUBLIC_BASE_URL",
+    "R2_LEGACY_PUBLIC_BASE_URLS"
   ],
+  "globalDependencies": [".node-version", "**/.env*"],
   "tasks": {
     "dev": {
       "cache": false,
       "persistent": true
     },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        ".next-*/**",
+        "!.next-*/cache/**",
+        "!.next/cache/**",
+        "dist/**"
+      ],
       "env": [
         "DATABASE_PROVIDER",
         "TURSO_DATABASE_URL",
         "TURSO_AUTH_TOKEN",
-        "SUPABASE_SERVICE_ROLE_KEY",
         "ADMIN_PASSWORD",
         "ADMIN_SESSION_SECRET",
         "R2_ACCOUNT_ID",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
         "R2_BUCKET",
-        "R2_PUBLIC_BASE_URL"
+        "R2_PUBLIC_BASE_URL",
+        "R2_LEGACY_PUBLIC_BASE_URLS"
       ]
     },
+    "@aim-archive/shared#build": {
+      "outputs": []
+    },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "clean": {
       "cache": false

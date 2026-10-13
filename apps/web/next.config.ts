@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pdf-parse', 'tesseract.js', 'canvas', 'pdfjs-dist'],
   outputFileTracingRoot: resolve(__dirname, '../..'),
   outputFileTracingIncludes: {
-    '/*': [pdfJsFontFiles],
+    '/api/admin/*': [pdfJsFontFiles],
   },
   async headers() {
     return [
@@ -30,7 +30,13 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    // Authenticated/catalogue cover routes must never enter the shared optimizer cache.
+    localPatterns: [{ pathname: '/logo.png' }, { pathname: '/icon.png' }, { pathname: '/_next/static/media/**' }],
     remotePatterns: [
+      ...(process.env.R2_PUBLIC_BASE_URL ? [{
+        protocol: 'https' as const,
+        hostname: new URL(process.env.R2_PUBLIC_BASE_URL).hostname,
+      }] : []),
       {
         protocol: 'https',
         hostname: 'pub-3ed08073797148cf93d772ea1eb341f9.r2.dev',

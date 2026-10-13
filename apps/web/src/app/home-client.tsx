@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { BookMarked, LibraryBig, Search } from 'lucide-react';
 import { Header } from '@/components/layout/header';
@@ -11,27 +10,9 @@ import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
 import { LatestSubscriberEditions } from '@/components/home/latest-subscriber-editions';
 import { Flame } from '@/components/home/flame';
 
-// Dynamic-import the embedded carousel reader so react-pdf + pdfjs ship in
-// their own chunk and don't block the initial bundle. The carousel sits below
-// the hero (often below the fold on mobile) so we don't need it for first
-// paint. ssr:false because the reader is purely client-side anyway. Skeleton
-// reserves space to avoid layout shift while the chunk arrives.
-const ThisMonthFeatured = dynamic(
-  () =>
-    import('@/components/home/this-month-featured').then((m) => ({
-      default: m.ThisMonthFeatured,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        aria-hidden
-        className="relative mx-auto mt-10 min-h-[220px] max-w-5xl rounded-xl border border-flame-100/60 bg-white/60"
-      />
-    ),
-  },
-);
+import { ThisMonthFeatured } from '@/components/home/this-month-featured';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
+import type { ShelfIssue, ShelfYear } from '@/lib/home-shelf';
 import { isEmbargoed } from '@/lib/embargo';
 import {
   formatRelativeTime,
@@ -64,7 +45,8 @@ const staggerContainer = {
 
 
 interface HomeClientProps {
-  recentIssues: ApiIssue[];
+  recentIssues: ShelfIssue[];
+  shelfYears: ShelfYear[];
   latestSubscriberEditions: ApiIssue[];
   carouselMagazines: ApiMagazine[];
   carouselIssues: ApiIssue[];
@@ -185,6 +167,7 @@ function ContinueReadingShelf() {
 
 export function HomeClient({
   recentIssues,
+  shelfYears,
   latestSubscriberEditions,
   carouselMagazines,
   carouselIssues,
@@ -268,7 +251,7 @@ export function HomeClient({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           >
-            <AnimatedBookshelf issues={recentIssues} />
+            <AnimatedBookshelf issues={recentIssues} years={shelfYears} />
           </motion.div>
 
           <ContinueReadingShelf />

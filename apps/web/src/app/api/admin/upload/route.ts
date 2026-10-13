@@ -3,8 +3,10 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { createAdminIssueInDb, getMagazineNameFromDb } from '@/lib/db';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
-import { isR2Url, keyFromPublicUrl, uploadToR2 } from '@/lib/r2-client';
+import { uploadToR2, verifyR2Pdf } from '@/lib/r2-client';
+import { pdfKeyFromLocator } from '@/lib/pdf-access';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
+import { readPrivatePdf } from '@/lib/private-pdf';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
   if (hasDirectPdf && (directFileSize <= 0 || directFileSize > 100 * 1024 * 1024)) {
     return NextResponse.json({ error: 'PDF must be under 100MB', code: 'VALIDATION' }, { status: 400 });
   }
-  if (hasDirectPdf && (!isR2Url(directPdfUrl) || keyFromPublicUrl(directPdfUrl) !== directStorageKey)) {
+  if (hasDirectPdf && pdfKeyFromLocator(directPdfUrl) !== directStorageKey) {
     return NextResponse.json({ error: 'Invalid uploaded PDF URL', code: 'VALIDATION' }, { status: 400 });
   }
 
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
   const storageKey =
     hasDirectPdf && directStorageKey
       ? directStorageKey
-      : `${magazineName.replace(/ /g, '-').toLowerCase()}-${year}/${file!.name.replace(/ /g, '-')}`;
+      : `${magazineName.replace(/ /g, '-').toLowerCase()}-${year}/${crypto.randomUUID()}.pdf`;
   const initialBuffer = file ? Buffer.from(await file.arrayBuffer()) : null;
 
   const coverFile = formData.get('cover') as File | null;
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        let buffer = initialBuffer;
+        let buffer: Buffer | null = initialBuffer;
         let pdfPublicUrl = directPdfUrl;
 
         if (file && buffer) {
@@ -106,9 +108,7 @@ export async function POST(request: NextRequest) {
         } else {
           send({ type: 'status', step: 'verifying-pdf', message: 'Verifying uploaded PDF…' });
           try {
-            const pdfResponse = await fetch(directPdfUrl, { cache: 'no-store' });
-            if (!pdfResponse.ok) throw new Error(`storage returned ${pdfResponse.status}`);
-            buffer = Buffer.from(await pdfResponse.arrayBuffer());
+            await verifyR2Pdf(directStorageKey, directFileSize);
           } catch (downloadErr) {
             const message = downloadErr instanceof Error ? downloadErr.message : 'Unknown error';
             send({ type: 'error', message: 'Uploaded PDF could not be verified: ' + message });
@@ -116,12 +116,6 @@ export async function POST(request: NextRequest) {
             return;
           }
         }
-        if (!buffer) {
-          send({ type: 'error', message: 'Uploaded PDF could not be read' });
-          controller.close();
-          return;
-        }
-        const pdfBuffer = buffer;
 
         // Step 2: Cover image (crop uploaded image or render page 1) (~2-5s)
         send({ type: 'status', step: 'processing-cover', message: 'Processing cover image…' });
@@ -142,9 +136,13 @@ export async function POST(request: NextRequest) {
         }
         if (!coverImageUrl) {
           try {
-            coverImageUrl = await generateAndUploadThumbnail(pdfBuffer, storageKey);
+            // Only transfer the complete PDF when no usable cover was supplied.
+            if (!buffer) {
+              buffer = await readPrivatePdf(directPdfUrl);
+            }
+            coverImageUrl = await generateAndUploadThumbnail(buffer, storageKey);
           } catch (thumbErr) {
-            console.error('Thumbnail generation failed (non-blocking):', thumbErr);
+            console.error('Thumbnail generation failed; saving without a cover:', thumbErr);
           }
         }
 

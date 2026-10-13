@@ -6,6 +6,10 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(new URL('../apps/web/package.json', import.meta.url));
 process.loadEnvFile(fileURLToPath(new URL('../apps/web/.env.local', import.meta.url)));
+const fromRoot = createRequire(import.meta.url);
+fromRoot('./register-web-typescript.cjs');
+const { supportedAssetSql } = fromRoot('../apps/web/src/lib/asset-url.ts');
+const { readPrivatePdf } = fromRoot('../apps/web/src/lib/private-pdf.ts');
 const { createClient } = require('@libsql/client');
 const { createCanvas } = require('canvas');
 const pdfjs = await import(pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href);
@@ -17,7 +21,7 @@ const year=india.getUTCFullYear()-5, month=india.getUTCMonth()+1;
 try {
   const {rows} = await db.execute({sql:`SELECT i.id,i.title,i.pdf_url,i.page_count,m.language
     FROM issues i JOIN magazines m ON m.id=i.magazine_id
-    WHERE i.is_published=1 AND trim(i.pdf_url)<>'' AND i.pdf_url NOT LIKE '%.supabase.co/%'
+    WHERE i.is_published=1 AND trim(i.pdf_url)<>'' AND ${supportedAssetSql('i.pdf_url')}
     AND (i.year<? OR (i.year=? AND i.month<=?)) ORDER BY i.year DESC,i.month DESC,i.id`,args:[year,year,month]});
   const english=rows.filter(r=>r.language==='english');
   const samples=[english[0],english.at(-1)].filter((issue,index,all)=>issue && all.findIndex(other=>other?.id===issue.id)===index);
@@ -25,12 +29,7 @@ try {
   for(const issue of samples){
     const start=performance.now();
     const filename=path.join(dir,issue.id+'.pdf');
-    let buffer;
-    try{buffer=await fs.readFile(filename);}catch{
-      const response=await fetch(issue.pdf_url,{signal:AbortSignal.timeout(90000)});
-      if(!response.ok)throw new Error('Source download HTTP '+response.status);
-      buffer=Buffer.from(await response.arrayBuffer());await fs.writeFile(filename,buffer);
-    }
+    const buffer=await readPrivatePdf(issue.pdf_url);await fs.writeFile(filename,buffer);
     const doc=await pdfjs.getDocument({data:new Uint8Array(buffer),useSystemFonts:true}).promise;
     const pages=[];
     try{

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,19 +15,19 @@ import {
   BookDashed,
   LockKeyhole,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { pdfjs } from 'react-pdf';
-import type { ApiIssue } from '@/lib/api';
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'framer-motion';
+import type { ShelfIssue, ShelfYear } from '@/lib/home-shelf';
+import { TtlCache } from '@/lib/ttl-cache';
 import { readerPath, rememberReaderSource } from '@/lib/reader-url';
 import { formatMonthYear } from '@/lib/utils';
 import { configurePdfWorker } from '@/lib/pdf-worker-client';
 
-configurePdfWorker(pdfjs);
 
 type PdfDocLike = import('pdfjs-dist').PDFDocumentProxy;
 
 interface AnimatedBookshelfProps {
-  issues: ApiIssue[];
+  issues: ShelfIssue[];
+  years: ShelfYear[];
 }
 
 type BookMode = 'closed' | 'open' | 'closing';
@@ -66,12 +66,12 @@ function magazineShortName(name: string) {
   return name;
 }
 
-function fallbackTitle(issue: ApiIssue) {
+function fallbackTitle(issue: ShelfIssue) {
   const [firstWord] = issue.magazines.name.split(/\s+/);
   return firstWord || issue.magazines.name;
 }
 
-function canPreviewIssue(issue: ApiIssue) {
+function canPreviewIssue(issue: ShelfIssue) {
   return !issue.is_embargoed && !!issue.pdf_url;
 }
 
@@ -82,13 +82,14 @@ function IssueBook({
   onIntentOpen,
   onLeave,
 }: {
-  issue: ApiIssue;
+  issue: ShelfIssue;
   index: number;
   mode: BookMode;
   onIntentOpen: (id: string, immediate?: boolean) => void;
   onLeave: (id: string) => void;
 }) {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const accent = accents[index % accents.length];
   const monthYear = formatMonthYear(issue.month, issue.year);
   const canPreview = canPreviewIssue(issue);
@@ -105,6 +106,7 @@ function IssueBook({
   const suppressClickRef = useRef(false);
   const pdfDocRef = useRef<PdfDocLike | null>(null);
   const pdfLoadStartedRef = useRef(false);
+  const renderTasksRef = useRef(new Set<import('pdfjs-dist').RenderTask>());
   const pageImagesRef = useRef<Record<number, string>>({});
   const pageRenderPromisesRef = useRef<Partial<Record<number, Promise<boolean>>>>({});
   const expanded = canPreview && mode === 'open';
@@ -140,19 +142,38 @@ function IssueBook({
     setPdfLoading(true);
     setPdfError(false);
 
-    pdfjs
-      .getDocument(issue.pdf_url)
-      .promise.then((pdf) => {
+    let disposed = false;
+    let task: import('pdfjs-dist').PDFDocumentLoadingTask | undefined;
+    import('react-pdf').then(({ pdfjs }) => {
+      if (disposed) return;
+      configurePdfWorker(pdfjs);
+      task = pdfjs.getDocument(issue.pdf_url!);
+      return task.promise;
+    }).then((pdf) => {
+        if (!pdf || disposed) return;
         pdfDocRef.current = pdf as PdfDocLike;
         setNumPages(pdf.numPages);
         setPdfReady(true);
       })
       .catch(() => {
-        setPdfError(true);
+        if (!disposed) setPdfError(true);
       })
       .finally(() => {
-        setPdfLoading(false);
+        if (!disposed) setPdfLoading(false);
       });
+    const tasks = renderTasksRef.current;
+    return () => {
+      disposed = true;
+      for (const render of tasks) render.cancel();
+      tasks.clear();
+      pdfDocRef.current = null;
+      pdfLoadStartedRef.current = false;
+      pageRenderPromisesRef.current = {};
+      pageImagesRef.current = {};
+      setPageImages({});
+      setPdfReady(false);
+      void task?.destroy().catch(() => {});
+    };
   }, [expanded, issue.pdf_url]);
 
   const ensurePageImage = useCallback(
@@ -169,6 +190,7 @@ function IssueBook({
 
       const renderPromise = (async () => {
         const page = await pdfDoc.getPage(pageNumber);
+        if (pdfDocRef.current !== pdfDoc) return false;
         const baseViewport = page.getViewport({ scale: 1 });
         const longSide = Math.max(baseViewport.width, baseViewport.height);
         const scale = Math.min(1.8, Math.max(1, 1000 / longSide));
@@ -179,13 +201,19 @@ function IssueBook({
         const context = canvas.getContext('2d');
         if (!context) return false;
 
-        await page.render({ canvasContext: context, viewport }).promise;
+        const render = page.render({ canvasContext: context, viewport });
+        renderTasksRef.current.add(render);
+        try { await render.promise; }
+        finally { renderTasksRef.current.delete(render); }
+        if (pdfDocRef.current !== pdfDoc) { canvas.width = canvas.height = 0; return false; }
         const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
         pageImagesRef.current = { ...pageImagesRef.current, [pageNumber]: dataUrl };
-        setPageImages((prev) => {
-          if (prev[pageNumber]) return prev;
-          return { ...prev, [pageNumber]: dataUrl };
-        });
+        // Retain at most three nearby spreads, even during long previews.
+        const keys = Object.keys(pageImagesRef.current).map(Number)
+          .sort((a, b) => Math.abs(a - pageNumber) - Math.abs(b - pageNumber));
+        for (const key of keys.slice(6)) delete pageImagesRef.current[key];
+        setPageImages({ ...pageImagesRef.current });
+        canvas.width = canvas.height = 0;
         page.cleanup();
         return true;
       })();
@@ -198,7 +226,7 @@ function IssueBook({
         // Keep the skeleton in place; the full reader remains the reliable path.
         return false;
       } finally {
-        delete pageRenderPromisesRef.current[pageNumber];
+        if (pageRenderPromisesRef.current[pageNumber] === renderPromise) delete pageRenderPromisesRef.current[pageNumber];
       }
     },
     [issue.page_count, numPages],
@@ -229,7 +257,7 @@ function IssueBook({
   }, [mode]);
 
   useEffect(() => {
-    if (mode !== 'open' || turning || !pdfReady) return;
+    if (reduceMotion || mode !== 'open' || turning || !pdfReady) return;
     const totalPages = numPages || issue.page_count || 0;
     if (totalPages <= 2) return;
     let cancelled = false;
@@ -269,7 +297,7 @@ function IssueBook({
       if (pageTurnDelayRef.current) clearTimeout(pageTurnDelayRef.current);
       pageTurnDelayRef.current = null;
     };
-  }, [ensurePageImage, issue.page_count, mode, numPages, pdfReady, spreadStart, turning]);
+  }, [ensurePageImage, issue.page_count, mode, numPages, pdfReady, reduceMotion, spreadStart, turning]);
 
   useEffect(() => {
     return () => {
@@ -282,7 +310,7 @@ function IssueBook({
     <motion.div
       layout
       className={`group relative shrink-0 cursor-pointer ${expanded ? 'z-40 w-[300px] sm:w-[390px] lg:w-[460px]' : 'z-10 w-[152px] sm:w-[178px] lg:w-[176px]'}`}
-      initial={{ y: 44, opacity: 0 }}
+      initial={false}
       animate={{ y: expanded ? -22 : 0, opacity: 1 }}
       transition={{
         layout: { duration: 0.48, ease: [0.22, 1, 0.36, 1] },
@@ -359,7 +387,7 @@ function ClosedIssueCover({
   accent,
   monthYear,
 }: {
-  issue: ApiIssue;
+  issue: ShelfIssue;
   accent: string;
   monthYear: string;
 }) {
@@ -428,7 +456,7 @@ function InFlowBookPreview({
   pdfLoading,
   pdfError,
 }: {
-  issue: ApiIssue;
+  issue: ShelfIssue;
   accent: string;
   monthYear: string;
   spreadStart: number;
@@ -536,7 +564,7 @@ function CoverFlap({
   monthYear,
   closing,
 }: {
-  issue: ApiIssue;
+  issue: ShelfIssue;
   accent: string;
   monthYear: string;
   closing: boolean;
@@ -795,7 +823,7 @@ function BookLoading({ label }: { label: string }) {
   );
 }
 
-function CoverFallback({ issue, monthYear }: { issue: ApiIssue; monthYear: string }) {
+function CoverFallback({ issue, monthYear }: { issue: ShelfIssue; monthYear: string }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gold-50 to-flame-50 px-3 text-center">
       <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-semibold text-transparent">{fallbackTitle(issue)}</span>
@@ -825,7 +853,7 @@ function Shelf() {
   );
 }
 
-function IssueRow({ issues, offset = 0 }: { issues: ApiIssue[]; offset?: number }) {
+function IssueRow({ issues, offset = 0 }: { issues: ShelfIssue[]; offset?: number }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
@@ -1024,18 +1052,18 @@ function YearNavigator({
 
   return (
     <div className="mb-8 flex flex-col items-center gap-3">
-      <div className="flex items-center justify-center gap-3">
+      <div className="flex w-full max-w-md items-center justify-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={() => onChange(selectedYear - 1)}
           disabled={selectedYear <= minYear}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
           aria-label="Previous year"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
 
-        <div className="min-w-[220px] rounded-2xl border border-flame-100 bg-white/95 px-5 py-3 text-center shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white sm:min-w-[290px]">
+        <div className="min-w-0 flex-1 rounded-2xl border border-flame-100 bg-white/95 px-2 py-3 text-center shadow-[0_12px_34px_rgba(120,84,28,0.10)] ring-1 ring-white sm:px-5">
           <p className="text-[11px] font-semibold uppercase tracking-normal text-flame-600">
             Selected year
           </p>
@@ -1058,27 +1086,23 @@ function YearNavigator({
           type="button"
           onClick={() => onChange(selectedYear + 1)}
           disabled={selectedYear >= maxYear}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-flame-100 bg-white text-flame-700 shadow-sm transition-colors hover:border-flame-200 hover:bg-flame-50 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-white"
           aria-label="Next year"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-1.5">
+      <div className="flex flex-wrap justify-center gap-1" aria-label="Choose archive year">
         {buildYearRange(minYear, maxYear).map((year) => (
           <button
             key={year}
             type="button"
             onClick={() => onChange(year)}
             aria-pressed={selectedYear === year}
-            className={`h-2.5 rounded-full transition-all ${
-              selectedYear === year
-                ? 'w-7 bg-gradient-to-r from-gold-500 to-flame-500'
-                : 'w-2.5 bg-flame-100 hover:bg-flame-200'
-            }`}
+            className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg px-2 text-xs font-semibold transition-colors ${selectedYear === year ? 'bg-flame-100 text-flame-900' : 'text-gray-600 hover:bg-flame-50'}`}
           >
-            <span className="sr-only">{year}</span>
+            {year}
           </button>
         ))}
       </div>
@@ -1086,16 +1110,21 @@ function YearNavigator({
   );
 }
 
-export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfProps) {
-  const issues = useMemo(() => suppliedIssues.filter(canPreviewIssue), [suppliedIssues]);
+export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBookshelfProps) {
+  const reduceMotion = useReducedMotion();
+  const [issues, setIssues] = useState(suppliedIssues);
+  const yearCache = useRef(new TtlCache<ShelfIssue[]>(60_000, 12));
+  const [yearLoading, setYearLoading] = useState(false);
+  const [yearError, setYearError] = useState(false);
+  const [yearRetry, setYearRetry] = useState(0);
   const [sortMode, setSortMode] = useState<SortMode>('uploaded');
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
   const issuesPerRow = useIssuesPerRow();
   const activeCopy = sortCopy[sortMode];
   const currentYear = new Date().getFullYear();
   const issueYears = useMemo(
-    () => Array.from(new Set(issues.map((issue) => issue.year))).sort((a, b) => a - b),
-    [issues],
+    () => years.map((entry) => entry.year),
+    [years],
   );
   const minYear = issueYears[0] ?? currentYear;
   const maxYear = issueYears[issueYears.length - 1] ?? currentYear;
@@ -1110,6 +1139,23 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
   const [selectedYear, setSelectedYear] = useState(defaultYear);
 
   useEffect(() => {
+    if (suppliedIssues[0]) yearCache.current.set(String(suppliedIssues[0].year), suppliedIssues);
+  }, [suppliedIssues]);
+
+  useEffect(() => {
+    const cached = yearCache.current.get(String(selectedYear));
+    if (cached) { setIssues(cached); setYearLoading(false); setYearError(false); return; }
+    const controller = new AbortController();
+    setYearLoading(true); setYearError(false);
+    fetch(`/api/issues/shelf?year=${selectedYear}`, { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error('Shelf unavailable'); return response.json() as Promise<ShelfIssue[]>; })
+      .then(data => { if (!controller.signal.aborted) { yearCache.current.set(String(selectedYear), data); setIssues(data); } })
+      .catch(() => { if (!controller.signal.aborted) setYearError(true); })
+      .finally(() => { if (!controller.signal.aborted) setYearLoading(false); });
+    return () => controller.abort();
+  }, [selectedYear, yearRetry]);
+
+  useEffect(() => {
     if (selectedYear < minYear || selectedYear > maxYear) {
       setSelectedYear(defaultYear);
     }
@@ -1117,14 +1163,14 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
 
   const magazineOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    issues.forEach((issue) => {
+    suppliedIssues.forEach((issue) => {
       byId.set(issue.magazines.id, issue.magazines.name);
     });
 
     return Array.from(byId.entries())
       .map(([id, name]) => ({ id, name, label: magazineShortName(name) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [issues]);
+  }, [suppliedIssues]);
   const yearIssues = useMemo(
     () => issues.filter((issue) => issue.year === selectedYear),
     [issues, selectedYear],
@@ -1149,7 +1195,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
     return sorted.slice(0, 12);
   }, [filteredIssues, sortMode]);
   const issueRows = useMemo(() => {
-    const chunks: ApiIssue[][] = [];
+    const chunks: ShelfIssue[][] = [];
     for (let i = 0; i < visibleIssues.length; i += issuesPerRow) {
       chunks.push(visibleIssues.slice(i, i + issuesPerRow));
     }
@@ -1162,42 +1208,45 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
   const readableCount = yearIssues.filter(canPreviewIssue).length;
   const lockedCount = yearIssues.filter((issue) => issue.is_embargoed).length;
   const statusLine =
-    yearIssues.length === 0
+    yearLoading ? `Loading editions for ${selectedYear}…` : yearError ? 'Editions could not be loaded.' : yearIssues.length === 0
       ? `No editions found for ${selectedYear}`
       : filteredIssues.length === 0
         ? `No ${activeMagazineName} editions found for ${selectedYear}`
         : `Showing ${visibleIssues.length} of ${filteredIssues.length} ${activeMagazineName} edition${filteredIssues.length === 1 ? '' : 's'} for ${selectedYear}`;
-  const browseHref =
+  const browseBaseHref =
     lockedCount > 0 && readableCount === 0
       ? `/browse?availability=subscriber&year=${selectedYear}`
       : `/browse?availability=read&year=${selectedYear}`;
+  const browseHref = magazineFilter === 'all' ? browseBaseHref : `${browseBaseHref}&magazine=${encodeURIComponent(magazineFilter)}`;
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="mx-auto w-full max-w-5xl">
       <motion.div
         className="relative"
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
         <div className="rounded-xl border border-flame-100/80 bg-gradient-to-b from-white to-flame-50/40 p-5 shadow-sm sm:p-7">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-flame-100 pb-4">
-            <div className="text-left">
+            <div className="w-full text-left sm:w-auto">
               <p className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-semibold uppercase text-transparent">{activeCopy.eyebrow}</p>
               <h2 className="font-heading text-2xl font-bold text-gray-900">{activeCopy.heading}</h2>
               <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
                 <LibraryBig className="h-3.5 w-3.5 text-flame-500" />
                 {statusLine}
               </p>
+              {yearError && <button type="button" onClick={() => setYearRetry(value => value + 1)} className="min-h-11 px-3 text-sm font-semibold text-flame-800">Try again</button>}
             </div>
-            <div className="order-last flex w-full flex-col items-center gap-2 sm:order-none sm:w-auto sm:flex-1">
+            <div className="flex w-full flex-col items-center gap-2 sm:w-auto sm:flex-1">
               {magazineOptions.length > 1 && (
                 <div className="inline-flex max-w-full rounded-full border border-flame-100 bg-white/95 p-1 shadow-[0_8px_24px_rgba(120,84,28,0.08)] ring-1 ring-white">
                   <button
                     type="button"
                     aria-pressed={magazineFilter === 'all'}
                     onClick={() => setMagazineFilter('all')}
-                    className={`relative isolate min-h-8 rounded-full px-3 text-xs font-semibold transition-colors ${
+                    className={`relative isolate min-h-11 min-w-11 rounded-full px-3 text-xs font-semibold transition-colors ${
                       magazineFilter === 'all'
                         ? 'text-white'
                         : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
@@ -1207,7 +1256,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
                       <motion.span
                         layoutId="bookshelf-magazine-active"
                         className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_14px_rgba(190,140,46,0.24)]"
-                        transition={{ type: 'spring', stiffness: 430, damping: 34 }}
+                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 34 }}
                       />
                     )}
                     All
@@ -1221,7 +1270,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
                         aria-pressed={active}
                         title={option.name}
                         onClick={() => setMagazineFilter(option.id)}
-                        className={`relative isolate min-h-8 rounded-full px-3 text-xs font-semibold transition-colors ${
+                        className={`relative isolate min-h-11 min-w-11 rounded-full px-3 text-xs font-semibold transition-colors ${
                           active
                             ? 'text-white'
                             : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
@@ -1231,7 +1280,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
                           <motion.span
                             layoutId="bookshelf-magazine-active"
                             className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_14px_rgba(190,140,46,0.24)]"
-                            transition={{ type: 'spring', stiffness: 430, damping: 34 }}
+                            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 34 }}
                           />
                         )}
                         {option.label}
@@ -1253,7 +1302,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
                       type="button"
                       aria-pressed={active}
                       onClick={() => setSortMode(id)}
-                      className={`relative isolate flex min-h-9 items-center gap-1.5 overflow-hidden rounded-full px-3 text-xs font-semibold transition-colors sm:px-3.5 ${
+                      className={`relative isolate flex min-h-11 min-w-11 items-center gap-1.5 overflow-hidden rounded-full px-3 text-xs font-semibold transition-colors sm:px-3.5 ${
                         active
                           ? 'text-white'
                           : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
@@ -1263,7 +1312,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
                         <motion.span
                           layoutId="bookshelf-sort-active"
                           className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_16px_rgba(190,140,46,0.28)]"
-                          transition={{ type: 'spring', stiffness: 430, damping: 34 }}
+                          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 34 }}
                         />
                       )}
                       <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-white' : 'text-flame-700/75'}`} />
@@ -1276,7 +1325,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
             </div>
             <Link
               href={browseHref}
-              className="rounded-lg border border-flame-200 bg-white px-4 py-2 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+              className="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-flame-200 bg-white px-4 py-2 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50 sm:mx-0"
             >
               Browse all
             </Link>
@@ -1341,5 +1390,6 @@ export function AnimatedBookshelf({ issues: suppliedIssues }: AnimatedBookshelfP
         </div>
       </motion.div>
     </div>
+    </MotionConfig>
   );
 }

@@ -92,7 +92,7 @@ export function getEmbargoState(
   };
 }
 
-/** Server-side: decorate a raw issue row from Supabase with embargo state and
+/** Server-side: decorate a raw issue row from the database with embargo state and
  *  strip the PDF URL when embargoed. The DB column is non-null, but the public
  *  API never leaks it for embargoed issues — that's the whole point. */
 export function applyEmbargoToIssueRow<

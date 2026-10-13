@@ -1,3 +1,4 @@
+import { supportedAssetSql } from '../asset-url';
 import type {
   NavigationDestinations,
   NavigationItem,
@@ -62,7 +63,7 @@ export async function listNavigationDestinationsFromDb(): Promise<NavigationDest
       SELECT id, title, year, month
       FROM issues
       WHERE is_published = 1
-        AND pdf_url NOT LIKE '%.supabase.co/%'
+        AND ${supportedAssetSql('pdf_url')}
       ORDER BY year DESC, month DESC, title ASC
       LIMIT 200
     `),

@@ -3,6 +3,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(new URL('../apps/web/package.json', import.meta.url));
 process.loadEnvFile(fileURLToPath(new URL('../apps/web/.env.local', import.meta.url)));
+const fromRoot = createRequire(import.meta.url);
+fromRoot('./register-web-typescript.cjs');
+const { supportedAssetSql } = fromRoot('../apps/web/src/lib/asset-url.ts');
 const { createClient } = require('@libsql/client');
 const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
 const now = new Date();
@@ -20,7 +23,7 @@ try {
       sum(CASE WHEN length(trim(idx.content)) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS short_text_pages
       FROM issues i JOIN magazines m ON m.id = i.magazine_id
       LEFT JOIN issue_search_index idx ON idx.issue_id = i.id
-      WHERE i.is_published = 1 AND i.pdf_url NOT LIKE '%.supabase.co/%' AND trim(i.pdf_url) <> ''
+      WHERE i.is_published = 1 AND ${supportedAssetSql('i.pdf_url')} AND trim(i.pdf_url) <> ''
       GROUP BY i.id ORDER BY m.language, i.year DESC, i.month DESC`,
     args: [year, year, month],
   });

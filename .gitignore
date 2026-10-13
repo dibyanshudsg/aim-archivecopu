@@ -3,14 +3,13 @@ node_modules/
 .pnpm-store/
 
 # Environment
-.env
-.env.local
-.env.production
-.env.*.local
+.env*
+!.env*.example
 
 # Build outputs
 .next/
 .next-verify/
+.next-performance/
 out/
 dist/
 build/
@@ -36,14 +35,17 @@ pnpm-debug.log*
 
 # Testing
 coverage/
-.cache/search-reader-qa/
-.cache/indexing-qa/
+.playwright-cli/
+output/playwright/
+output/
+/tmp/
+.cache/
+.ocr-cache/
+__pycache__/
+*.pyc
 *.traineddata
 
-# Supabase
-supabase/.temp/
-
-# Magazine PDFs (large binary files — tracked via Supabase Storage, not Git)
+# Magazine PDFs (large binary files — stored in Cloudflare R2, not Git)
 content/**/*.pdf
 content/**/*.epub
 content/**/*.mobi
@@ -64,3 +66,9 @@ AIM Issues/
 
 .vercel
 .lighthouse/
+
+# Local agent tooling; preserve on disk, exclude from the handover source release.
+.agents/
+.impeccable/
+.codex/
+.aws/

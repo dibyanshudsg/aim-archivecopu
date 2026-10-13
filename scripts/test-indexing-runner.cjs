@@ -1,8 +1,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'indexing-worker.cjs'),'utf8');
-async function run(work,elapsed=0){let calls=0,closed=false,removed=false,ticks=0;
+const storageEnv={R2_ACCOUNT_ID:'fixture',R2_BUCKET:'fixture',R2_ACCESS_KEY_ID:'fixture',R2_SECRET_ACCESS_KEY:'fixture',R2_PUBLIC_BASE_URL:'https://assets.example'};
+async function run(work,elapsed=0,env=storageEnv){let calls=0,closed=false,removed=false,ticks=0;
 const db={execute:async()=>{removed=true;},close:()=>{closed=true;}};
-const fakeProcess={argv:['node','worker','--drain'],env:{},on(){},chdir(){},exit(){throw Error('Unexpected watchdog');}};
+const fakeProcess={argv:['node','worker','--drain'],env:{...env},on(){},chdir(){},exit(){throw Error('Unexpected watchdog');}};
 const context={require:(name)=>name==='./register-web-typescript.cjs'?{root:'.'}:name==='node:fs'?{existsSync:()=>false}:name.endsWith('indexing-repository.ts')?{heartbeatIndexingWorker:async()=>{}}:name.endsWith('indexing-worker.ts')?{processNextIndexingJob:async()=>{calls++;return work;}}:name.endsWith('client.ts')?{getDb:()=>db}:require(name),process:fakeProcess,console:{info(){},error(){}},Date:{now:()=>ticks++===0?0:elapsed},setInterval:()=>1,clearInterval(){},setTimeout:()=>2,clearTimeout(){}};
-await vm.runInNewContext(source,context);assert.ok(closed&&removed);return calls;}
-(async()=>{assert.equal(await run(false),1,'Empty queue exits immediately');assert.equal(await run(true),3,'Batch never claims more than three jobs');assert.equal(await run(true,21*60_000),1,'Expired claiming window finishes current job and exits');console.log('PASS: scheduled worker exits on empty queue, caps jobs and stops claiming at deadline; heartbeat cleanup runs.');})().catch(e=>{console.error(e);process.exitCode=1;});
+await vm.runInNewContext(source,context);assert.ok(closed&&removed);return {calls,exitCode:fakeProcess.exitCode??0};}
+(async()=>{assert.deepEqual(await run(false),{calls:1,exitCode:0},'Empty queue exits immediately');assert.deepEqual(await run(true),{calls:3,exitCode:0},'Batch never claims more than three jobs');assert.deepEqual(await run(true,21*60_000),{calls:1,exitCode:0},'Expired claiming window finishes current job and exits');for(const name of Object.keys(storageEnv)){const env={...storageEnv};delete env[name];assert.deepEqual(await run(true,0,env),{calls:0,exitCode:1},`Missing ${name} must fail before claiming work`);}console.log('PASS: manual worker exits on empty queue, caps jobs, stops claiming at deadline and rejects missing private storage configuration; heartbeat cleanup runs.');})().catch(e=>{console.error(e);process.exitCode=1;});

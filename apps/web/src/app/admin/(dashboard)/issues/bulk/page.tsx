@@ -1,4 +1,5 @@
 'use client';
+import { uploadPdfDirect } from '@/lib/direct-pdf-upload';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -136,7 +137,15 @@ export default function BulkUploadPage() {
 
   async function uploadOne(item: BulkItem): Promise<boolean> {
     const fd = new FormData();
-    fd.append('pdf', item.file);
+    try {
+      const uploaded = await uploadPdfDirect(item.file, { magazine_id: item.magazine_id, year: item.year });
+      fd.append('pdf_url', uploaded.publicUrl);
+      fd.append('storage_key', uploaded.storageKey);
+      fd.append('file_size_bytes', String(item.file.size));
+    } catch (error) {
+      patch(item.id, { status: 'error', message: error instanceof Error ? error.message : 'Upload failed' });
+      return false;
+    }
     fd.append('magazine_id', item.magazine_id);
     fd.append('title', item.title);
     fd.append('year', String(item.year));

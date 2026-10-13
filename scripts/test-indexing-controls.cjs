@@ -1,3 +1,5 @@
+process.env.R2_PUBLIC_BASE_URL = 'https://example.test';
+process.env.R2_LEGACY_PUBLIC_BASE_URLS = '';
 // Isolated libSQL and mocked GitHub; never uses production credentials or workflows.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {root,fromWeb}=require('./register-web-typescript.cjs');

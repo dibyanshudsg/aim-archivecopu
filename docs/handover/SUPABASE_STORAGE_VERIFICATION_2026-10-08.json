@@ -1,0 +1,198 @@
+{
+  "verified_on": "2026-10-08",
+  "source": "D:\\AIM (Project Directory)\\glduurfsjyxpkdnxgdqz.storage",
+  "files": [
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Apr-2026-thumb.jpg",
+      "bytes": 68508,
+      "sha256": "b7ce0983aaaf289e29e2408310e9827ade6d3dae5e44e7b0e71bd5313e239633",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Apr-2026.pdf",
+      "bytes": 23965701,
+      "sha256": "a397d6e3d682d8d4d2488dc86855ffc7bdf8349d59cbf9e0b01e8300a3603bf1",
+      "pages": 52,
+      "repaired_on_open": false,
+      "pages_rendered": 52,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Feb-2026-thumb.jpg",
+      "bytes": 53617,
+      "sha256": "52770158d6046efea28d88e37d5e0a79541704a96dd55f34223cfebf26a1194d",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Feb-2026.pdf",
+      "bytes": 24480898,
+      "sha256": "ca6809de1e0c71c9099513c5016a12ab90ccf50c5d7a148b478d0c9c4af17bb9",
+      "pages": 52,
+      "repaired_on_open": false,
+      "pages_rendered": 52,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Jan-2026-thumb.jpg",
+      "bytes": 52741,
+      "sha256": "ffb5dae7c3972ff2b99c7d0cb5e27ca17128f775b2e710b1695c29f98eefa441",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Jan-2026.pdf",
+      "bytes": 23329222,
+      "sha256": "844cf4652485f80008a0b5321b4a4054d674b96e8e4c116db0a0bd956914aa3a",
+      "pages": 77,
+      "repaired_on_open": false,
+      "pages_rendered": 77,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Mar-2026-thumb.jpg",
+      "bytes": 76429,
+      "sha256": "34c56cbd0e9dd6e6decc4303a51cbfec0e0fb9dbbb41a9ede87041406ff865ad",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/agnisikha-2026/Agnishikha-Mar-2026.pdf",
+      "bytes": 23677174,
+      "sha256": "1ced485fce4698e9a4d9881defb776a2bb2c56f3f4d292b93f0106472f8e2e4e",
+      "pages": 77,
+      "repaired_on_open": false,
+      "pages_rendered": 77,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Apr-2026-thumb.jpg",
+      "bytes": 70805,
+      "sha256": "79bca9b93a1e279950a057c1db9b1df262b40b7edadef2598cbafb89343f8879",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Apr-2026.pdf",
+      "bytes": 21745618,
+      "sha256": "225ca9b16c08816d6bcf9ec7182ef2b9b4e7656cda30cacb9d48dcadc157a561",
+      "pages": 44,
+      "repaired_on_open": false,
+      "pages_rendered": 44,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Feb-2026-thumb.jpg",
+      "bytes": 54265,
+      "sha256": "03149c2f4e71f6c7be8bca74c671260de8b846a16aac49228033fa0d58cf3e1b",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Feb-2026.pdf",
+      "bytes": 20786217,
+      "sha256": "25257c284ce282a11735e9e8f4347bb7f9546609dd5613d954d1a4b6b20b199f",
+      "pages": 44,
+      "repaired_on_open": false,
+      "pages_rendered": 44,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Jan-2026-thumb.jpg",
+      "bytes": 53811,
+      "sha256": "2a89596b9367cfc130afb094bde2bdd958b09c0ac510d38148a6648ea3ec8593",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Jan-2026.pdf",
+      "bytes": 19492912,
+      "sha256": "f65058d8a29e6800d9a8f288edfeccb8fe1b01bcc486f70f74f689f1e85ee97f",
+      "pages": 65,
+      "repaired_on_open": false,
+      "pages_rendered": 65,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Mar-2026-thumb.jpg",
+      "bytes": 59326,
+      "sha256": "e7f63f4ca07587a5ad6dcc6fc09152bb9d0b4782d75ac42517245c30ce86fea2",
+      "image_size": [
+        600,
+        849
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/aim-2026/All-India-Magazine-Mar-2026.pdf",
+      "bytes": 22154786,
+      "sha256": "f004233db63169680f4ae42fea6a71ae4d3b62a2cf72124cb55e467f55db7b7b",
+      "pages": 65,
+      "repaired_on_open": false,
+      "pages_rendered": 65,
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/all-india-magazine-2024/February-2024-final-thumb.jpg",
+      "bytes": 71541,
+      "sha256": "0daac9d341fe7cdec0991ebb539785a12efe68c9599b6bc0166524e62a411841",
+      "image_size": [
+        600,
+        1020
+      ],
+      "image_format": "JPEG",
+      "unchanged_after_read": true
+    },
+    {
+      "key": "magazines/all-india-magazine-2024/February-2024-final.pdf",
+      "bytes": 1100541,
+      "sha256": "f1dae52c022b97003b6a468f2caca942778b52ab543dd45de583dfac80a91af4",
+      "pages": 40,
+      "repaired_on_open": false,
+      "pages_rendered": 40,
+      "unchanged_after_read": true
+    }
+  ],
+  "file_count": 18,
+  "total_bytes": 181294112,
+  "pdf_count": 9,
+  "total_pdf_pages_rendered": 516,
+  "historical_export": "supabase-export-20260527T142432Z",
+  "historical_asset_references": 16,
+  "missing_historical_assets": [],
+  "additional_downloaded_assets": [
+    "magazines/agnisikha-2026/Agnishikha-Mar-2026-thumb.jpg",
+    "magazines/agnisikha-2026/Agnishikha-Mar-2026.pdf"
+  ],
+  "limits": "Local readability/rendering and historical-reference coverage verified; no authoritative remote manifest/checksums, paused database inspection, current R2 comparison or full editorial page review."
+}

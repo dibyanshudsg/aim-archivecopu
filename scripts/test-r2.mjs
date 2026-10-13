@@ -3,15 +3,15 @@
  * R2 connectivity smoke test.
  *
  * Usage (from the repo root):
- *   node scripts/test-r2.mjs
+ *   node scripts/test-r2.mjs --allow-write
  *
  * Reads creds from ../.env.r2.local at the repo root (gitignored). The
  * @aws-sdk/client-s3 package is resolved out of apps/web/node_modules so
  * the script works without adding the dep at the repo root. Performs:
  *   1. PutObject  — upload a small text file
  *   2. ListObjects — confirm it's there
- *   3. HEAD via public URL — confirm public access is on
- *   4. GET  via public URL — confirm body matches
+ *   3. Authenticated HEAD — works with public access disabled
+ *   4. Authenticated GET — confirm body matches
  *   5. DeleteObject — clean up
  */
 
@@ -19,6 +19,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
+
+if (!process.argv.includes('--allow-write')) {
+  console.error('This smoke test creates and deletes a synthetic object. Use --allow-write only with approval. For read-only inventory use reconcile-r2-readonly.cjs.');
+  process.exit(1);
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
@@ -31,7 +36,7 @@ const envPath = resolve(repoRoot, '.env.r2.local');
 const webRequire = createRequire(
   pathToFileURL(resolve(repoRoot, 'apps/web/package.json')).href,
 );
-const { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } =
+const { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand } =
   webRequire('@aws-sdk/client-s3');
 
 const env = Object.fromEntries(
@@ -106,36 +111,16 @@ try {
     console.log(`\n  → ${r.Contents.length} object(s) under test/, found ours (size ${found.Size})`);
   });
 
-  const publicUrl = `${R2_PUBLIC_BASE_URL}/${key}`;
-  console.log(`  public URL: ${publicUrl}`);
-
-  await step('public HEAD', async () => {
-    const r = await fetch(publicUrl, { method: 'HEAD' });
-    if (!r.ok) throw new Error(`HEAD ${r.status} — public access likely disabled`);
-    console.log(`\n  → status ${r.status}, content-type ${r.headers.get('content-type')}`);
+  await step('authenticated HEAD', async () => {
+    const r = await client.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    if (r.ContentLength !== Buffer.byteLength(body)) throw new Error('Size mismatch');
   });
 
-  await step('public GET', async () => {
-    const r = await fetch(publicUrl);
-    if (!r.ok) throw new Error(`GET ${r.status}`);
-    const got = await r.text();
+  await step('authenticated GET', async () => {
+    const r = await client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    const got = await r.Body.transformToString();
     if (got !== body) throw new Error(`body mismatch: got "${got}"`);
     console.log(`\n  → body matches (${got.length} bytes)`);
-  });
-
-  await step('CORS preflight', async () => {
-    const r = await fetch(publicUrl, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'https://aim-archive.vercel.app',
-        'Access-Control-Request-Method': 'GET',
-      },
-    });
-    const allowOrigin = r.headers.get('access-control-allow-origin');
-    console.log(`\n  → status ${r.status}, ACAO: ${allowOrigin ?? '(none)'}`);
-    if (!allowOrigin) {
-      console.log('  ⚠  no CORS headers — browser fetch from another origin will fail');
-    }
   });
 
   await step('delete', () =>

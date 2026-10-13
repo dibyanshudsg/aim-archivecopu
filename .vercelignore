@@ -1,9 +1,27 @@
 .agents/
+.impeccable/
+.aws/
+.ocr-cache/
+**/__pycache__/
+**/*.pyc
+.git/
+.github/
+.pnpm-store/
+.turbo/
+**/.next/
+**/node_modules/
+tmp/
+docs/
+ops/
+images/
+**/*.md
 .cache/
 .codex/
 .codex-logs/
 .lighthouse/
 .migration/
+.playwright-cli/
+output/
 
 AIM 2026/
 Agnisikha 2026/
@@ -13,5 +31,6 @@ AIM Issues/
 *.pdf
 coverage/
 **/.next-verify/
+**/.next-performance/
 **/.env*
 **/*.traineddata*

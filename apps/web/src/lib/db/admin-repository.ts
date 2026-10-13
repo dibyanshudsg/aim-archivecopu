@@ -1,4 +1,6 @@
+import { supportedAssetSql, isSupportedAssetUrl } from '../asset-url';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
+import type { ResultSet } from '@libsql/client';
 import type {
   AdminIssue,
   AdminIssueListInput,
@@ -36,6 +38,13 @@ interface SqlPart {
 }
 
 const adminIdentityCache = new AsyncTtlCache<{ id: string; email: string; name: string } | null>(30_000);
+const adminFacetCache = new AsyncTtlCache<ResultSet>(10_000, 2);
+const adminStorageCache = new AsyncTtlCache<AdminStorageData>(5_000, 1);
+
+export function clearAdminDiscoveryCaches() {
+  adminFacetCache.clear();
+  adminStorageCache.clear();
+}
 
 export async function getAdminByIdAndEmail(id: string, email: string): Promise<{ id: string; email: string; name: string } | null> {
   return adminIdentityCache.get(`id-email:${id}:${email}`, async () => {
@@ -206,8 +215,8 @@ export async function listAdminIssuesPageFromDb(input: AdminIssueListInput): Pro
       `,
       args: where.args,
     }),
-    getDb().execute('SELECT DISTINCT year FROM issues ORDER BY year DESC'),
-    getDb().execute(`
+    adminFacetCache.get('years', () => getDb().execute('SELECT DISTINCT year FROM issues ORDER BY year DESC')),
+    adminFacetCache.get('topics', () => getDb().execute(`
       SELECT topic.value AS name, COUNT(DISTINCT i.id) AS count
       FROM issues i
       JOIN json_each(i.topics_json) topic ON true
@@ -215,7 +224,7 @@ export async function listAdminIssuesPageFromDb(input: AdminIssueListInput): Pro
         AND topic.value != ''
       GROUP BY topic.value
       ORDER BY lower(topic.value) ASC
-    `),
+    `)),
   ]);
 
   const total = Number(countResult.rows[0]?.count ?? 0);
@@ -393,12 +402,19 @@ export async function updateIssuePdfInDb(
   id: string,
   pdfUrl: string,
   fileSizeBytes: number,
+  expectedSource?: string,
+  cover?: { previous: string | null; next: string },
 ): Promise<void> {
   const tx = await getDb().transaction('write');
   try {
-    await tx.execute({
-      sql: 'UPDATE issues SET pdf_url = ?, file_size_bytes = ?, page_count = NULL, updated_at = ? WHERE id = ?',
-      args: [pdfUrl, fileSizeBytes, nowIso(), id],
+    const updated = await tx.execute({
+      sql: 'UPDATE issues SET pdf_url = ?, file_size_bytes = ?, page_count = NULL, updated_at = ? WHERE id = ?' + (expectedSource === undefined ? '' : ' AND pdf_url = ?'),
+      args: [pdfUrl, fileSizeBytes, nowIso(), id, ...(expectedSource === undefined ? [] : [expectedSource])],
+    });
+    if (updated.rowsAffected !== 1) throw new Error('PDF_SOURCE_CHANGED');
+    if (cover) await tx.execute({
+      sql: 'UPDATE issues SET cover_image_url=? WHERE id=? AND cover_image_url IS ?',
+      args: [cover.next, id, cover.previous],
     });
     // Old page numbers must never point into a different PDF while its job waits.
     await tx.execute({ sql: 'DELETE FROM issue_search_index WHERE issue_id=?', args: [id] });
@@ -436,7 +452,7 @@ export async function listReindexCandidatesFromDb(force: boolean): Promise<Array
   const result = await getDb().execute(`
     SELECT id, title, pdf_url, cover_image_url
     FROM issues
-    WHERE pdf_url NOT LIKE '%.supabase.co/%'
+    WHERE ${supportedAssetSql('pdf_url')}
       AND magazine_id IN (SELECT id FROM magazines WHERE language = 'english')
     ORDER BY year DESC, month DESC
   `);
@@ -463,7 +479,7 @@ export async function listIssuesMissingCoverFromDb(): Promise<Array<{
     SELECT id, title, pdf_url
     FROM issues
     WHERE cover_image_url IS NULL
-      AND pdf_url NOT LIKE '%.supabase.co/%'
+      AND ${supportedAssetSql('pdf_url')}
     ORDER BY year DESC, month DESC
   `);
   return result.rows.map((row) => ({
@@ -516,6 +532,7 @@ export async function getAdminSiteSettingsFromDb() {
 }
 
 export async function getAdminStorageDataFromDb(): Promise<AdminStorageData> {
+  return adminStorageCache.get('inventory', async () => {
   const r2Objects = [];
   let token: string | undefined;
 
@@ -558,14 +575,14 @@ export async function getAdminStorageDataFromDb(): Promise<AdminStorageData> {
     linkedIssue: keyToIssue.get(object.key) ?? null,
   }));
 
-  const legacyIssues = issues
+  const unsupportedIssues = issues
     .map((issue) => ({
       id: issue.id,
       title: issue.title,
-      pdfOnSupabase: !!issue.pdf_url && issue.pdf_url.includes('.supabase.co/'),
-      coverOnSupabase: !!issue.cover_image_url && issue.cover_image_url.includes('.supabase.co/'),
+      pdfUnsupported: !isSupportedAssetUrl(issue.pdf_url),
+      coverUnsupported: !!issue.cover_image_url && !isSupportedAssetUrl(issue.cover_image_url),
     }))
-    .filter((issue) => issue.pdfOnSupabase || issue.coverOnSupabase);
+    .filter((issue) => issue.pdfUnsupported || issue.coverUnsupported);
 
   return {
     r2: {
@@ -575,11 +592,12 @@ export async function getAdminStorageDataFromDb(): Promise<AdminStorageData> {
       orphanCount: objects.filter((object) => !object.linkedIssue).length,
       linkedCount: objects.filter((object) => object.linkedIssue).length,
     },
-    supabaseLegacy: {
-      issueCount: legacyIssues.length,
-      issues: legacyIssues,
+    unsupportedAssets: {
+      issueCount: unsupportedIssues.length,
+      issues: unsupportedIssues,
     },
   };
+  });
 }
 
 async function getIssueUrlRows(): Promise<IssueUrlRow[]> {

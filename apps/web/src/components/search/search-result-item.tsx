@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BookOpen, Lock } from 'lucide-react';

@@ -2,16 +2,20 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { createHash, createHmac } from 'node:crypto';
+import { normalizePublicAssetUrl } from './asset-url';
 
 /**
  * Cloudflare R2 client. R2 speaks the S3 API so we use @aws-sdk/client-s3
  * pointed at the R2 endpoint.
  *
- * Uploads go through the authenticated S3 API; reads happen via the public
- * `R2_PUBLIC_BASE_URL` (currently the `pub-*.r2.dev` subdomain — will be
- * swapped for a custom domain later via a single env-var change).
+ * Uploads and server/worker reads use the authenticated S3 API. Public readers
+ * use short-lived grants issued by the application access gate.
+ * R2_PUBLIC_BASE_URL remains the stored catalogue locator namespace even when
+ * that origin's public access is disabled; it is not an authorization mechanism.
  */
 
 let cached: S3Client | null = null;
@@ -152,9 +156,22 @@ export async function uploadToR2(
       Key: key,
       Body: body,
       ContentType: contentType,
+      CacheControl: 'private, no-store, max-age=0',
     }),
   );
   return r2PublicUrl(key);
+}
+
+/** Verify an authenticated object using metadata and only the PDF signature. */
+export async function verifyR2Pdf(key: string, expectedSize: number): Promise<void> {
+  const client = getR2Client();
+  const metadata = await client.send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: key }));
+  if (metadata.ContentLength !== expectedSize || metadata.ContentType !== 'application/pdf') {
+    throw new Error('Stored PDF size or content type does not match the upload');
+  }
+  const result = await client.send(new GetObjectCommand({ Bucket: r2Bucket(), Key: key, Range: 'bytes=0-4' }));
+  const bytes = await result.Body?.transformToByteArray();
+  if (!bytes || Buffer.from(bytes).toString('ascii') !== '%PDF-') throw new Error('Invalid PDF signature');
 }
 
 /**
@@ -176,6 +193,7 @@ export async function deleteFromR2(key: string): Promise<void> {
  *   → "aim-2026/All India Magazine.pdf"
  */
 export function keyFromPublicUrl(url: string): string | null {
+  url = normalizePublicAssetUrl(url);
   const base = r2PublicBaseUrl();
   if (!url.startsWith(base + '/')) return null;
   const rawKey = url.slice(base.length + 1).split('?')[0];
@@ -184,29 +202,13 @@ export function keyFromPublicUrl(url: string): string | null {
 
 /** True if the URL points at our configured R2 public base. */
 export function isR2Url(url: string): boolean {
-  return url.startsWith(r2PublicBaseUrl() + '/');
-}
-
-/** True if the URL looks like a legacy Supabase Storage public URL. */
-export function isSupabaseStorageUrl(url: string): boolean {
-  return url.includes('/storage/v1/object/public/magazines/');
+  return normalizePublicAssetUrl(url).startsWith(r2PublicBaseUrl() + '/');
 }
 
 /**
- * Recover the object key from any public storage URL we've ever used — R2
- * (current) or Supabase Storage (legacy). Returns null if neither pattern
- * matches. Strips query strings and URL-decodes.
- *
- * The key is intentionally the same shape across both backends (e.g.
- * `agnishikha-2026/Agnishikha-Jan-2026.pdf`) so that an issue can be
- * migrated by re-uploading at the same key.
+ * Recover keys only from configured R2 asset locations. Never infer a managed
+ * object key from a path fragment on an unrelated host.
  */
 export function storageKeyFromUrl(url: string): string | null {
-  const r2Key = keyFromPublicUrl(url);
-  if (r2Key) return r2Key;
-  const marker = '/magazines/';
-  const i = url.indexOf(marker);
-  if (i < 0) return null;
-  const rawKey = url.slice(i + marker.length).split('?')[0];
-  return decodeURIComponent(rawKey);
+  return keyFromPublicUrl(url);
 }

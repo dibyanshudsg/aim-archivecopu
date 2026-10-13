@@ -1,8 +1,12 @@
 # Durable search indexing
 
+Local private-storage adaptation, 8 October 2026: default worker downloads and thumbnail/operator source reads now use the authenticated R2 S3 API. The stored PDF locator and SHA-256 of actual PDF bytes remain the checkpoint/review identity. Reads reject unconfigured locators, non-PDF metadata/signatures and files above 100 MiB, with a two-minute transfer timeout. Historical hosted verification below predates this local change; deployment, GitHub source synchronization and the new bucket-scoped read credentials remain pending. See [P2-05 evidence](docs/handover/P2-05_PRIVATE_MAINTENANCE.md) and [GitHub configuration](GITHUB_INDEXING.md).
+
+For an authorized environment, `node scripts/verify-private-worker.cjs` checks one English source using read-only metadata/signature requests before processing. `inspect-indexing-sources.mjs` and `rebuild-search-index.cjs` now re-read private source bytes each run; rebuild checkpoint reuse still depends on byte hash and extraction version. The R2 smoke script requires explicit `--allow-write`, uses authenticated reads and no longer treats public access as a success condition. Do not run it as a read-only verification.
+
 Implemented and verified: 2026-09-06. The website is deployed to https://aim-archive.vercel.app. The owner selected manual-only GitHub indexing: there is no hourly trigger or shared activation gate. Hosted PDF extraction and production database access are verified. See `GITHUB_INDEXING.md` for the current operator workflow.
 
-Final release and integrity evidence: [Production release — 6 September 2026](PRODUCTION_RELEASE_2026-09-06.md).
+Final release and integrity evidence: [Production release — 6 September 2026](docs/archive/PRODUCTION_RELEASE_2026-09-06.md).
 
 ## Admin access
 
@@ -31,14 +35,12 @@ Withheld-page links open `/admin/indexing/[id]/preview`, an authenticated PDF pr
 
 ## Database migration
 
-Apply once before enabling the new application paths. This idempotent migration creates only the queue, page-checkpoint, and worker-health tables; it does not rebuild or modify existing issue/search rows.
+Historical indexing migrations were applied in September. Current setup uses the [explicit-target migration procedure](docs/handover/P4-07_MIGRATION_PROCEDURE.md), with ordered checksums and a ledger. Do not replay historical migrations against the configured database. An existing schema without a ledger requires review and baselining first.
 
 ```powershell
-node scripts/apply-turso-migrations.mjs --only 00003_indexing_jobs.sql
-node scripts/apply-turso-migrations.mjs --only 00004_indexing_workspace.sql
-# For the separate local smoke database:
-node scripts/apply-turso-migrations.mjs --local --only 00003_indexing_jobs.sql
-node scripts/apply-turso-migrations.mjs --local --only 00004_indexing_workspace.sql
+# Fresh, separate synthetic setup only:
+node scripts/apply-turso-migrations.mjs --local .cache/indexing-fixture.db --status
+node scripts/apply-turso-migrations.mjs --local .cache/indexing-fixture.db --apply
 ```
 
 Applied to both configured databases on 2026-09-06. Do not rerun every historical migration just to install this feature.
@@ -74,11 +76,9 @@ Multiple workers are allowed and leases prevent duplicate ownership, but each ad
 
 ### Hosting decision background
 
-The owner selected manual-only GitHub Actions after reviewing free alternatives. No paid service has been provisioned and hourly execution is not planned. The following comparison records the original options; current setup and verification are in `GITHUB_INDEXING.md`.
+The owner selected manual-only GitHub Actions after reviewing free alternatives. No paid service has been provisioned and hourly execution is not planned. Current setup and verification are in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
 
-A scheduled GitHub Actions worker is a possible alternative to continuous hosting for occasional uploads. It would require a bounded queue-draining mode, protected database secrets, concurrency control, dependency/OCR caching, an on-demand trigger, and health copy that distinguishes scheduled operation from an offline continuous worker. GitHub Free includes 2,000 monthly runner minutes for private repositories; standard public-repository runners are free. Check the account's remaining allowance and block overages before enabling it. Scheduled runs can be delayed, so an hourly check does not guarantee indexing starts within one hour. This alternative is proposed, not implemented. Sources: [billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [schedule behavior](https://docs.github.com/en/actions/tutorials/manage-your-work/schedule-issue-creation).
-
-Railway is the paid continuous-host option considered: Hobby has a $5 monthly minimum including $5 of usage, with additional resource usage charged above that amount. Actual OCR CPU and memory usage must be measured before estimating the ongoing bill. [Pricing](https://docs.railway.com/pricing/plans).
+Scheduled execution and paid continuous hosting were considered but not selected. The approved setup is manual-only GitHub Actions; no paid worker service or hourly schedule is authorized by these notes.
 
 ## Verification evidence
 
@@ -90,3 +90,25 @@ Railway is the paid continuous-host option considered: Hobby has a $5 monthly mi
 - Combined local development launcher was restarted and verified: full catalogue remains 104 listed editions, the worker reports connected, and unauthenticated indexing access returns HTTP 401. Finish review accepted the desktop/mobile panel and rendered Admin footer control.
 
 GitHub Actions is configured, PR #1 is merged, and the two encrypted database secrets are installed with explicit authorization. The owner approved manual-only production indexing. The Admin Start indexing control requires INDEXING_GITHUB_TOKEN in Vercel; it was not present at the 6 September environment inspection. Direct repository dispatch remains available to maintainers. Existing indexes remain searchable between runs. Inspection and resolution of the 17 withheld covers remain separate from missing indexing work.
+
+## Catalogue rebuild and verification
+
+Run from the repository root. The default target uses the remote database configured in `apps/web/.env.local`; `--local` explicitly selects `.migration/turso-local-smoke.db`.
+
+```powershell
+# Extract/review only; no index writes
+node scripts/rebuild-search-index.cjs
+# Apply validated extraction to all supported English editions
+node scripts/rebuild-search-index.cjs --apply
+# Restrict a retry to explicit issue IDs
+node scripts/rebuild-search-index.cjs --apply --ids <comma-separated-issue-ids>
+# Local test catalogue
+node scripts/rebuild-search-index.cjs --local --apply
+# Verify every supported index against its source checkpoint and catalogue snapshot
+node scripts/verify-rebuilt-search.cjs --complete
+node scripts/verify-rebuilt-search.cjs --local --complete
+```
+
+Reports, backups, source PDFs and per-page review details stay in ignored `.codex-logs/search-rebuild-v2/`; the directory name is historical, while each checkpoint records the actual extraction version. Runs are locked per database scope. An interrupted run can resume from saved pages; only remove a stale lock after confirming its recorded process has stopped.
+
+These commands are an operator alternative to queued jobs. `--apply` writes to the selected database; the default is the configured remote database. Confirm target and intended issue IDs before a write. Hindi OCR remains excluded. Completed rebuild results are in [SEARCH_REBUILD_REPORT.md](SEARCH_REBUILD_REPORT.md).

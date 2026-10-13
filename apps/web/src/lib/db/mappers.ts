@@ -1,5 +1,6 @@
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { displayableAssetUrl } from './client';
+import { publicPdfRoute, publicCoverRoute, magazineCoverRoute } from '../public-asset-routes';
 
 export interface MagazineRow {
   id: string;
@@ -43,7 +44,7 @@ export function rowToMagazine(row: MagazineRow): ApiMagazine {
     name: String(row.name),
     language: String(row.language),
     description: row.description ?? '',
-    cover_image_url: displayableAssetUrl(row.cover_image_url),
+    cover_image_url: displayableAssetUrl(row.cover_image_url) ? magazineCoverRoute(String(row.id)) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -59,10 +60,10 @@ export function rowToIssue(row: IssueJoinedRow): ApiIssue {
     month: Number(row.month),
     description: row.description ?? null,
     topics: parseTopics(row.topics_json),
-    pdf_url: row.pdf_url ?? null,
+    pdf_url: row.pdf_url ? publicPdfRoute(String(row.id)) : null,
     epub_url: row.epub_url ?? null,
     mobi_url: row.mobi_url ?? null,
-    cover_image_url: displayableAssetUrl(row.cover_image_url),
+    cover_image_url: displayableAssetUrl(row.cover_image_url) ? publicCoverRoute(String(row.id)) : null,
     page_count: row.page_count == null ? null : Number(row.page_count),
     file_size_bytes: Number(row.file_size_bytes ?? 0),
     read_count: Number(row.read_count ?? 0),
@@ -79,7 +80,7 @@ export function rowToIssue(row: IssueJoinedRow): ApiIssue {
       name: String(row.magazine_name),
       language: String(row.magazine_language),
       description: row.magazine_description ?? '',
-      cover_image_url: displayableAssetUrl(row.magazine_cover_image_url),
+      cover_image_url: displayableAssetUrl(row.magazine_cover_image_url) ? magazineCoverRoute(String(row.magazine_id)) : null,
     },
   };
 }

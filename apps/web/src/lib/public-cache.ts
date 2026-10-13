@@ -1,8 +1,10 @@
-import { revalidatePath } from 'next/cache';
-import { clearPublicRepositoryCaches } from '@/lib/db';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { clearPublicRepositoryCaches, clearAdminDiscoveryCaches } from '@/lib/db';
 
 export function refreshPublicArchiveCaches(issueId?: string): void {
   clearPublicRepositoryCaches();
+  clearAdminDiscoveryCaches();
+  revalidateTag('public-archive');
 
   revalidatePath('/');
   revalidatePath('/browse');

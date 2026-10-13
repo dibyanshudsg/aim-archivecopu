@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
-import { getMagazineNameFromDb } from '@/lib/db';
+import { getMagazineNameFromDb, getAdminIssueFileRowFromDb } from '@/lib/db';
+import { replacementTicket } from '@/lib/replacement-upload';
+import { PDF_HEADERS } from '@/lib/pdf-access';
 import { createR2PresignedPutUrl, r2PublicUrl } from '@/lib/r2-client';
 
 export const runtime = 'nodejs';
@@ -15,7 +17,7 @@ function safeStorageFileName(filename: string): string {
 
 function buildStorageKey(magazineName: string, year: number, filename: string): string {
   const magazineSlug = magazineName.replace(/ /g, '-').toLowerCase();
-  return `${magazineSlug}-${year}/${safeStorageFileName(filename)}`;
+  return `${magazineSlug}-${year}/${crypto.randomUUID()}-${safeStorageFileName(filename)}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -28,6 +30,19 @@ export async function POST(request: NextRequest) {
   const contentType = typeof body?.content_type === 'string' ? body.content_type : '';
   const size = Number(body?.size);
   const year = Number(body?.year);
+
+  if (typeof body?.issue_id === 'string') {
+    if (contentType !== 'application/pdf' || !Number.isSafeInteger(size) || size <= 0 || size > MAX_PDF_BYTES) {
+      return NextResponse.json({ error: 'A PDF under 100MB is required' }, { status: 400 });
+    }
+    const issue = await getAdminIssueFileRowFromDb(body.issue_id);
+    if (!issue) return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
+    const key = `staging/replacement-${crypto.randomUUID()}.pdf`;
+    return NextResponse.json({
+      uploadUrl: createR2PresignedPutUrl(key),
+      uploadTicket: replacementTicket({ adminId: admin.id, issueId: issue.id, source: issue.pdf_url, key, size }),
+    }, { headers: PDF_HEADERS });
+  }
 
   if (!magazineId || !filename || !Number.isInteger(year)) {
     return NextResponse.json({ error: 'Missing upload metadata' }, { status: 400 });
@@ -47,5 +62,5 @@ export async function POST(request: NextRequest) {
     uploadUrl: createR2PresignedPutUrl(storageKey),
     publicUrl: r2PublicUrl(storageKey),
     storageKey,
-  });
+  }, { headers: PDF_HEADERS });
 }

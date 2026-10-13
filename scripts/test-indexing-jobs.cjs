@@ -1,3 +1,5 @@
+process.env.R2_PUBLIC_BASE_URL = 'https://example.test';
+process.env.R2_LEGACY_PUBLIC_BASE_URLS = '';
 // Real isolated libSQL transactions; never loads credentials or changes catalogue data.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

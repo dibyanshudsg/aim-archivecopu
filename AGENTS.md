@@ -6,30 +6,21 @@ This file is the day-to-day runbook for coding agents working in this repo. It i
 
 1. Read `CLAUDE.md` for the full product, architecture, database, deployment, and design context.
 2. Read `TO DO LIST.md` for the freshest task status and near-term priorities.
-3. Use `ROADMAP.md` as historical planning context only. It is older than `CLAUDE.md` and `TO DO LIST.md`, and some completed items are still marked pending there.
+3. Use [docs/archive/README.md](docs/archive/README.md) for historical evidence only; the active backlog is `TO DO LIST.md`.
 
 Do not paste secrets from docs or `.env.local` into chat. Summarize sensitive configuration instead.
 
 ## Verified Reality Snapshot
 
-Last verified: 2026-05-02.
+Updated: 2026-09-19. pnpm/Turborepo monorepo: web in `apps/web`, Expo skeleton in `apps/mobile`, shared types in `packages/shared`.
 
-The repo is a pnpm/Turborepo monorepo:
+Web candidate updated 10 October: Next.js 15.5.27, Node 22.23.3, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Turso/libSQL, Cloudflare R2, react-pdf, pdfjs-dist 4.8.69, canvas, Tesseract.js, Zustand, Zod and Lucide. Keep root React type overrides and PDF.js v4 compatibility. See SETUP.md for the exact runtime contract; this local candidate is not deployed.
 
-- Root package: `aim-archive`
-- Web app: `apps/web`, package `@aim-archive/web`
-- Mobile app skeleton: `apps/mobile`, package `@aim-archive/mobile`
-- Shared package: `packages/shared`
-- Supabase package and migrations: `packages/supabase`
-- ESLint config package: `packages/eslint-config`
-
-The web app is Next.js 15.5.15, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Supabase, `react-pdf`, `pdfjs-dist@4.8.69`, `canvas`, Tesseract.js, Zustand, Zod, and Lucide React.
-
-The mobile app is an Expo skeleton with four tabs: Home, Browse, Search, Library. It is not feature-complete.
-
-Local source PDFs exist in `AIM 2026/` and `Agnishikha 2026/` with 8 real PDFs total.
+The web runtime uses Turso repositories and R2 assets. Public catalogue scope is English/Hindi; new extraction/OCR is English-only. The native app is not feature-complete.
 
 ## Run Locally
+
+Use [SETUP.md](SETUP.md) for pinned Node/pnpm installation, native dependencies, local fonts and environment scope. Database changes use the [explicit-target migration procedure](docs/handover/P4-07_MIGRATION_PROCEDURE.md); a bare migration command no longer selects the configured live database.
 
 Prefer running the web app directly from `apps/web`:
 
@@ -75,124 +66,39 @@ pnpm.cmd format:check
 
 The direct `apps/web` command is easier for daily local work. The filtered root command is also valid.
 
-## Build Status
+## Verification and Current Status
 
-Verified production build command:
+The September 19 website release passed build, TypeScript/lint and production browser checks; see [release evidence](PRODUCTION_RELEASE_2026-09-19.md). These are dated results, not a substitute for checks after a new change.
+
+Run `pnpm.cmd build` from `apps/web`. If a build encounters sandbox `spawn EPERM` or cache permissions, follow the session's sandbox instructions and use the narrow required escalation; do not infer a code defect from a runner failure.
+
+[TO DO LIST.md](TO%20DO%20LIST.md) is the single active backlog. Domain/CDN setup and spending are deferred. Admin manual dispatch still needs `INDEXING_GITHUB_TOKEN` in Vercel and live verification. Local worker changes require GitHub source synchronization separately from website deployment.
+
+## Current Web and API Surface
+
+Public routes: Home, Browse, Search, Bookmarks, issue detail and Reader. Admin includes magazines, issues/bulk upload, storage/settings, navigation and indexing. Discover current routes from disk instead of relying on historical counts:
 
 ```powershell
-cd "d:/AIM Project/apps/web"
-pnpm.cmd build
+rg --files apps/web/src/app -g 'page.tsx'
+rg --files apps/web/src/app/api -g 'route.ts'
 ```
 
-Build result on 2026-05-02: passes when run outside the sandbox permission limitation.
+Keep public server-component wrappers with initial repository data. Privileged API work must call `verifyAdmin()`. Public queries exclude drafts and enforce the five-year access policy before returning PDF URLs. Search snippet HTML must be sanitized.
 
-Current warnings:
+Respect endpoint-specific public caching and invalidation; do not cache away read/download analytics side effects. See [performance implementation](PERFORMANCE_IMPLEMENTATION.md).
 
-- `apps/web/src/app/browse/browse-client.tsx`: `setLoading` is assigned but unused.
-- `apps/web/src/app/read/[id]/page.tsx`: two React hook dependency warnings involving `issue` and `numPages`.
+## Database and Storage
 
-If the build fails with `spawn EPERM` or a webpack cache `EPERM` inside the Codex sandbox, rerun with elevated permission. That failure is environmental, not necessarily a code failure.
+Runtime migrations are in `packages/turso/migrations/`: core schema (00001), navigation (00002), durable indexing/workspace/controls (00003–00006), and FTS5 trigram page/metadata search (00007–00008). Use parameterized libSQL queries and transactions; authorization is enforced by the application.
 
-## Docs Claims Vs Reality
+R2 stores PDFs/covers. The September 19 catalogue check found 104 issues. Current file locations must match configured R2 bases. The owner excluded a separate R2 backup during handover preparation; see P1-03.
 
-`CLAUDE.md` is mostly accurate for product direction and architecture, but it has some stale details:
+Operating references:
 
-- It says 19 API endpoints/routes. The build currently shows 20 route handlers, including `/api/admin/issues/[id]/cover`.
-- Its project structure omits the current admin bulk upload page at `/admin/issues/bulk`.
-- Its "Admin Enhancements (Planned)" list is stale. Many of those items are now implemented: bulk select/actions, manual cover upload, download count column, pagination, status/topic filters, CSV export, bulk upload, duplicate issue, and custom toast/confirm UI.
-- It says the backend API count is 16 in one older tech-stack bullet and 19 later. Reality is 20 route handler files.
-
-`TO DO LIST.md` is the freshest status tracker:
-
-- Admin issues page enhancements are mostly complete, except batch topic editing.
-- Current Phase 1.5 remaining work includes Lighthouse, accessibility, custom domain, browse/search polish, auth hardening, server-side browse scalability, mobile readiness, tests, lint tooling cleanup, and optional font/PDF-worker resilience.
-- A Cloudflare R2 storage migration is planned but not implemented.
-
-`ROADMAP.md` is stale:
-
-- It still marks Vercel deployment, SEO, and Zod validation as pending, but the code/docs/build indicate those are done.
-- It still marks admin enhancements as pending even though many are implemented.
-- It claims "production build - 0 errors, 0 warnings"; current build passes but has warnings.
-
-## Current Web Surface
-
-Public pages on disk:
-
-- `/`
-- `/browse`
-- `/search`
-- `/bookmarks`
-- `/issue/[id]`
-- `/read/[id]`
-
-Admin pages on disk:
-
-- `/admin/login`
-- `/admin`
-- `/admin/magazines`
-- `/admin/issues`
-- `/admin/issues/new`
-- `/admin/issues/bulk`
-
-Public routes use the server-component wrapper pattern with client children where needed. Keep this pattern for public data pages.
-
-## Current API Surface
-
-Route handler files currently on disk:
-
-- `/api/magazines`
-- `/api/issues`
-- `/api/issues/[id]`
-- `/api/issues/[id]/download`
-- `/api/search`
-- `/api/pdf/[...path]`
-- `/api/admin/auth`
-- `/api/admin/auth/check`
-- `/api/admin/stats`
-- `/api/admin/magazines`
-- `/api/admin/magazines/[id]`
-- `/api/admin/issues`
-- `/api/admin/issues/[id]`
-- `/api/admin/issues/[id]/cover`
-- `/api/admin/issues/[id]/reindex`
-- `/api/admin/upload`
-- `/api/admin/reindex`
-- `/api/admin/thumbnails`
-- `/api/admin/topics`
-- `/api/admin/topics/rename`
-
-Admin routes should call `verifyAdmin()` before privileged work.
-
-Public API caching currently exists for:
-
-- `/api/magazines`: `s-maxage=600`, `stale-while-revalidate=3600`
-- `/api/issues`: `s-maxage=60`, `stale-while-revalidate=300`
-- `/api/search`: `s-maxage=60`, `stale-while-revalidate=300`
-
-`/api/issues/[id]` is intentionally not cached because it increments read analytics. `/api/issues/[id]/download` increments download analytics.
-
-## Database And Storage
-
-Migrations currently on disk:
-
-- `00001_initial_schema.sql`: core tables, indexes, RLS, triggers, seed analytics visibility.
-- `00002_search_rpc.sql`: `search_issues` RPC.
-- `00003_analytics_counters.sql`: atomic read/download counter RPCs.
-
-Core tables claimed in docs match the migration:
-
-- `magazines`
-- `issues`
-- `issue_search_index`
-- `admins`
-- `users`
-- `user_bookmarks`
-- `user_reading_history`
-- `analytics_visibility`
-
-Storage is currently Supabase Storage bucket `magazines`. Cloudflare R2 migration is planned in `TO DO LIST.md`, but code still uses Supabase Storage.
-
-The `magazines` bucket must allow PDF and image MIME types because upload/thumbnail/cover flows write PDFs and JPEG/PNG assets.
+- [Manual GitHub indexing](GITHUB_INDEXING.md) and [worker/rebuild guide](INDEXING_WORKER.md).
+- [Navigation management](NAVIGATION_MANAGEMENT.md).
+- [Migration recovery notes](MIGRATION_RECOVERY.md).
+- [Deferred asset delivery](ASSET_DELIVERY_PLAN.md).
 
 ## Important Implementation Rules
 
@@ -216,6 +122,9 @@ git -c safe.directory='D:/AIM Project' status --short
 Never revert or overwrite unrelated dirty work. At the time this file was created, the working tree already had many modified and untracked files from prior work.
 
 ## Editing Workflow Notes
+
+- Follow the phase/task IDs in `TO DO LIST.md`. Before starting each task, brief the owner on its purpose, choices, necessary questions, planned actions, expected outcome and verification. Resolve consequential missing choices before dependent work; do not repeat questions already answered.
+- Record progress, decisions and completion evidence as work proceeds. Check off a task only after verification; brief the next task before starting it.
 
 - Prefer targeted in-place patches for existing files. Do not delete and recreate a file just to make a code change.
 - For large refactors, still patch section by section unless the file is genuinely being removed or renamed.

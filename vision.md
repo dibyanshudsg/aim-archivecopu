@@ -1,5 +1,7 @@
 # AIM Archive — Vision Document
 
+> Reference status, 19 September 2026: the original comparison and phase labels below are historical product research, not current implementation facts. Runtime now uses Turso/libSQL and R2. Use [CLAUDE.md](CLAUDE.md) for current architecture and [TO DO LIST.md](TO%20DO%20LIST.md) for approved work; ideas here remain optional.
+
 > A north-star vision for the AIM Archive platform, informed by a deep study of [namahjournal.com](https://namahjournal.com/) — the sister publication suggested by the boss as a reference benchmark.
 
 ---
@@ -270,7 +272,7 @@ These are deliberate choices to leapfrog NAMAH and define AIM as the modern flag
 4. **Mobile app with offline reading.** Already on the roadmap. Download an issue once, read forever on a flight or in a power cut. NAMAH has nothing here.
 5. **Bookmarks and a personal library.** Already in place via Zustand + localStorage. Phase 2 adds Google sign-in for cross-device sync.
 6. **Beautiful design system.** Gold + flame palette, Playfair Display for headings, Inter for body, smooth Framer Motion transitions, content-first composition. NAMAH is competent but visually dated — AIM is the SAS family's digital flagship.
-7. **Performance.** Next.js 15 + Vercel Edge + Supabase Mumbai region — sub-second LCP target. Skeletons over spinners; no `backdrop-blur` or heavy CSS that lags scrolling.
+7. **Performance.** Next.js 15 + Vercel + Turso/libSQL — sub-second LCP target. Skeletons over spinners; no `backdrop-blur` or heavy CSS that lags scrolling.
 8. **Accessibility.** WCAG AA contrast, keyboard navigation, screen-reader-friendly PDF reader, language tags on multilingual content, font-size controls.
 9. **Share with cover image attached** (already shipped via `navigator.share({files})`) — NAMAH has no share buttons at all.
 10. **Quote of the day / This Day in AIM.** Surface a luminous excerpt on the homepage and rotating across visits — encourages return visits and feels alive.
@@ -303,7 +305,7 @@ The site should feel like a **modern temple library**: bright, ordered, hushed, 
 
 ## 8. Concrete Roadmap Additions Suggested by NAMAH
 
-These slot into the existing `ROADMAP.md` phases.
+These are optional product ideas. Approved remaining work is tracked in `TO DO LIST.md`; this vision is not an implementation commitment.
 
 ### Phase 1.5 (current — polish + deploy)
 - [ ] Add `/about` page in nav and footer.
@@ -380,3 +382,7 @@ These are decisions worth confirming before building Phase 2:
 - [Contact Us](https://namahjournal.com/contact-us)
 - [Sri Aurobindo Society (parent)](https://aurosociety.org/)
 - [Sri Aurobindo Ashram](https://www.sriaurobindoashram.org/)
+
+## Retained ideas from the retired roadmap
+
+The following remain unapproved options, to evaluate only when user needs justify them: date-range download selection; recently viewed ordering; shared motion timing cleanup; scheduled publishing; uptime monitoring and load testing. Existing deferred ideas such as preservation mirrors, onboarding, historical highlights and additional-language support remain in the active TODO or this vision. Do not treat an old unchecked roadmap item as evidence of a current defect.

@@ -1,3 +1,4 @@
+import { isSupportedAssetUrl } from '../asset-url';
 import type { Transaction } from '@libsql/client';
 import { createId, getDb, nowIso } from './client';
 import type { ExtractedDocument, ExtractedPage } from '../pdf-extract';
@@ -33,7 +34,7 @@ export async function enqueueInTransaction(
   ).rows[0];
   if (!issue) throw new Error('Issue not found');
   if (issue.language !== 'english') return null;
-  if (!issue.pdf_url || String(issue.pdf_url).includes('.supabase.co/'))
+  if (!isSupportedAssetUrl(issue.pdf_url == null ? null : String(issue.pdf_url)))
     throw new Error('Upload an available PDF before indexing');
   const existing = (
     await tx.execute({ sql: 'SELECT * FROM indexing_jobs WHERE issue_id=?', args: [issueId] })
@@ -147,13 +148,18 @@ export async function prepareIndexingCheckpoint(
 }
 
 export async function saveIndexingPage(job: IndexingJob, page: ExtractedPage, total: number) {
+  return saveIndexingPages(job, [page], total);
+}
+
+export async function saveIndexingPages(job: IndexingJob, pages: ExtractedPage[], total: number) {
+  if (!pages.length) return;
   const tx = await getDb().transaction('write');
   try {
     await assertLease(tx, job);
-    await tx.execute({
+    await tx.batch(pages.map(page => ({
       sql: `INSERT INTO indexing_job_pages(job_id,page_number,payload) VALUES(?,?,?) ON CONFLICT(job_id,page_number) DO UPDATE SET payload=excluded.payload`,
       args: [job.id, page.pageNumber, JSON.stringify(page)],
-    });
+    })));
     await tx.execute({
       sql: `UPDATE indexing_jobs SET completed_pages=(SELECT COUNT(*) FROM indexing_job_pages WHERE job_id=?),total_pages=?,lease_until=?,updated_at=? WHERE id=?`,
       args: [job.id, total, Date.now() + LEASE_MS, nowIso(), job.id],

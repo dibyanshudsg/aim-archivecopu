@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Search as SearchIcon, X, SlidersHorizontal } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -17,6 +17,7 @@ interface SearchClientProps {
 }
 
 export function SearchClient({ navigation }: SearchClientProps) {
+  const reduceMotion = useReducedMotion();
   const url = useSearchParams();
   const query = url.get('q') ?? '';
   const magazineFilter = url.get('magazine_id') ?? 'all';
@@ -117,13 +118,13 @@ export function SearchClient({ navigation }: SearchClientProps) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search a title, theme, topic, or phrase…"
-                className="w-full rounded-2xl border border-gray-200 bg-white py-4 pr-12 pl-12 text-base text-gray-900 shadow-sm transition-colors placeholder:text-gray-400 focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
+                className="w-full rounded-2xl border border-gray-200 bg-white py-4 pr-14 pl-12 text-base text-gray-900 shadow-sm transition-colors placeholder:text-gray-500 focus:border-flame-300 focus:outline-none focus:ring-2 focus:ring-flame-100"
               />
               {query && (
                 <button
                   onClick={() => setQuery('')}
                   aria-label="Clear search"
-                  className="absolute top-1/2 right-4 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute top-1/2 right-1 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-600 hover:bg-flame-50"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -144,7 +145,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
               <button
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 aria-expanded={showAdvanced}
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+                className="flex min-h-11 items-center gap-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900"
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 {showAdvanced ? 'Hide filters' : 'Show filters'}
@@ -159,8 +160,9 @@ export function SearchClient({ navigation }: SearchClientProps) {
 
             {showAdvanced && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
+                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
                 className="mt-4 grid gap-3 rounded-xl border border-gray-100 bg-white p-4 sm:grid-cols-3"
               >
                 <div>
@@ -170,7 +172,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
                     onChange={(e) => update('magazine_id', e.target.value, true)}
                     aria-label="Magazine"
                     disabled={magazinesLoading}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    className="min-h-11 w-full rounded-lg border border-gray-200 px-3 py-2 text-base"
                   >
                     <option value="all">{magazinesLoading ? 'Loading magazines…' : 'All'}</option>
                     {magazines.map((m) => (
@@ -188,7 +190,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
                     min={1950}
                     max={2100}
                     placeholder="1990"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    className="min-h-11 w-full rounded-lg border border-gray-200 px-3 py-2 text-base"
                   />
                 </div>
                 <div>
@@ -201,7 +203,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
                     min={1950}
                     max={2100}
                     placeholder="2026"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    className="min-h-11 w-full rounded-lg border border-gray-200 px-3 py-2 text-base"
                   />
                 </div>
               </motion.div>
@@ -215,7 +217,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
                     <button
                       key={topic}
                       onClick={() => update('q', topic, true)}
-                      className="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
+                      className="min-h-11 rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
                     >
                       {topic}
                     </button>

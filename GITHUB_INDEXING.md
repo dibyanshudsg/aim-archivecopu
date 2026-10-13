@@ -1,5 +1,9 @@
 # Manual search indexing
 
+Private-storage update, 8 October 2026 (local only): the workflow now requires `INDEXING_R2_ACCOUNT_ID`, `INDEXING_R2_BUCKET`, `INDEXING_R2_ACCESS_KEY_ID` and `INDEXING_R2_SECRET_ACCESS_KEY` as repository secrets. Use a separate Society-controlled credential with Object Read access scoped to this bucket; the worker needs no upload/delete or admin-session permission. These new secrets have **not** been configured or verified on GitHub. Earlier successful runs below predate this change.
+
+Before claiming work, and when `verify_worker` is selected, `scripts/verify-private-worker.cjs` checks the database plus authenticated HEAD and five PDF signature bytes from one current English source. It makes no writes. Missing storage credentials fail before queue consumption. A successful sample does not certify every archive object or browser CORS. Keep `R2_PUBLIC_BASE_URL` and any configured aliases matching stored locators even after the public origin is disabled.
+
 [PR #1](https://github.com/MugdhanilK/aim-archive/pull/1) is merged with the owner's explicit approval. The two encrypted database secrets are configured. The hosted native/scanned PDF test and read-only production credential check [passed on GitHub](https://github.com/MugdhanilK/aim-archive/actions/runs/34040576130). The owner subsequently selected manual-only indexing. The hourly trigger and shared activation gate have been removed.
 
 The workflow is `.github/workflows/search-indexing.yml`. It runs through an authenticated Admin start or a direct GitHub manual dispatch, on the main branch. There are no scheduled, push or pull-request triggers. Existing search reads saved database rows independently of this workflow.
@@ -28,6 +32,8 @@ Manual runs use the account's shared Actions allowance. Billing usage and paid-o
 The owner authorized `INDEXING_TURSO_DATABASE_URL` and `INDEXING_TURSO_AUTH_TOKEN` as encrypted repository secrets. Both are configured and verified. No R2 write key or admin password was uploaded. Checking **verify_worker** runs isolated PDF tests and a read-only production connection test instead of processing queued issues, capped at 15 minutes.
 
 ## Execution
+
+- The worker must use the same permitted asset bases as the website. The workflow reads repository variables `R2_PUBLIC_BASE_URL` and optional `R2_LEGACY_PUBLIC_BASE_URLS`; its public-base fallback is the existing archive R2 hostname. Change the variable when moving the asset origin. These are public configuration, not storage credentials.
 
 - Standard Ubuntu runner, Node 22, pinned action revisions, read-only repository permissions and one concurrent production run.
 - A dependency-free Python queue probe exits cheaply when there is no due work. Credentials are scoped to the probe, processing and completion steps, not dependency installation or cache actions.

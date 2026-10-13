@@ -13,12 +13,13 @@
   "dependencies": {
     "@aim-archive/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "3.1045.0",
     "@libsql/client": "^0.17.3",
     "canvas": "^3.2.3",
     "framer-motion": "^12.6.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.474.0",
-    "next": "15.5.15",
+    "next": "15.5.27",
     "pdf-parse": "1.1.1",
     "pdfjs-dist": "4.8.69",
     "react": "^19.1.0",
@@ -36,9 +37,9 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "eslint": "^9.25.0",
-    "eslint-config-next": "15.5.15",
+    "eslint-config-next": "15.5.27",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "postcss": "^8.5.3",
+    "postcss": "8.5.23",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3"
   }

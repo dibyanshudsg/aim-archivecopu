@@ -9,7 +9,7 @@ const localDbPath = resolve(ROOT, process.env.LOCAL_TURSO_DB || '.migration/turs
 
 if (!existsSync(localDbPath)) {
   console.error(`Local DB not found: ${localDbPath}`);
-  console.error('Create it with the Turso importer before using dev:local-db.');
+  console.error('Restore a current database backup into an isolated local file before using dev:local-db.');
   process.exit(1);
 }
 

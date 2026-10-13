@@ -1,3 +1,5 @@
+import { AsyncTtlCache } from './ttl-cache';
+
 // Use relative URLs so API calls always hit the same origin (no CORS issues)
 const BASE_URL = '';
 
@@ -73,31 +75,18 @@ export async function fetchMagazines(signal?: AbortSignal): Promise<ApiMagazine[
   return res.json();
 }
 
-const bookmarkedIssueRequests = new Map<
-  string,
-  { expiresAt: number; promise: Promise<ApiIssue[]> }
->();
+const bookmarkedIssueRequests = new AsyncTtlCache<ApiIssue[]>(60_000, 32);
 
 export function fetchBookmarkedIssues(ids: string[]): Promise<ApiIssue[]> {
   if (ids.length === 0) return Promise.resolve([]);
   const key = [...new Set(ids)].sort().join(',');
-  const existing = bookmarkedIssueRequests.get(key);
-  if (existing && existing.expiresAt > Date.now()) return existing.promise;
-
   const searchParams = new URLSearchParams({ ids: key });
-  const promise = fetch(`${BASE_URL}/api/issues/bookmarks?${searchParams}`)
+  return bookmarkedIssueRequests.get(key, () => fetch(`${BASE_URL}/api/issues/bookmarks?${searchParams}`)
     .then(async (res) => {
       if (!res.ok) throw new Error('Failed to fetch bookmarked issues');
       const result = (await res.json()) as { data: ApiIssue[] };
       return result.data;
-    })
-    .catch((error) => {
-      bookmarkedIssueRequests.delete(key);
-      throw error;
-    });
-
-  bookmarkedIssueRequests.set(key, { expiresAt: Date.now() + 60_000, promise });
-  return promise;
+    }));
 }
 
 export async function fetchIssues(params?: {

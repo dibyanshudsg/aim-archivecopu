@@ -1,3 +1,5 @@
+process.env.R2_PUBLIC_BASE_URL = 'https://example.test';
+process.env.R2_LEGACY_PUBLIC_BASE_URLS = '';
 // End-to-end extraction with a generated native-text page and a scanned page.
 // Isolated SQLite database and PDF bytes; no catalogue or storage writes.
 const assert = require('node:assert/strict');

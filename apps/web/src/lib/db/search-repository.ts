@@ -1,7 +1,11 @@
+import { supportedAssetSql } from '../asset-url';
 import type { FullTextSearchResult } from '@/lib/api';
 import { getEmbargoState, readableCutoffIssueMonth } from '@/lib/embargo';
 import { displayableAssetUrl, getDb } from './client';
 import { buildSearchSnippet } from '../search-text-quality';
+import { hasSearchIndex, literalFtsPhrase } from './search-capabilities';
+import { publicPdfRoute, publicCoverRoute, magazineCoverRoute } from '../public-asset-routes';
+
 
 export interface SearchInput {
   query: string;
@@ -51,23 +55,22 @@ export async function searchIssueText(input: SearchInput): Promise<FullTextSearc
   const query = input.query.trim();
   if (!query) return [];
 
-  try {
-    return await searchWithTursoFts(input);
-  } catch (error) {
-    if (!isMissingFtsError(error)) throw error;
-    return searchWithLikeFallback(input);
-  }
+  // A quoted trigram phrase preserves literal substring/phrase searches,
+  // including Indic scripts and punctuation. Short queries use the scan path.
+  const indexed = Array.from(query).length >= 3 && await hasSearchIndex('issue_text_fts');
+  return searchWithLikeFallback({ ...input, query }, indexed);
 }
 
 export async function searchIssueMetadata(input: SearchInput): Promise<MetadataSearchIssue[]> {
   const query = input.query.trim().toLowerCase();
   if (!query) return [];
+  const indexed = Array.from(query).length >= 3 && await hasSearchIndex('issue_metadata_fts');
 
   const filters = buildSearchFilters(input);
   const pattern = `%${query.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
   const result = await getDb().execute({
     sql: `
-      SELECT DISTINCT
+      SELECT
         i.id,
         i.title,
         i.theme,
@@ -84,20 +87,20 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
         m.cover_image_url AS magazine_cover_image_url
       FROM issues i
       JOIN magazines m ON m.id = i.magazine_id
-      LEFT JOIN json_each(i.topics_json) topic ON true
       WHERE i.is_published = 1
-        AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        AND ${supportedAssetSql('i.pdf_url')}
+        ${indexed ? 'AND i.rowid IN (SELECT rowid FROM issue_metadata_fts WHERE issue_metadata_fts MATCH ?)' : ''}
         AND (
           lower(i.title) LIKE ? ESCAPE '\\'
           OR lower(coalesce(i.theme, '')) LIKE ? ESCAPE '\\'
           OR lower(coalesce(i.description, '')) LIKE ? ESCAPE '\\'
-          OR lower(coalesce(topic.value, '')) LIKE ? ESCAPE '\\'
+          OR EXISTS (SELECT 1 FROM json_each(i.topics_json) topic WHERE lower(coalesce(topic.value, '')) LIKE ? ESCAPE '\\')
         )
         ${filters.sql}
       ORDER BY i.year DESC, i.month DESC
       LIMIT ?
     `,
-    args: [pattern, pattern, pattern, pattern, ...filters.args, input.limit ?? 50],
+    args: [...(indexed ? [literalFtsPhrase(query)] : []), pattern, pattern, pattern, pattern, ...filters.args, input.limit ?? 50],
   });
 
   return result.rows.map((row) => ({
@@ -108,16 +111,14 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
     topics: parseTopics(row.topics_json == null ? null : String(row.topics_json)),
     year: Number(row.year),
     month: Number(row.month),
-    cover_image_url: displayableAssetUrl(row.cover_image_url == null ? null : String(row.cover_image_url)),
-    pdf_url: row.pdf_url == null ? null : String(row.pdf_url),
+    cover_image_url: displayableAssetUrl(row.cover_image_url == null ? null : String(row.cover_image_url)) ? publicCoverRoute(String(row.id)) : null,
+    pdf_url: row.pdf_url == null || getEmbargoState(Number(row.year), Number(row.month)).isEmbargoed ? null : publicPdfRoute(String(row.id)),
     magazines: {
       id: String(row.magazine_id),
       name: String(row.magazine_name),
       language: String(row.magazine_language),
       description: String(row.magazine_description ?? ''),
-      cover_image_url: displayableAssetUrl(
-        row.magazine_cover_image_url == null ? null : String(row.magazine_cover_image_url),
-      ),
+      cover_image_url: displayableAssetUrl(row.magazine_cover_image_url == null ? null : String(row.magazine_cover_image_url)) ? magazineCoverRoute(String(row.magazine_id)) : null,
     },
   }));
 }
@@ -127,7 +128,7 @@ export async function listSearchTopics(input: SearchInput): Promise<string[]> {
   const result = await getDb().execute({
     sql: `SELECT trim(topic.value) AS topic, count(DISTINCT i.id) AS uses
       FROM issues i JOIN json_each(i.topics_json) topic ON true
-      WHERE i.is_published = 1 AND i.pdf_url NOT LIKE '%.supabase.co/%'
+      WHERE i.is_published = 1 AND ${supportedAssetSql('i.pdf_url')}
         AND topic.type = 'text' AND length(trim(topic.value)) BETWEEN 1 AND 100
         ${filters.sql}
       GROUP BY trim(topic.value) ORDER BY uses DESC, topic COLLATE NOCASE LIMIT 12`,
@@ -136,41 +137,7 @@ export async function listSearchTopics(input: SearchInput): Promise<string[]> {
   return result.rows.map((row) => String(row.topic));
 }
 
-async function searchWithTursoFts(input: SearchInput): Promise<FullTextSearchResult[]> {
-  const filters = buildSearchFilters(input);
-  const result = await getDb().execute({
-    sql: `
-      SELECT
-        i.id AS issue_id,
-        i.title AS issue_title,
-        m.name AS magazine_name,
-        m.language AS magazine_language,
-        i.year,
-        i.month,
-        idx.page_number,
-        idx.content AS snippet,
-        fts_score(idx.content, ?) AS rank,
-        i.cover_image_url,
-        i.pdf_url,
-        i.theme,
-        i.topics_json
-      FROM issue_search_index idx
-      JOIN issues i ON i.id = idx.issue_id
-      JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1
-        AND i.pdf_url NOT LIKE '%.supabase.co/%'
-        AND fts_match(idx.content, ?)
-        ${filters.sql}
-      ORDER BY rank DESC, i.year DESC, i.month DESC
-      LIMIT ?
-    `,
-    args: [input.query, input.query, ...filters.args, input.limit ?? 50],
-  });
-
-  return decorateSearchRows((result.rows as unknown as SearchRow[]).map(row => ({ ...row, snippet: buildSearchSnippet(String(row.snippet), input.query, Number(row.page_number)) })));
-}
-
-async function searchWithLikeFallback(input: SearchInput): Promise<FullTextSearchResult[]> {
+async function searchWithLikeFallback(input: SearchInput, indexed = false): Promise<FullTextSearchResult[]> {
   const filters = buildSearchFilters(input);
   const pattern = `%${input.query.toLowerCase().replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
   const result = await getDb().execute({
@@ -193,13 +160,14 @@ async function searchWithLikeFallback(input: SearchInput): Promise<FullTextSearc
       JOIN issues i ON i.id = idx.issue_id
       JOIN magazines m ON m.id = i.magazine_id
       WHERE i.is_published = 1
-        AND i.pdf_url NOT LIKE '%.supabase.co/%'
+        AND ${supportedAssetSql('i.pdf_url')}
+        ${indexed ? 'AND idx.rowid IN (SELECT rowid FROM issue_text_fts WHERE issue_text_fts MATCH ?)' : ''}
         AND lower(replace(replace(idx.content, char(10), ' '), char(13), ' ')) LIKE ? ESCAPE '\\'
         ${filters.sql}
       ORDER BY i.year DESC, i.month DESC, idx.page_number ASC
       LIMIT ?
     `,
-    args: [pattern, ...filters.args, input.limit ?? 50],
+    args: [...(indexed ? [literalFtsPhrase(input.query)] : []), pattern, ...filters.args, input.limit ?? 50],
   });
 
   return decorateSearchRows((result.rows as unknown as SearchRow[]).map((row) => ({
@@ -259,8 +227,8 @@ function decorateSearchRows(rows: SearchRow[]): FullTextSearchResult[] {
         ? `Matches indexed text; excerpt available when public reading opens. ${buildEmbargoSnippet(row.theme, parseTopics(row.topics_json), state.embargoLiftLabel)}`
         : String(row.snippet),
       rank: Number(row.rank ?? 0),
-      cover_image_url: displayableAssetUrl(row.cover_image_url),
-      pdf_url: state.isEmbargoed ? null : row.pdf_url,
+      cover_image_url: displayableAssetUrl(row.cover_image_url) ? publicCoverRoute(String(row.issue_id)) : null,
+      pdf_url: state.isEmbargoed ? null : publicPdfRoute(String(row.issue_id)),
       is_embargoed: state.isEmbargoed,
       embargo_lift_label: state.embargoLiftLabel,
       embargo_lift_at: state.embargoLiftAt,
@@ -290,9 +258,4 @@ function parseTopics(value: string | null): string[] {
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function isMissingFtsError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('no such function: fts_') || message.includes('near "USING"') || message.includes('fts_match');
 }

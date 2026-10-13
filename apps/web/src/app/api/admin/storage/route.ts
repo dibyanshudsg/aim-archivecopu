@@ -3,11 +3,12 @@ import { verifyAdmin } from '@/lib/admin-auth';
 import { getAdminStorageData } from '@/lib/admin-data';
 import { deleteFromR2 } from '@/lib/r2-client';
 import { clearIssueCoverByStorageKeyInDb } from '@/lib/db';
+import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 
 /**
  * GET /api/admin/storage
  * Returns a cross-referenced view of every object in R2 and every issue
- * whose URLs still point at the legacy Supabase Storage bucket.
+ * whose file locations are missing or unsupported.
  */
 export async function GET() {
   const admin = await verifyAdmin();
@@ -57,6 +58,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   await clearIssueCoverByStorageKeyInDb(key);
+  refreshPublicArchiveCaches();
 
   return NextResponse.json({ success: true });
 }

@@ -171,7 +171,7 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
     setDownloadOpen(true);
     try {
       await downloadAsZip({
-        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url })),
+        files: downloadable.map((i) => ({ name: i.title, url: i.pdf_url, sizeBytes: i.file_size_bytes })),
         zipName: `AIM Archive — ${downloadable.length} bookmark${downloadable.length === 1 ? '' : 's'}`,
         onProgress: (p) => setProgress({ ...p, skipped: [...preSkipped, ...p.skipped] }),
         signal: abortRef.current.signal,
@@ -271,8 +271,8 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
           ) : totalBookmarks === 0 ? (
             <div className="py-20 text-center">
               <BookMarked className="mx-auto h-12 w-12 text-gray-300" />
-              <p className="mt-4 text-lg font-medium text-gray-400">No bookmarks yet</p>
-              <p className="mt-2 text-sm text-gray-400">
+              <p className="mt-4 text-lg font-medium text-gray-700">No bookmarks yet</p>
+              <p className="mt-2 text-sm text-gray-600">
                 Tap the heart icon on any issue to save it here
               </p>
               <Link

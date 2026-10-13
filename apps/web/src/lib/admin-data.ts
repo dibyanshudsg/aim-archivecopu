@@ -107,11 +107,11 @@ export interface R2Object {
   linkedIssue: LinkedIssue | null;
 }
 
-export interface LegacyIssue {
+export interface UnsupportedAssetIssue {
   id: string;
   title: string;
-  pdfOnSupabase: boolean;
-  coverOnSupabase: boolean;
+  pdfUnsupported: boolean;
+  coverUnsupported: boolean;
 }
 
 export interface AdminStorageData {
@@ -122,9 +122,9 @@ export interface AdminStorageData {
     orphanCount: number;
     linkedCount: number;
   };
-  supabaseLegacy: {
+  unsupportedAssets: {
     issueCount: number;
-    issues: LegacyIssue[];
+    issues: UnsupportedAssetIssue[];
   };
 }
 

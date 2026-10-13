@@ -1,0 +1,61 @@
+{
+  "commit": "bd8f81ddb5c74d5c8897b36ad88b440266245103",
+  "conversion": "fonttools 4.54.1 WOFF2; full fonts",
+  "files": [
+    {
+      "file": "inter-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/inter/OFL.txt",
+      "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57"
+    },
+    {
+      "file": "Inter-variable.woff2",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+      "sourceSha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+      "sha256": "13b4cddc57045d40b411008e61588c8f81aa0bd72fe884624831a0ff9c4d159a",
+      "bytes": 350460
+    },
+    {
+      "file": "aboreto-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/aboreto/OFL.txt",
+      "sha256": "da0971c73aa1773b791926b81530f3cec50c94031912f162a320263488805ef8"
+    },
+    {
+      "file": "Aboreto-Regular.woff2",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/aboreto/Aboreto-Regular.ttf",
+      "sourceSha256": "fc702d535857fa2bda802647b9d55f82a07502d4acdfd95b47279b3bf479eaa1",
+      "sha256": "ccb99fb3a46852a386c3d6b349170960a5e68f66c263a585bbeb19426c8165b4",
+      "bytes": 20992
+    },
+    {
+      "file": "tirodevanagarihindi-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/tirodevanagarihindi/OFL.txt",
+      "sha256": "2ed6051706542c5d6d96480318152b17900bb6d4dbadb11d7d5d6464d8b3e0dd"
+    },
+    {
+      "file": "TiroDevanagariHindi-Regular.woff2",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/tirodevanagarihindi/TiroDevanagariHindi-Regular.ttf",
+      "sourceSha256": "d2abcb4d352f0bfab91632df5d9c8173882073c182e662fa731a5a738e6681d7",
+      "sha256": "077ae14c099fc1d774429f28ec749609bae82f44c9579aa87d45be35e6169083",
+      "bytes": 141504
+    },
+    {
+      "file": "tangerine-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/tangerine/OFL.txt",
+      "sha256": "adadb8d5d34fe2218dca0f4a4919a9b6f81dfaebb289e5446ac7b3063d6965e9"
+    },
+    {
+      "file": "Tangerine-Regular.woff2",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/tangerine/Tangerine-Regular.ttf",
+      "sourceSha256": "3f5db6010de48f7173939f16621c0e0e794b589eec04e3b04e0a81be848dfab9",
+      "sha256": "46029029704d9dc8f568d04560936f870d087a26d942941258a71904deeffdf7",
+      "bytes": 25408
+    },
+    {
+      "file": "Tangerine-Bold.woff2",
+      "source": "https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/tangerine/Tangerine-Bold.ttf",
+      "sourceSha256": "a35368c814c71c15928ffc60cbac32bc81461f03b895a4a607df9c64b3d1548b",
+      "sha256": "1afcb33adabb605364d3768178cea7e00edbc244f1ee599ad0e3249d53e81caf",
+      "bytes": 27032
+    }
+  ]
+}

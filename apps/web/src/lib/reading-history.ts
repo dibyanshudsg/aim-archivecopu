@@ -7,6 +7,7 @@
  * resume position, so the FAB can render instantly without a network roundtrip.
  */
 
+import { publicCoverRoute } from './public-asset-routes';
 const KEY_PREFIX = 'aim-reader-state-';
 
 export interface ReadingHistoryEntry {
@@ -58,7 +59,7 @@ export function getReadingHistory(): ReadingHistoryEntry[] {
         updatedAt: parsed.updatedAt ?? 0,
         title: parsed.title,
         theme: parsed.theme ?? null,
-        coverImageUrl: parsed.coverImageUrl ?? null,
+        coverImageUrl: parsed.coverImageUrl ? publicCoverRoute(issueId) : null,
         magazineName: parsed.magazineName,
         month: parsed.month ?? 1,
         year: parsed.year ?? new Date().getFullYear(),

@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 /**
  * Wraps the app's page content with a subtle slide-in + fade on every route
@@ -20,6 +21,8 @@ import { usePathname } from 'next/navigation';
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Admin routes have their own persistent sidebar shell. Keying the whole
   // app by pathname remounts that shell on every sidebar click, which causes a
@@ -29,7 +32,9 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
       key={pathname ?? 'root'}
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24 }}
+      // Keep the first server/client render identical and visible. Motion
+      // preferences are available for subsequent client-side navigation.
+      initial={!mounted ? false : reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
     >

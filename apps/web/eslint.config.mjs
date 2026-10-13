@@ -11,7 +11,17 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   {
-    ignores: ['.next/**', 'node_modules/**', 'dist/**', 'coverage/**', 'next-env.d.ts'],
+    ignores: [
+      '.next/**',
+      '.next-*/**', // Isolated verification/performance builds (NEXT_DIST_DIR).
+      '.turbo/**',
+      'node_modules/**',
+      'dist/**',
+      'out/**',
+      'coverage/**',
+      'next-env.d.ts',
+      'public/pdf.worker-*.min.mjs', // Vendored PDF.js; keep authored public JS linted.
+    ],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
 ];

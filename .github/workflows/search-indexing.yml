@@ -28,6 +28,9 @@ jobs:
     env:
       INDEXING_OCR_CACHE_PATH: ${{ github.workspace }}/.ocr-cache
       INDEXING_REQUEST_ID: ${{ inputs.request_id }}
+      # Public configuration, not a credential. Override when the asset origin changes.
+      R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL || 'https://pub-3ed08073797148cf93d772ea1eb341f9.r2.dev' }}
+      R2_LEGACY_PUBLIC_BASE_URLS: ${{ vars.R2_LEGACY_PUBLIC_BASE_URLS }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Check for queued issues
@@ -42,7 +45,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
         with:
-          node-version: '22'
+          node-version-file: '.node-version'
           cache: pnpm
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
@@ -65,9 +68,23 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
         run: python3 scripts/indexing-schedule.py verify
+      - name: Verify private source access without changes
+        if: steps.queue.outputs.pending == 'true' || inputs.verify_worker
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.INDEXING_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.INDEXING_R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.INDEXING_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.INDEXING_R2_SECRET_ACCESS_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
+        run: node scripts/verify-private-worker.cjs
       - name: Process queued issues
         if: steps.queue.outputs.pending == 'true'
         env:
+          R2_ACCOUNT_ID: ${{ secrets.INDEXING_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.INDEXING_R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.INDEXING_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.INDEXING_R2_SECRET_ACCESS_KEY }}
           TURSO_DATABASE_URL: ${{ secrets.INDEXING_TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.INDEXING_TURSO_AUTH_TOKEN }}
         run: node scripts/indexing-worker.cjs --drain

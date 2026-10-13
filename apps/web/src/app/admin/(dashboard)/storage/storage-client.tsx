@@ -144,7 +144,7 @@ export function StorageClient({
         <div>
           <h1 className="font-heading text-2xl font-bold text-gray-900">Storage</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Files in Cloudflare R2 and any issues still served from legacy Supabase Storage.
+            Files in Cloudflare R2 and issues with missing or unsupported file locations.
           </p>
         </div>
         <button
@@ -180,9 +180,9 @@ export function StorageClient({
         />
         <StatCard
           icon={<AlertTriangle className="h-5 w-5 text-blue-600" />}
-          label="Supabase legacy"
-          value={data.supabaseLegacy.issueCount.toLocaleString()}
-          subtle="issues awaiting migration"
+          label="Unsupported assets"
+          value={data.unsupportedAssets.issueCount.toLocaleString()}
+          subtle="issues needing replacement files"
         />
       </div>
 
@@ -214,6 +214,7 @@ export function StorageClient({
                         : obj.key;
                       const linked = obj.linkedIssue;
                       const isPdf = linked?.field === 'pdf_url';
+                      const previewUrl = linked ? `/api/admin/issues/${linked.id}/${isPdf ? 'pdf' : 'cover'}` : undefined;
                       return (
                         <tr key={obj.key} className="hover:bg-gray-50/50">
                           <td className="w-10 py-3 pl-5">
@@ -221,11 +222,12 @@ export function StorageClient({
                           </td>
                           <td className="py-3">
                             <a
-                              href={obj.publicUrl}
+                              href={previewUrl}
+                              aria-disabled={!previewUrl}
                               target="_blank"
                               rel="noopener"
                               className="font-medium text-gray-900 hover:text-flame-600"
-                              title="Open in new tab"
+                              title={previewUrl ? 'Open authenticated preview' : 'Unlinked object; inspect through Society storage access'}
                             >
                               {fileName}
                             </a>
@@ -260,15 +262,15 @@ export function StorageClient({
                           </td>
                           <td className="py-3 pr-5 pl-4">
                             <div className="flex items-center justify-end gap-1">
-                              <a
-                                href={obj.publicUrl}
+                              {previewUrl && <a
+                                href={previewUrl}
                                 target="_blank"
                                 rel="noopener"
                                 className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                                title="Open public URL"
+                                title="Open authenticated preview"
                               >
                                 <ExternalLink className="h-4 w-4" />
-                              </a>
+                              </a>}
                               <button
                                 onClick={() => handleDelete(obj)}
                                 disabled={deletingKey === obj.key}
@@ -294,22 +296,21 @@ export function StorageClient({
         )}
       </section>
 
-      {/* Legacy Supabase issues */}
+      {/* Unsupported asset locations */}
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <header className="border-b border-gray-100 px-5 py-3">
           <h2 className="font-heading text-sm font-semibold text-gray-900">
-            Supabase legacy · {data.supabaseLegacy.issueCount} issue
-            {data.supabaseLegacy.issueCount === 1 ? '' : 's'}
+            Unsupported assets · {data.unsupportedAssets.issueCount} issue
+            {data.unsupportedAssets.issueCount === 1 ? '' : 's'}
           </h2>
           <p className="mt-0.5 text-xs text-gray-500">
-            These issues still serve files from the old Supabase Storage bucket. The Phase 3
-            migration script will move them to R2.
+            Upload a replacement PDF or cover for any issue listed here to restore its file location.
           </p>
         </header>
 
-        {data.supabaseLegacy.issues.length === 0 ? (
+        {data.unsupportedAssets.issues.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-gray-500">
-            ✓ Every issue is on R2. Migration is complete.
+            All issue file locations use configured storage.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -322,13 +323,13 @@ export function StorageClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data.supabaseLegacy.issues.map((issue) => (
+              {data.unsupportedAssets.issues.map((issue) => (
                 <tr key={issue.id}>
                   <td className="py-3 pl-5 font-medium text-gray-900">{issue.title}</td>
                   <td className="py-3 text-xs">
-                    {issue.pdfOnSupabase ? (
+                    {issue.pdfUnsupported ? (
                       <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 ring-1 ring-amber-100">
-                        Supabase
+                        Replace file
                       </span>
                     ) : (
                       <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-100">
@@ -337,9 +338,9 @@ export function StorageClient({
                     )}
                   </td>
                   <td className="py-3 text-xs">
-                    {issue.coverOnSupabase ? (
+                    {issue.coverUnsupported ? (
                       <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 ring-1 ring-amber-100">
-                        Supabase
+                        Replace file
                       </span>
                     ) : (
                       <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-100">

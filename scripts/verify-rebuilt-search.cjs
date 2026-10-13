@@ -23,6 +23,7 @@ require.extensions['.ts'] = (module, file) =>
     file,
   );
 process.loadEnvFile(path.join(root, 'apps/web/.env.local'));
+const { isSupportedAssetUrl } = require('../apps/web/src/lib/asset-url.ts');
 const local = process.argv.includes('--local');
 const db = fromWeb('@libsql/client').createClient(
   local
@@ -97,7 +98,7 @@ require('../apps/web/src/lib/db/client.ts').getDb = () => db;
       ).rows;
       const eligible = catalogue.filter(
         (issue) =>
-          issue.language === 'english' && issue.pdf_url && !issue.pdf_url.includes('.supabase.co/'),
+          issue.language === 'english' && issue.pdf_url && isSupportedAssetUrl(issue.pdf_url),
       );
       const scope = local ? 'local' : 'remote';
       const fullRuns = fs

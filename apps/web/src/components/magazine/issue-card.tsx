@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Check, Download, Heart, Lock, Share2 } from 'lucide-react';
@@ -23,8 +23,8 @@ interface IssueCardProps {
 
 export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProps) {
   const router = useRouter();
-  const { toggle, isBookmarked } = useBookmarks();
-  const bookmarked = isBookmarked(issue.id);
+  const toggle = useBookmarks((state) => state.toggle);
+  const bookmarked = useBookmarks((state) => state.bookmarkedIds.includes(issue.id));
   const [copied, setCopied] = useState(false);
   // Embargoed issues route to the detail page (where the "Available {Month}"
   // message lives) instead of the reader, which can't load their PDF.
@@ -42,7 +42,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
   // Cards above the fold get LCP priority on their cover image. 6 covers
   // first row across all breakpoints (2/3/3/4/4/5). Only matters on first
   // paint of /browse + /bookmarks; below-the-fold cards use lazy loading.
-  const isAboveFold = index < 6;
+  const isAboveFold = index < 2;
   const prepareDetails = () => {
     if (selectionEnabled) return;
     router.prefetch(detailHref);
@@ -171,7 +171,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
                 setTimeout(() => setCopied(false), 1500);
               }
             }}
-            className={`flex h-8 w-8 items-center justify-center rounded-full bg-white/80 transition-colors hover:bg-white ${
+            className={`flex h-11 w-11 items-center justify-center rounded-full bg-white/95 transition-colors hover:bg-white ${
               copied ? 'text-green-600' : 'text-gray-500 hover:text-flame-700'
             }`}
             aria-label="Share issue"
@@ -185,11 +185,11 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
               e.stopPropagation();
               toggle(issue.id);
             }}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 transition-colors hover:bg-white"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/95 transition-colors hover:bg-white"
             aria-label={bookmarked ? 'Remove bookmark' : 'Add bookmark'}
           >
             <Heart
-              className={`h-4 w-4 transition-colors ${bookmarked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+              className={`h-4 w-4 transition-colors ${bookmarked ? 'fill-red-500 text-red-500' : 'text-gray-600'}`}
             />
           </button>
         </div>
@@ -234,7 +234,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
         </p>
 
         {/* Meta */}
-        <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-400">
+        <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-600">
           {issue.pageCount && <span>{issue.pageCount}p</span>}
           <span>{formatFileSize(issue.fileSizeBytes)}</span>
         </div>
@@ -255,7 +255,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
               onPointerEnter={prepareDetails}
               onPointerDown={prepareDetails}
               onFocus={prepareDetails}
-              className="relative z-20 flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+              className="relative z-20 flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-flame-200 bg-flame-50/60 py-2 text-xs font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
             >
               <Lock className="h-3.5 w-3.5" />
               View Details
@@ -265,7 +265,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
               <Link
                 href={readHref}
                 onClick={() => rememberReaderSource(issue.id, source)}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
+                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-flame-500 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 Read
@@ -275,7 +275,7 @@ export function IssueCard({ issue, index = 0, source = 'browse' }: IssueCardProp
                 onPointerEnter={prepareDetails}
                 onPointerDown={prepareDetails}
                 onFocus={prepareDetails}
-                className="relative z-20 flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
+                className="relative z-20 flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50"
               >
                 <Download className="h-3.5 w-3.5" />
                 Details

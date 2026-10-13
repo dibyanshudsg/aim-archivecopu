@@ -1,5 +1,6 @@
 import type { ExtractedDocument } from './pdf-extract';
 import { extractPdfText } from './pdf-extract';
+import { readPrivatePdf } from './private-pdf';
 import { createId, getDb, nowIso } from '@/lib/db/client';
 import type { InStatement } from '@libsql/client';
 
@@ -94,15 +95,17 @@ export function prepareSearchIndex(
  */
 export async function indexIssueFromUrl(issueId: string, pdfUrl: string): Promise<number> {
   if (!(await canIndexIssue(issueId))) return 0;
-  // Download the PDF
-  const response = await fetch(pdfUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download PDF: ${response.status}`);
-  }
+  const source = await getDb().execute({ sql: 'SELECT pdf_url FROM issues WHERE id=?', args: [issueId] });
+  if (source.rows[0]?.pdf_url !== pdfUrl) throw new Error('PDF source changed');
+  const buffer = await readPrivatePdf(pdfUrl);
 
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  // Extract text
-  return indexIssueFromBuffer(issueId, buffer);
+  const { statements, indexedPages } = prepareSearchIndex(issueId, await extractPdfText(buffer));
+  const tx = await getDb().transaction('write');
+  try {
+    const current = await tx.execute({ sql: 'SELECT i.pdf_url,m.language FROM issues i JOIN magazines m ON m.id=i.magazine_id WHERE i.id=?', args: [issueId] });
+    if (current.rows[0]?.pdf_url !== pdfUrl || current.rows[0]?.language !== 'english') throw new Error('PDF source changed');
+    for (const statement of statements) await tx.execute(statement);
+    await tx.commit();
+    return indexedPages;
+  } finally { tx.close(); }
 }

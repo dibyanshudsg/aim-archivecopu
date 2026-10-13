@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
+import { uploadPdfDirect } from '@/lib/direct-pdf-upload';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -1449,7 +1450,7 @@ function ReplaceCoverModal({
   async function generateFromPdf() {
     setGenerating(true);
     try {
-      const generated = await renderPdfFirstPageCoverFromUrl(issue.pdf_url, issue.title);
+      const generated = await renderPdfFirstPageCoverFromUrl(`/api/admin/issues/${issue.id}/pdf`, issue.title);
       if (!generated) throw new Error('Could not render PDF page 1');
       setCoverSource('pdf-first-page');
       showPreview(generated);
@@ -1639,7 +1640,8 @@ function CoverThumbnail({ issue }: { issue: Issue }) {
           <div className="absolute inset-y-0 left-0 z-10 w-[3px] bg-gradient-to-b from-gold-500 to-flame-500" />
           {issue.cover_image_url ? (
             <Image
-              src={issue.cover_image_url}
+              key={issue.cover_image_url}
+              src={`/api/admin/issues/${issue.id}/cover`}
               alt=""
               fill
               className="object-cover"
@@ -1678,7 +1680,8 @@ function CoverThumbnail({ issue }: { issue: Issue }) {
                 >
                   <div className="absolute inset-y-0 left-0 z-10 w-1.5 bg-gradient-to-b from-gold-500 to-flame-500" />
                   <Image
-                    src={issue.cover_image_url}
+                    key={issue.cover_image_url}
+                    src={`/api/admin/issues/${issue.id}/cover`}
                     alt={issue.title}
                     fill
                     className="object-cover"
@@ -1954,7 +1957,7 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
     if (downloading) return;
     setDownloading(true);
     try {
-      const res = await fetch(issue.pdf_url);
+      const res = await fetch(`/api/admin/issues/${issue.id}/pdf`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -1984,20 +1987,20 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
     }
     const ok = await confirm({
       title: 'Replace PDF?',
-      message: `The current PDF will be overwritten with “${file.name}”. The OCR index will be rebuilt automatically. This cannot be undone.`,
+      message: `Use “${file.name}” as the active PDF? The previous file will remain in storage. English search indexing will be queued.`,
       confirmLabel: 'Replace',
       destructive: true,
     });
     if (!ok) return;
 
     setReplacing(true);
-    const fd = new FormData();
-    fd.append('pdf', file);
+    try {
+    const upload = await uploadPdfDirect(file, { issue_id: issue.id });
     const res = await fetch(`/api/admin/issues/${issue.id}/pdf`, {
       method: 'POST',
-      body: fd,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadTicket: upload.uploadTicket }),
     });
-    setReplacing(false);
     if (res.ok) {
       const data = await res.json();
       toast.success(data.indexing === 'queued' ? 'PDF replaced. Search indexing queued.' : 'PDF replaced. English-only indexing skipped.');
@@ -2007,6 +2010,9 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
       const data = await res.json().catch(() => ({}));
       toast.error(data.error || 'Failed to replace PDF');
     }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to replace PDF');
+    } finally { setReplacing(false); }
   }
 
   async function handleReindex() {
@@ -2050,13 +2056,13 @@ function PdfManagementPanel({ issue, onChanged }: { issue: Issue; onChanged: () 
       {/* Action buttons */}
       <div className="flex flex-col gap-2">
         <Link
-          href={`/read/${issue.id}`}
+          href={`/admin/indexing/${issue.id}/preview`}
           target="_blank"
           rel="noopener"
           className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          Open in reader
+          Open admin preview
         </Link>
 
         <button

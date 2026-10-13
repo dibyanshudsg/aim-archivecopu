@@ -1,5 +1,10 @@
 import type { PDFPageProxy, TextItem } from 'pdfjs-dist/types/src/display/api';
 import { findSearchLines, type SearchLine, type SearchReaderTarget } from './search-reader-target';
+import { TtlCache } from './ttl-cache';
+
+// Weak ownership follows PDF.js page/document lifetime; no cross-file stale
+// coordinates or retained documents when the reader closes.
+const locations = new WeakMap<PDFPageProxy, TtlCache<SearchLine[]>>();
 
 function matrix(a: number[], b: number[]) {
   return [a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1], a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3], a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]];
@@ -17,6 +22,19 @@ export async function locatePdfSearch(
   signal: AbortSignal,
   onScan: () => void,
 ): Promise<SearchLine[]> {
+  signal.throwIfAborted();
+  let cache = locations.get(page);
+  if (!cache) { cache = new TtlCache(10 * 60_000, 8); locations.set(page, cache); }
+  const key = JSON.stringify(target);
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const result = await locateUncached(page, target, signal, onScan);
+  signal.throwIfAborted();
+  cache.set(key, result);
+  return result;
+}
+
+async function locateUncached(page: PDFPageProxy, target: SearchReaderTarget, signal: AbortSignal, onScan: () => void): Promise<SearchLine[]> {
   const viewport = page.getViewport({ scale: 1 });
   const content = await page.getTextContent();
   signal.throwIfAborted();

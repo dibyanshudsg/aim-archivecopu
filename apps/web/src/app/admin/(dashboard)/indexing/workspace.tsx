@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import Image from '@/components/magazine/archive-image';
 import Link from 'next/link';
 import { RefreshCw, Search, X, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useUI } from '@/components/ui/toast';
@@ -596,7 +596,8 @@ export function IndexingWorkspace({ initial }: { initial: IndexingCatalogue }) {
                         <div className="flex gap-3">
                           {issue.cover_image_url ? (
                             <Image
-                              src={issue.cover_image_url}
+                              key={issue.cover_image_url}
+                              src={`/api/admin/issues/${issue.id}/cover`}
                               alt=""
                               width={40}
                               height={56}

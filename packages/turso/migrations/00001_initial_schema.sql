@@ -1,5 +1,5 @@
 -- AIM Archive: Turso/libSQL initial schema
--- Target: zero Supabase runtime dependency.
+-- Runtime database: Turso/libSQL.
 
 PRAGMA foreign_keys = ON;
 
@@ -63,10 +63,7 @@ CREATE TABLE IF NOT EXISTS issue_search_index (
 CREATE INDEX IF NOT EXISTS idx_search_issue ON issue_search_index(issue_id);
 CREATE INDEX IF NOT EXISTS idx_search_page ON issue_search_index(issue_id, page_number);
 
--- Turso FTS is powered by Tantivy. This differs from SQLite FTS5 syntax and
--- should be run against Turso/libSQL, not stock SQLite.
-CREATE INDEX IF NOT EXISTS idx_issue_search_content_fts
-ON issue_search_index USING fts (content);
+-- Supported substring indexes are installed by migration 00007 (FTS5).
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,

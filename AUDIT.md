@@ -1,8 +1,6 @@
 # AIM Archive — Audit & Issues Tracker
 
-> Living document for accessibility, SEO, performance, and code-quality findings.
-> Move items from **Open** → **In progress** → **Fixed** as they're addressed.
-> Add Lighthouse scores after each production-build audit so we can track regression.
+> Historical measurements and audit evidence. Earlier open/fixed labels describe the original audits, not the current backlog. Track remaining work in [TO DO LIST.md](TO%20DO%20LIST.md); see [September's performance fixes](PERFORMANCE_IMPLEMENTATION.md) for subsequent changes. Retain these Lighthouse baselines and append fresh production measurements when available.
 
 ---
 
@@ -130,8 +128,6 @@
 
 | Severity | Issue | Detected | Status |
 |---|---|---|---|
-| Critical | `admins` table had RLS disabled — anon key could INSERT a row via PostgREST, then forge a session cookie (verifyAdmin only checks row exists by id, not password) to bypass auth entirely. Could also DELETE the real admin row. | Supabase Security Advisor, 2026-05-11 | **Fixed** 2026-05-13 — `ALTER TABLE admins ENABLE ROW LEVEL SECURITY;` applied via SQL Editor. Server access uses service role key (bypasses RLS) so no policies needed. Recorded in [packages/supabase/migrations/00006_security_hardening.sql](packages/supabase/migrations/00006_security_hardening.sql). |
-| Low | `public.update_updated_at()` and `public.search_issues(...)` had mutable `search_path` — hardening warning, not exploitable since neither is `SECURITY DEFINER`. | Supabase Security Advisor, 2026-05-11 | **Fixed** 2026-05-13 — `SET search_path = public, pg_temp` pinned on both functions. Recorded in [packages/supabase/migrations/00006_security_hardening.sql](packages/supabase/migrations/00006_security_hardening.sql). |
 
 ---
 
@@ -141,3 +137,5 @@
 - Include the issue's row from this doc in the commit message (e.g. `fix(a11y): restore focus ring on search dropdown — AUDIT.md "Accessibility / High"`).
 - New findings: add to the relevant table with severity, file:line, and `Open` status. Don't reorder — append.
 - When marking `Fixed`: add a `→ commit-sha` annotation in the Status column so the doc stays connected to history.
+
+Historical database-provider security records were preserved privately during the 8 October 2026 handover cleanup; current database authorization is implemented in the application.

@@ -1,0 +1,79 @@
+# Source reconciliation and release exclusions
+
+Updated 10 October 2026. Cloudflare work and the draft request remain pending, as instructed. This preparation does not deploy, push, merge, reset, rewrite history or change remote settings.
+
+Latest candidate extension: [P4-10/P6-01 CI/security review](P4-10_P6-01_CI_SECURITY_REVIEW.md). Four CI files and updated dependency/runtime pins passed fresh Linux verification in a 356-file snapshot. Final companion documentation is assembled and scanned separately under `.cache/p6-security/candidate-final`; earlier archive identities below remain historical evidence. First hosted CI execution and native dependency/support risks remain open.
+
+## Baselines and reconciliation decision
+
+**History cleanup update, 8 October:** the baseline IDs below are pre-cleanup evidence. Password-only history rewriting mapped local HEAD to `4c02a99a3ecb7aa17a3be8f0c724c9c6127e676b` and GitHub main to `e4d860fb7fc540481ab7bf23d768bedd8cbb3c6c`; both tip trees are unchanged, as is the nine-commit difference. Use these new IDs for ongoing reconciliation. [Full mapping and limits](P4-03_SECRET_HISTORY_REVIEW.md). Previously captured comparisons remain historical evidence.
+
+- Local branch `main`: `8aad9b805102a45ed4bc77f3f5b8c6c9938acfa2`.
+- Fetched GitHub `origin/main`: `7d73dce038e178525db16fd615e20365af7eea17`. It is nine commits ahead of local HEAD, with zero local-only commits. Fetch refreshed remote-tracking metadata without changing the working source.
+- Current Vercel production: `dpl_5V2XphXmDRLfDB4ku83WkYgeSf7x`. Inspected deployment metadata returned no `gitSource`, GitHub commit SHA or CLI commit SHA. The September 19 release report records deployment from the local working folder without a commit/push. Exact deployed-source equivalence therefore remains unproven; do not label either Git commit as the deployed release.
+- The tested local working folder is the intended release **candidate**, including the private-PDF work. It is not represented by local HEAD or GitHub main. Do not pull/reset over it, and do not deploy a plain checkout of either existing commit as the completed security release.
+
+`node scripts/reconcile-release-source.cjs` compares actual Git-filtered local blob hashes with both commits, so CRLF differences do not create false source changes. The first evidence snapshot reported 158 files matching GitHub, 59 differing from both baselines, 27 local changes to otherwise unchanged upstream files, 84 local additions and 22 upstream files absent locally. There were zero cases where a changed upstream file remained unchanged from the old local HEAD. This is a content-comparison result, not proof of semantic equivalence in the 59 overlapping files.
+
+Per-file paths, categories and all three hashes are recorded privately in `.codex-logs/p4-source/comparison.json`; rerunning refreshes that report as source/docs change. Ordinary `git diff origin/main` can misleadingly show remote additions as deletions while equivalent files exist untracked relative to old local HEAD. Use the explicit blob comparison during reconciliation.
+
+The overlapping areas include public data-first/performance/search work, indexing/review/worker functionality, current private delivery, source-location cleanup, configuration and handover docs. Review these as the existing local release baseline plus security work; do not discard them to manufacture a clean working tree.
+
+The 22 initially absent files belong to recorded retirement/archival work: two obsolete correspondence drafts; the archived September 6 release record; superseded roadmap and remaining-work lists; the retired migration plan, package and five scripts. Preserve the retirement decisions under SB-04 and the archive index. The remote `TO DO - REMAINING WORK.md` explicitly treats the current tracker as historical; restoring that obsolete competing backlog would reintroduce conflicting instructions. No missing runtime file was identified in this absent-file group.
+
+## Deliverable classification
+
+| Category | Keep on disk | Git candidate | Vercel web upload |
+|---|---|---|---|
+| Web/mobile/shared source, manifests, lockfile and Turso migrations | Yes | Yes; mobile remains a skeleton | Required web/shared/build sources; no promise of native-app completion |
+| PDF.js browser worker and app public assets | Yes | Yes | Yes |
+| Worker workflow, scripts and operating service file | Yes | Yes | Workflow/ops excluded; scripts retained where useful to project commands |
+| Active/historical project docs and handover records | Yes | Review under P4-03, then include suitable documents | Excluded; not needed by the web build |
+| Root brand/source images | Yes | Retain existing tracked files | Excluded; runtime assets live in app public/source locations |
+| Environment secrets, private evidence, browser profiles and local agent state | Yes, privately where appropriate | Excluded | Excluded |
+| Source magazine PDFs, generated OCR downloads, Python bytecode, caches, temporary output | Yes; no file cleanup performed | Excluded | Excluded |
+| Environment examples | Yes | Included | Excluded; hosted variables are configured separately |
+
+Expanded `.gitignore` to cover all `.cache`, `.ocr-cache`, output, root tmp, Python bytecode, local agent/tool state and environment variants while retaining `.env*.example`. Expanded `.vercelignore` for local state, generated dependencies/builds, workflow/ops, documents and source images. No secret files were copied or printed.
+
+Two generated language downloads were already tracked despite existing ignore rules: `apps/web/eng.traineddata` (5,199,098 bytes) and `apps/web/hin.traineddata` (1,651,097 bytes). Removed **only their Git index entries** using `git rm --cached`; both files remain on disk. Their Git blob hashes still match upstream: `6d110021fb63e5751bff19d811cbc1ffe665c1c0` and `2862accf24d17a906ef077b0af37b6cd3e170980`. These are staged source removals, not a commit. OCR cache acquisition/clean Linux verification remains P4-05/09; Hindi indexing remains excluded.
+
+## Verification and next actions
+
+**Subsequent batch, 10 October:** [P4-08 assembly and P4-09 Linux verification](P4-08_09_CANDIDATE_VERIFICATION.md) passed for the exact 351-file selected snapshot. Archive SHA-256 `b5cfcb3458c069eabb85ecc51132341f9cc25571ddf7a5267e7d4530c637ff5d`; package scan found no credentials. A release commit/push, hosted coordination and final receiving-package updates remain separate. Dated fingerprints and next-action notes below describe the earlier preparation steps.
+
+Earlier local preparation, 10 October: [P4-05/06/07 batch](P4_BATCH1_REPRODUCIBILITY.md) completed runtime/font/configuration and migration-tool verification. Its runtime/operator fingerprint was 293 files, SHA-256 `b755891735d5fd0e68448aee366f6759d09124336ff01f6799ca5f7155582a62`, in `.codex-logs/p2-08/candidate-b755891735d5.json`. Later P4-01 and P4-10/P6-01 snapshots supersede it. These fingerprints are dated evidence, not published releases.
+
+Refreshed runtime-source fingerprint after this work: 275 files, SHA-256 `a7f5a7c1879f63c720144fd155ad06ce6496275867396323f808d19360e36c16`, recorded at `.codex-logs/p2-08/candidate-a7f5a7c1879f.json`. It now includes Git exclusion rules and excludes the untracked OCR downloads. This supersedes the earlier P2-08 candidate fingerprint for current-source identification; neither manifest is a deployment package or committed release.
+
+`node scripts/test-release-exclusions.cjs` passed: real Git ignore matching for private/generated paths, inclusion of source/examples/workflow/docs, Gitignore-compatible deployment matching, and no currently tracked files hidden by the ignore policy after the two index removals. Actual hosted upload contents still require staging verification. No application code/dependencies changed in this step, so the previous successful production build is not rerun solely for ignore/document changes.
+
+- P4-02 local classification and exclusion work is complete. Files were retained; there was no recursive cleanup.
+- P4-01 local reconciliation and candidate selection completed on 10 October, as recorded below. Isolated assembly and a committed release remain P4-08; deployed-source equivalence is not asserted.
+- P4-03 found a historically committed live admin password. At the owner's instruction, both GitHub branches and local history were cleaned while retaining the login. Rotation is deferred; GitHub's old PR ref and external copies remain outside the completed branch cleanup. [Audit, cleanup and limits](P4-03_SECRET_HISTORY_REVIEW.md). Local document/package suitability review completed on 10 October; final assembled-candidate scanning remains required before transfer.
+- Then assemble a reviewed candidate from `origin/main` in isolation, apply the retained local changes and intentional removals, verify no source is lost, run clean-checkout checks and record a commit under P4-08/09. Synchronize the worker separately under P4-11. Preserve the current dirty workspace throughout.
+- Cloudflare settings, staging resources and production cutover remain pending. No request was sent to Dibyanshu Ji.
+
+## P4-01 reconciliation decisions, 10 October 2026
+
+Fresh read-only remote checks confirmed main `e4d860fb7fc540481ab7bf23d768bedd8cbb3c6c`, worker branch `096b231d1c9c26fcf1ae8207d82565bbe01009e0`, and the unchanged production alias targeting `dpl_5V2XphXmDRLfDB4ku83WkYgeSf7x`. Local HEAD remains `4c02a99a3ecb7aa17a3be8f0c724c9c6127e676b`, zero commits ahead and nine behind. No merge/pull is appropriate over this working folder.
+
+The initial refreshed comparison had 59 overlapping changes, 29 local modifications, 109 additions, 156 matches and 22 absences. Review found one integration mismatch: the upstream worker-runner test still supplied an empty environment, while the retained private-worker startup requires five R2 configuration names. This prevented its queue-limit checks from running and would fail the workflow's isolated verification step. The test now supplies synthetic values, checks successful exit as well as claim counts, and verifies failure before claiming work when each required name is omitted. Runtime worker behavior and real credentials were not changed. After this correction there are **60 overlaps, 29 local modifications, 109 additions, 155 matches and 22 absences** across 375 paths.
+
+| Review area | Selection and reason | Evidence / remaining boundary |
+|---|---|---|
+| Admin dispatch, review and durable jobs | Retain GitHub's manual-only workflow and request tracking, source-bound page review, leases, checkpoints and atomic replacement reset. Dispatch/review routes, dispatch helper, page-review repository, migrations 00003–00006 and schedule script match GitHub exactly. Overlapping worker/repository files add authenticated reads, configured-location checks and batched checkpoints. | PDF security gate includes controls/jobs/indexing; corrected runner and four Python schedule tests pass. Hosted dispatch credentials and worker rollout remain P4-11/P5. |
+| Public PDF/cover delivery and admin uploads | Select local controlled routes, fresh authorization, public DTO redaction, private maintenance, immutable replacement promotion, retry helpers and retired workspace-file endpoint. Keep the corresponding browser, fixture and operator scripts. | Nine isolated PDF security suites pass. This does not prove R2 origin closure, production CORS or staging readiness. |
+| Search, repositories and performance | Retain later bounded caches, FTS5 migrations 00007/00008, literal substring behavior, lean/year-scoped shelf queries, ZIP byte limits and cache invalidation. Preserve removal of unsupported FTS syntax from the initial schema; do not restore it from GitHub. | Search/review, performance, I/O, search-reader and asset-location regressions pass; migration lifecycle was verified in batch 1. Live migration-ledger adoption remains open. |
+| Public interface and reader | Retain September's responsive/accessibility changes, server-provided initial data, lazy PDF previews, bounded preview lifecycle, reader position lookup and controlled asset URLs. The large deletion in `this-month-featured.tsx` moves the embedded reader into the added `slide-reader.tsx`; it does not remove preview functionality. | September release/UI/performance records plus the unchanged application build and local browser evidence from batch 1. This is source reconciliation, not a new complete visual audit. |
+| Build, dependencies, fonts and environment | Retain local Node/pnpm contract, bundled licensed fonts, presigner dependency/lockfile, PDF.js v4 compatibility, React overrides, lint exclusions, Turbo environment coverage and explicit-target migration tooling. | P4-04 and P4-05/06/07 evidence. No dependency upgrades during this review; clean Linux/current security checks remain P4-09/P6-01. |
+| Documents and operator material | Retain the locally reviewed active references, historical archive, handover limitations and recovery/migration procedures. Keep the single active tracker; historical release descriptions are not current production claims. | P4-03 suitability review and archive index. Owner reports the general handover email sent; stored draft is historical. Cloudflare request remains unsent. Scan each refreshed package. |
+| Retirements and generated files | Preserve all 22 recorded absences under SB-04/archive decisions. Exclude both generated OCR downloads even though their physical bytes match GitHub. Retain all other exact matches, including app assets and the native skeleton without claiming native completion. | Exclusion test passes. Comparison now records Git index membership, generated exclusions and Git file modes, preventing physical presence from being mistaken for release inclusion. |
+
+No unresolved upstream-only file was found. The reviewed selection contains **351 files and 24 intentional exclusions/removals** (22 absent paths plus two generated downloads). `.codex-logs/p4-source/selection-2026-10-10.json` records every selected path, Git-filtered blob, file mode, raw-byte SHA-256 and disposition against both baselines. It is local evidence, not a transferable archive or Git commit. Any later path/content/mode change requires a refreshed comparison before assembly; do not automatically approve future dirty files using these counts.
+
+The post-review runtime/operator fingerprint is 293 files, SHA-256 `e83456f0abdfd1ab4678b2e1069b00a95bf91b42a278a6d890b5bd974a6626bc`, recorded in `.codex-logs/p2-08/candidate-e83456f0abdf.json`. It supersedes the batch-1 fingerprint only for current source identity. Application source and dependencies were not edited during P4-01, so the successful batch-1 web build remains the applicable build evidence; only the runner test and comparison utility changed.
+
+Verification: nine PDF security suites; review/search; performance; performance I/O; search-reader; asset locations; worker runner; four Python schedule tests; release exclusions. Git-spawning helpers required narrow host execution after sandbox subprocess `EPERM`; they passed without cache deletion or ACL changes. Protected-file hashes confirm the existing Git index and private web environment file are unchanged. The two pre-existing staged OCR removals remain the only staged changes.
+
+P4-08 must assemble this selection over the verified remote main in an isolated location, check every retained/removal decision and scan the resulting package. P4-09 then verifies a clean Linux checkout. No source was published, no hosted configuration/schema changed and no deployment occurred. GitHub's retained old PR reference and external clones/caches/backups may still contain the active password; rotation remains deferred and credential exposure is not resolved.
