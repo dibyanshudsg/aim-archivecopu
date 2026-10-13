@@ -4,6 +4,8 @@ Baseline verified against the local workspace and read-only service checks on 8 
 
 ## Runtime architecture
 
+Source publication, 13 October: [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identifies the published candidate and verification. The original workspace's HEAD remains old; GitHub `main` now contains reconciled source. The public website remains the September deployment.
+
 13 October update: the owner reports Society acceptance and will continue participating. Today’s requested delivery is complete source through Git for Dibyanshu Ji; final operational acceptance, hosting/access and release checks remain separate. [Fresh offline database restore](docs/handover/P3_LOCAL_RESTORE_2026-10-13.md) passed; [dependency/support review](docs/handover/P6_SUPPORT_REVIEW_2026-10-13.md) records unresolved release risks.
 
 ### APIs and external integrations

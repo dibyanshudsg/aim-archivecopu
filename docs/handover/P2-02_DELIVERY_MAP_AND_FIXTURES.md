@@ -35,7 +35,7 @@ Magazine covers are distinct from issue covers: provide a magazine-ID route for 
 | Thumbnail generation | `api/admin/thumbnails`, `lib/pdf-thumbnail.ts`, `lib/crop-cover-spread.ts` | P2-05: S3 reads and private writes; cover bytes served only through appropriate image route |
 | Durable worker | `lib/indexing-worker.ts`, `scripts/indexing-worker.cjs`, `.github/workflows/search-indexing.yml` | P2-05: scoped R2 read credentials and source validation; deploy workflow separately from web; preserve source hashes/checkpoints |
 | Alternate extraction helper | `lib/search-indexer.ts:indexIssueFromUrl` still fetches a URL; main reindex routes enqueue jobs | P2-05: adapt or retire helper so it cannot become a remaining public-fetch path; update its callers/tests |
-| Operators | Root `scripts/test-r2.mjs` assumes public HEAD/GET and performs remote writes/deletion; `scripts/inspect-indexing-sources.mjs` and `scripts/rebuild-search-index.cjs` fetch stored PDF URLs | P2-05/07: use authenticated reads for both operators and replace obsolete smoke-test assumptions. Do not run the existing R2 smoke script as a read-only check |
+| Operators (historical baseline) | Original R2 smoke test and extraction-pilot/rebuild tools used public/stored PDF URLs | P2-05 replaced reads with authenticated access; the pilot tools were privately archived on 13 October. Current R2 smoke test still needs explicit write approval; current worker/rebuild guides are authoritative |
 
 ## Origins and cache inventory
 

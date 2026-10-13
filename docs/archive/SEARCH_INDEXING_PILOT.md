@@ -85,7 +85,7 @@ All three stored page counts were previously unknown. Physical page numbers are 
 
 ## Work completed and evidence
 
-`scripts/inspect-indexing-sources.mjs` reads catalogue metadata, downloads only three readable sources, and saves page statistics/text plus selected images locally. `scripts/pilot-search-extraction.mjs` runs a local hybrid prototype with per-page checkpoints keyed to PDF SHA-256 and prototype version. It retains all page results for inspection; its heuristic is not yet the application's production extractor.
+At the time of this pilot, separate inspection/extraction scripts produced catalogue samples, page statistics/text/images and prototype checkpoints. Those superseded scripts were privately archived during the 13 October source cleanup and are not present-day operator commands. The durable worker and current synthetic extraction tests remain in source; this paragraph describes the historical method.
 
 Evidence is in ignored `.codex-logs/indexing-pilot`: `source-inspection.json`, `pilot-summary.json`, per-issue extraction JSON, source PDFs, and selected page images/text. No credentials are printed. No database index rows, physical page counts, publication state, or storage assets were changed by the pilot.
 

@@ -38,7 +38,7 @@ Restore into a new directory, preserving this copy unchanged. Verify the manifes
 
 This backup is on the same drive, is not encrypted by this task, and does not protect against drive failure. Historical/local database files are not certified consistent snapshots of the remote Turso service. R2 objects were not downloaded by this task. Independent Society-controlled backup remains required.
 
-The snapshot contains the tracker at its in-progress state. This completion report and the subsequent checkbox update were deliberately written after verification and do not retroactively change the preserved baseline. The backup creation script is retained at `scripts/preserve-workspace.py`; it creates a fresh folder, refuses to overwrite one and fails on verification errors.
+The snapshot contains the tracker at its in-progress state. This completion report and the subsequent checkbox update were deliberately written after verification and do not retroactively change the preserved baseline. The one-time workstation preservation script was archived privately under `D:\AIM (Project Directory)\SOURCE_cleanup_2026-10-13` during authorized source cleanup; it is not a receiving setup dependency. Current database recovery uses the tools in `MIGRATION_RECOVERY.md`.
 
 ## Next task
 

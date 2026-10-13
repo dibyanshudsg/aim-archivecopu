@@ -1,182 +1,10 @@
-# Hand Over TaskList:
+# AIM Archive — Handover tracker
 
-**Current direction, 13 October 2026:** owner reports Society acceptance and will continue as part of the project. Today's request is complete reviewed Git source for Dibyanshu Ji. The owner subsequently authorized isolated commit/push, hosted CI verification and repository sharing. This supersedes acceptance-pending and assumed-departure wording in the older continuation prompt below; it does not certify final release acceptance, named operating responsibilities or a departure date. Existing credentials and the pending Cloudflare request remain unchanged. Source publication must preserve the live website.
+Current direction, 13 October 2026: Society acceptance is owner-reported and the owner continues participating. Source commit `c44eb45` is published and its hosted CI passed; the live website remains unchanged. The authorized 12-file cleanup has passed a fresh Linux install, the exact CI suite, package secret scans and documentation link checks; its 355-file candidate is ready for guarded source publication. [Publication evidence](docs/handover/SOURCE_PUBLICATION_2026-10-13.md). Dibyanshu Ji's account is `dibyanshudsg`; the owner instructed that the invitation remain on hold while source cleanup is completed.
 
-**Local progress, 13 October:** fresh read-only Turso capture and offline restore passed all 31 table/schema comparisons, integrity/FK and FTS checks; seven restore safeguards passed. [Recovery evidence](docs/handover/P3_LOCAL_RESTORE_2026-10-13.md). [Support review](docs/handover/P6_SUPPORT_REVIEW_2026-10-13.md) records native install exposure and Next migration work without upgrading the tested candidate. Source publication must use an isolated reviewed assembly and account for Vercel auto-build triggers.
+Keep the current admin password/session configuration working. Cloudflare assistance remains pending and unsent. Existing 104-issue coverage is sufficient; new uploads focus on English AIM, with Agnishikha ingestion paused. Native completion, Dynamic Pages and a separate R2 backup remain excluded. Preserve unrelated dirty work and private recovery material outside Git.
 
-Perfect. We will follow this from now on. Before starting each tasks - give me what it is, choices I should make, any questions to clarify with me and the outcome and anything else necessary so that I can know what to expect from it.
-For each of the task. Now What is our first task.
-
-# 
-
-Prepared the discussion package. Start with the [document index](D:/AIM Project/docs/handover/SOCIETY_DOCUMENT_INDEX.md).
-It includes:
-- [Project status brief](D:/AIM Project/docs/handover/SOCIETY_DISCUSSION_BRIEF.md)
-- [Society decisions and service inventory](D:/AIM Project/docs/handover/SOCIETY_DECISIONS_AND_SERVICES.md)
-- [Draft admin walkthrough and acceptance requirements](D:/AIM Project/docs/handover/ADMIN_WALKTHROUGH_AND_ACCEPTANCE_DRAFT.md)
-
-# Prompt to Share to start tomorrow's work:
-
-Continue the AIM Archive handover work in D:\AIM Project from where we stopped on 10 October 2026.
-
-Context and decisions to preserve:
-- We are preparing the project for handover to Sri Aurobindo Society. Dibyanshu Ji is my intended recipient; institutional acceptance is still pending.
-- Keep the current admin password and login working. I explicitly deferred rotation and requested removal of the password from Git only. Do not rotate credentials or invalidate sessions without a new instruction.
-- Cloudflare settings require Dibyanshu Ji’s access. Leave the existing request pending and unsent, and continue independent local work.
-- Preserve the dirty workspace and all unrelated work. Do not reset, overwrite, broadly stage or deploy it.
-
-Read first:
-1. AGENTS.md, including the Windows sandbox instructions.
-2. CLAUDE.md.
-3. TO DO LIST.md — the single active backlog.
-4. docs/handover/P4-03_SECRET_HISTORY_REVIEW.md.
-5. docs/handover/P4_SOURCE_RECONCILIATION.md.
-6. docs/handover/P2-08_STAGING_READINESS.md.
-
-Latest completed work:
-- P4-02: local source/deployment exclusions verified.
-- P4-03 found the active admin password in nine historical blobs.
-- P4-03 local document/package suitability review is complete as of 10 October. Fresh scans found no known secret values or Gitleaks findings; eight historical documentation flags were classified. External limitations and the final assembled-package scan remain open.
-- P4-04 generated/vendor lint exclusions are corrected; ordinary web lint and host-runner root lint passed, including Turbo cache/log replay. See docs/handover/P4-04_LINT_VERIFICATION.md.
-- At my instruction, password-only history cleanup was published to both GitHub branches and applied locally. All 101 mapped commits were compared; current branch-tip files remained unchanged.
-- Local Git index and private environment file were preserved.
-- GitHub still retains the old PR #1 reference. Existing clones, caches and private backups may retain the password. Do not claim complete erasure or resolved credential exposure.
-- Vercel builds triggered by the history rewrite were canceled using a temporary build guard. The previous setting was restored, and the public alias still points to deployment dpl_5V2XphXmDRLfDB4ku83WkYgeSf7x.
-
-Current Git baselines:
-- Local main: 4c02a99a3ecb7aa17a3be8f0c724c9c6127e676b
-- GitHub main: e4d860fb7fc540481ab7bf23d768bedd8cbb3c6c
-- Local main remains nine commits behind GitHub; extensive newer work is in the working folder. P4-01 local reconciliation and P4-08 isolated assembly are verified; no release commit/push has been made.
-Verify current state before acting; earlier documents may contain pre-rewrite commit IDs.
-
-Next work:
-The [Society discussion package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) is prepared for owner review: status brief, decisions/service inventory and draft admin/acceptance walkthrough. It has not been sent and does not close receiving acceptance or operational gates. Continue the remaining dependency/support review and isolated recovery preparation; Society decisions are needed for hosted staging/transfer.
-
-P4-10 CI preparation and compatible P6-01 web/root patches passed a fresh Linux install and the exact CI script. See docs/handover/P4-10_P6-01_CI_SECURITY_REVIEW.md. Native dependency risks and the Next 15 support horizon remain open. First hosted CI execution, commit/push and rollout remain separate. Preserve P4-03 external cleanup limits and scan each updated receiving package.
-
-Other settled constraints:
-- Phase 2 PDF protections are locally implemented/tested, but staging, deployment and public-origin closure remain open.
-- No separate R2 backup is requested.
-- Existing 104-issue coverage is sufficient for handover.
-- New uploads focus on English AIM; Agnishikha remains paused.
-- Dynamic Pages and native-app completion are excluded.
-- Supabase local cleanup is complete; hosted retirement remains pending.
-- Private recovery material belongs under D:\AIM (Project Directory), outside the repository.
-
-Before each task, briefly explain its purpose, expected outcome, necessary choices and genuine questions. Proceed with authorized local work without repeatedly seeking confirmation. Record evidence and remaining limitations in the tracker as you work. Never expose secrets or mark local preparation as production completion.
-
-Start with a short status recap and the briefing for the next task, then proceed.
-
-# [SHORT VERSION] AIM Archive — To Do List:
-
-The main outstanding risks are **PDF protection not yet deployed or verified at public origins, unpublished verified source, and pending Society acceptance/access**. The current admin password remains unchanged by your instruction; historical exposure remains unresolved.
-
-Below is the remaining work from the [active tracker](<D:/AIM Project/TO DO LIST.md>), grouped without repeating overlapping service checklists.
-
-**1. Source and reproducible releases — next local work**
-
-- **P4-05 — completed locally, 10 October:** Runtime/install contract and bundled fonts verified; P4-09 Linux verification passed and P6-01 patched the candidate runtime further. Remaining security/support work stays open.
-- **P4-06 — completed locally, 10 October:** Environment examples/Turbo and hosted name-only inventory reconciled; hosted changes remain their release tasks.
-- **P4-07 — completed locally, 10 October:** Explicit-target migration ledger, fresh setup and populated upgrades verified; live ledger adoption remains a reviewed release action.
-- **P4-01 — completed locally, 10 October:** Reviewed overlaps, corrected the worker-runner test integration and recorded the exact candidate selection without changing the index/private environment. Assembly and publication remain separate.
-- **P4-03:** Exact assembled-candidate scan passed; retained GitHub PR/external-copy exposure remains open. Scan later package changes before transfer.
-- **P4-08 — assembly verified:** initial 351-file archive extended to the scanned 357-file CI/security snapshot. Discussion/document updates postdate that archive and need inclusion in a refreshed final release; commit/push remains pending.
-- **P4-09 — verified, 10 October:** Cold Linux install, lint/cache replay, types, build, PDF/OCR/regressions and 13 startup/auth HTTP checks passed for the exact source snapshot.
-- **P4-10 — locally verified, 10 October:** isolated CI prepared; first hosted execution awaits source publication.
-- **P4-11:** Synchronize the indexing worker separately and verify its actual GitHub checkout.
-
-**2. Finish PDF protection — requires staging and Cloudflare access**
-
-- **P2-08:** Arrange isolated staging database/storage and separate credentials.
-- Obtain Cloudflare settings/access assistance from Dibyanshu Ji; the prepared request remains **pending and unsent**.
-- Configure scoped worker storage credentials and staging configuration.
-- Deploy the reviewed candidate to staging.
-- Verify actual reader redirects/ranges, expired links, uploads, replacements, covers, worker extraction and the PDF-unavailable fallback.
-- Rehearse recovery and coordinate website/worker release.
-- **P2-09:** Close every old public PDF origin and relevant cache path; verify restricted/draft denial while released reading and admin/worker access continue.
-
-The implementation and local regression work are already complete; these are hosted verification and rollout tasks.
-
-**3. Demonstrate recovery**
-
-- **P3-01–03:** Finalize repeatable backup/restore steps, restore into isolation, and compare tables, relationships, search indexes, settings and counters.
-- **P3-04–05:** Verify applicable asset references and representative files; exercise reading, search, private access and admin/worker operations on the restored service.
-- **P3-06–07:** Record recovery duration/data timestamp and publish tested recovery instructions.
-
-Your exclusion of a separate R2 backup remains in force; full-object-copy requirements must respect that decision.
-
-**4. Indexing, admin workflows and editorial checks**
-
-- **P5-01–02:** Configure and verify Admin-to-worker dispatch, including concurrent starts, failures, no-op runs and multiple batches.
-- **P5-03:** Test single/bulk uploads, metadata, publication, PDF/cover replacement and resulting search/cache changes.
-- **P5-04:** Test worker interruption, resume, retries, stale jobs and preservation of reviewed text.
-- **P5-05:** Verify remaining admin operations: magazines, bulk actions, topics, CSV, navigation, settings, storage and deletion.
-- **P5-06:** Review the **17 flagged cover pages** individually.
-- **P5-07:** Validate and snapshot the **existing 104-issue catalogue**.
-- **P5-08:** Agree future source-file quality, naming, delivery and publishing responsibilities.
-- **P5-09:** Confirm subscription, feedback and problem-report destinations.
-- **P5-10:** Check that documentation/admin/mobile wording accurately describes English/Hindi support and unfinished features.
-
-**5. Security and product-quality acceptance**
-
-- **P6-01 — partial, 10 October:** compatible web/root fixes verified; native dependency findings and Next 15 support planning remain open.
-- **P6-02:** Verify login throttling, proxy handling, cookies, session validation and admin offboarding. Password/session replacement remains deferred until a new instruction.
-- **P6-03:** Review privileged APIs, cross-origin mutations, uploads, object ownership and sensitive metadata/search responses.
-- **P6-04:** Verify counters and caching behavior.
-- **P6-05–07:** Test public browsing/search, bookmarks/history and full/embedded readers across desktop and phone.
-- **P6-08:** Complete keyboard, screen-reader, focus, contrast, zoom and touch accessibility checks.
-- **P6-09–10:** Measure performance and test representative upload, ZIP, OCR, traffic and failure workloads.
-- **P6-11:** Fix confirmed release blockers and record any accepted noncritical exceptions.
-
-**6. Society decisions, accounts and hosting**
-
-- **P0-01–03:** Obtain institutional acceptance, named receiving owners and acknowledgement of the agreed product and 104-issue scope.
-- **P0-04–07:** Agree hosting choices, operational responsibilities, account/recovery access, costs, acceptance criteria and a finite transition period.
-- Confirm Society admin identities and GitHub access.
-- Decide who operates and pays for the indexing worker if it remains in your retained private repository.
-- **P7-01–03:** Prepare receiving accounts and transfer or recreate retained services as selected.
-- **P7-04–10:** Implement and rehearse **only the migrations actually chosen**—web hosting, database, storage or worker. A DigitalOcean migration is not mandatory.
-- **P7-11:** Finalize the domain arrangement; setup/spending remain deferred.
-- **P7-12:** Decide whether legacy-site replacement/redirects are included.
-- **FORM-02–04:** Dibyanshu Ji confirms his form copy, response preservation and new links; then update and test website destinations.
-- **SB-02/06:** Resolve remaining legacy Supabase preservation/billing uncertainty, remove obsolete hosted secrets during the coordinated release, and retire reviewed resources when authorized.
-
-**7. Operations and the handover package**
-
-- **P8-01:** Establish Society-controlled backup storage, scheduling, retention and verification.
-- **P8-02:** Set up and test monitoring and alert recipients.
-- **P8-03:** Establish secret management, renewal reminders, recovery access and spending alerts.
-- **P8-04:** Finish tested deployment, rollback, restart and incident runbooks.
-- **P8-05–06:** Reconcile technical specifications and operating documents with the final release.
-- **P8-07:** Prepare the admin walkthrough and editorial checklist.
-- **P8-08:** Assemble the source, documentation, inventories, private recovery references, test evidence and dependency/content notices.
-- **P8-09:** Review the package with the receiving team and assign ongoing work.
-
-**8. Final production release**
-
-- **P9-01–03:** Confirm readiness and rollback arrangements, refresh applicable recovery evidence, and deploy the identified release.
-- **P9-04:** Verify production security at old and new origins.
-- **P9-05:** Run real desktop/phone public-flow checks.
-- **P9-06:** Exercise a disposable production admin/indexing fixture and verify cleanup/integrity.
-- **P9-07:** Verify backups, alerts, worker version and receiving access.
-- **P9-08:** Observe the service for the agreed period and resolve failures.
-- **P9-09:** Record the final release, deployment, schema, verification results and rollback instructions.
-
-**9. Acceptance and ending your responsibility**
-
-- **P10-01–02:** Society IT independently builds/deploys/rolls back and demonstrates recovery.
-- **P10-03:** The receiving editor independently performs the admin/indexing workflow.
-- **P10-04:** Verify receiving ownership, billing, recovery and operational responsibilities.
-- **P10-05:** Obtain written acceptance and an effective transfer date.
-- **P10-06:** Coordinate credential/session replacement and revoke departing access **only with the required instruction and verified receiving access**.
-- **P10-07:** Close personal billing/automation dependencies, respecting the retained GitHub arrangement and agreed retention.
-- **P10-08:** Record formal closure and the end of indefinite personal maintenance responsibility.
-
-**Excluded or deferred—not required for this handover**
-
-Additional archive uploads, new Agnishikha ingestion, Dynamic Pages, native-app completion and a separate R2 backup remain excluded. Optional backlog items include collections, larger ZIPs, OCR-coordinate caching, thumbnail queues, storage pagination, batch topic editing, within-reader search, public accounts/sync, EPUB conversion, expanded analytics and other future product enhancements.
-
-**P4-10 CI preparation and compatible P6-01 patches are verified locally.** Next: resolve the remaining dependency/support plan and continue scoped security review. First hosted CI execution, release commit/push and rollout remain separate.
+Start with [README](README.md), [Society document index](docs/handover/SOCIETY_DOCUMENT_INDEX.md), [technical specification](TECHNICAL_SPECIFICATION.md) and [setup](SETUP.md). Before each task, explain its purpose, necessary choices, expected result and verification; record completion only after evidence. The task IDs below are the single active backlog.
 
 # AIM Archive — To Do List
 
@@ -212,7 +40,7 @@ H01 from the assessment maps to Phase 2; H02 to Phases 1 and 3; H03 to Phase 4; 
 
 Lead: Owner with Society IT and Editorial. Decisions can proceed alongside Phases 1–4.
 
-- [ ] **P0-01 — SOCIETY ACCEPTANCE REPORTED, 13 OCTOBER:** owner confirms Society acceptance and will continue participating. Dibyanshu Ji is the intended source recipient. Named technical, editorial, account/billing and final release acceptance responsibilities/access still need recording; this does not assign all roles to Dibyanshu Ji. [Earlier email preparation](docs/handover/HANDOVER_EMAIL_DRAFT.md) remains historical.
+- [ ] **P0-01 — SOCIETY ACCEPTANCE REPORTED, 13 OCTOBER:** owner confirms Society acceptance and will continue participating. Dibyanshu Ji is the intended source recipient. Named technical, editorial, account/billing and final release acceptance responsibilities/access still need recording; this does not assign all roles to Dibyanshu Ji. Earlier correspondence preparation is privately archived.
 - [ ] **P0-02** Agree the handover product: working web archive, existing English/Hindi catalogue, English extraction, manual indexing and local bookmarks/history. Owner confirmed on 8 October that new uploads focus only on English AIM; Agnishikha uploads are on hold and Dynamic Pages is excluded from the planned handover. Preserve existing Hindi issues. Society acceptance of the overall scope remains pending; explicitly exclude unfinished native apps and other optional features unless newly selected.
 - [ ] **P0-03** Record the current catalogue as the handover coverage: **OWNER DECISION SETTLED, 8 October 2026** — the existing 104 issues (102 English AIM, 2 Agnishikha) are sufficient; no additional uploads or completion of historical years is required for handover. Preserve an itemised acceptance snapshot and obtain Society acknowledgement. Future ingestion belongs to the receiving editorial owner; Agnishikha uploads remain paused.
 - [ ] **P0-04** Confirm Society IT's hosting standards and choose whether to retain current services, move only the web server, or additionally move database/storage/worker. Record decisions separately for each component using `DIGITALOCEAN_MIGRATION.md`.
@@ -356,10 +184,10 @@ Lead: Engineering and Owner; Society IT supplies the final repository destinatio
 - [x] **P4-05 — LOCAL SETUP VERIFIED, 10 OCTOBER:** pinned tested Node 22.16.0/pnpm 10.33.0, documented native canvas/PDF.js/OCR requirements and retained React overrides. Bundled existing fonts with licenses/hashes; frozen offline install on the populated host store, runtime checks, real PDF/OCR, web build and English/Hindi browser checks passed. [Setup](SETUP.md) and [batch evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md). Clean Linux remains P4-09; current Node/dependency security review remains P6-01.
 - [x] **P4-06 — CONTRACT/INVENTORY VERIFIED, 10 OCTOBER:** all 18 active app/dev names documented and verified in Turbo strict-mode planning; env-file cache invalidation and isolated outputs covered. Read-only Vercel inventory records shared Preview/Production entries, missing dispatch/session/fallback configuration and retained legacy names. No hosted values/settings changed; actual configuration/isolation remains P2-08/P5-01/SB-06, session changes owner-deferred. [Evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md).
 - [x] **P4-07 — PROCEDURE/LOCAL MIGRATIONS VERIFIED, 10 OCTOBER:** explicit target/read-only default, checksummed ledger, reviewed baseline and atomic application implemented. Synthetic fresh/populated upgrades, FTS triggers/backfills, rollback and drift/target safeguards passed. Live read-only comparison matches all eight migrations (57 schema objects), but no live ledger was created. Adoption requires a fresh backup and reviewed release action. [Procedure](docs/handover/P4-07_MIGRATION_PROCEDURE.md) and [evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md).
-- [ ] **P4-08 — ASSEMBLY VERIFIED, PUBLICATION PENDING, 10 OCTOBER:** assembled all 351 selected files over sanitized remote main with 24 intentional removals/exclusions; hashes/modes and zero-finding candidate secret scan verified. Archive SHA-256 `b5cfcb3458c069eabb85ecc51132341f9cc25571ddf7a5267e7d4530c637ff5d`. No commit/push authorized by this batch; record the release commit when separately authorized and reconcile companion documentation updates. [Evidence](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md).
+- [x] **P4-08 — SOURCE PUBLISHED, 13 OCTOBER:** 366 selected files, 24 reviewed removals, zero-finding secret scan and byte/mode verification; isolated commit `c44eb459325dfd8835a0a632b2ece735d7e15764` pushed normally to private GitHub main. Original dirty workspace/index/environment preserved; Vercel-triggered build canceled and prior setting restored. [Evidence](docs/handover/SOURCE_PUBLICATION_2026-10-13.md). Owner subsequently authorized the first 12 cleanup recommendations; private preservation and removal are complete. Verification/publication evidence is recorded in the same report.
 - [x] **P4-09 — CLEAN LINUX SOURCE VERIFIED, 10 OCTOBER:** fresh Ubuntu/WSL2 source extraction, pinned tools and empty pnpm store; frozen install, native canvas/PDF/English OCR, nine PDF security suites, migration/search/performance/worker regressions, root lint/cache replay, web types, cold root/web build and 13 production HTTP startup/auth checks passed. All 351 source hashes/modes unchanged. This is an exact uncommitted selected-source snapshot; future release commit must match it. Mobile build remains a placeholder; no hosted acceptance claimed. [Results and limits](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md).
-- [ ] **P4-10 — IMPLEMENTED / LOCALLY VERIFIED, 10 OCTOBER; HOSTED RUN PENDING:** CI covers lint/types/build and isolated security/migration/search/worker/native OCR/HTTP/image tests without production mutation credentials. Production indexing remains manual-only. Fresh Linux run and workflow syntax validation passed; publish approved source and verify the first GitHub-hosted run before closure. [Evidence](docs/handover/P4-10_P6-01_CI_SECURITY_REVIEW.md).
-- [ ] **P4-11** Synchronize the hosted worker to the approved release and verify the checkout actually used by GitHub Actions; document website and worker release coordination.
+- [x] **P4-10 — FIRST HOSTED RUN PASSED, 13 OCTOBER:** [run 38358541234](https://github.com/MugdhanilK/aim-archive/actions/runs/38358541234) passed frozen install, isolated security/migration/search/worker/native OCR/restore tests, lint/types/build/budgets/HTTP/image checks and dependency gate. No production mutation credentials used. Native findings remain P6-01; branch protection/required-check policy was not changed. [Evidence](docs/handover/SOURCE_PUBLICATION_2026-10-13.md).
+- [ ] **P4-11 — SOURCE SYNCHRONIZED, 13 OCTOBER:** worker/workflow source is now on GitHub main and isolated worker tests ran in hosted CI. Actual production-worker checkout/configuration verification remains open; no indexing workflow was dispatched. Dedicated R2/dispatch setup and coordinated website release remain separate.
 
 **Exit evidence:** clean-checkout build/test results, working CI, identifiable source release and migration state. Optional native-app completion is not implied by monorepo command success.
 
@@ -526,19 +354,7 @@ Append a row when a task is completed or a conditional branch is formally exclud
 | P4-01 | 2026-10-10 | Codex, authorized by project owner | Dirty Windows candidate at HEAD `4c02a99`; origin `e4d860f`; unchanged production alias | [Reconciliation evidence](docs/handover/P4_SOURCE_RECONCILIATION.md#p4-01-reconciliation-decisions-10-october-2026): reviewed selection of 351 files/24 removals, runner-test correction, nine PDF security suites and search/performance/worker checks passed. Fingerprint `e83456f0abdf`; index/private environment unchanged. Isolated assembly, clean Linux and final package scan remain open. |
 | P4-08 assembly / P4-09 | 2026-10-10 | Codex, authorized by project owner | 351-file archive `b5cfcb3458c0`; fresh Ubuntu 26.04 x64/WSL2 task directory, Node 22.16.0 / pnpm 10.33.0 | [Candidate evidence](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md): zero-finding scan, cold frozen install, native PDF/OCR, security/migration/search/worker checks, lint/cache replay, types, build/budgets and 13 startup/auth checks passed. Original index/environment and all selected Linux source bytes/modes preserved. No commit/push/deploy; publication and hosted gates remain open. |
 
-Progress note, 8 October 2026: reviewed the owner's five-page June 29 correspondence PDF and prepared the [handover email draft](docs/handover/HANDOVER_EMAIL_DRAFT.md). The owner reports that the Society has not yet been informed of the intended withdrawal from ongoing responsibility. Earlier correspondence prioritised archive ingestion and discussed future enhancements; the draft asks for an agreed transition scope rather than presuming those commitments or all historical uploads are complete. P0-01 remains open. The reference PDF includes historical login credentials; do not reproduce them in outgoing mail or shared documents, and verify rotation under P6-02/P8-03. No message was sent. This newly supplied PDF and email draft postdate the P1-01 recovery snapshot.
-
-Correspondence follow-up, 8 October 2026: [checked Dibyanshu Ji's requests](docs/handover/DIBYANSHU_REQUEST_REVIEW.md) against current source and operating records. Expanded search and Navigation Management are implemented; issue actions were reorganised but the specific Edit-button wrapping fix has not been freshly verified across viewports. Dynamic Pages and full historical ingestion are not complete. Updated the draft's opening accordingly; no email sent and no implementation checkbox closed.
-
-Final draft review, 8 October 2026: preserved the owner's wording edits and clarified the 102 English / 2 Hindi catalogue split, current English-only upload focus, paused Agnishikha ingestion and exclusion of Dynamic Pages from planned handover. The draft is ready for the owner to send to Kaushal Ji, copying Dibyanshu Ji. No email sent; Society acceptance remains pending.
-
-Recipient clarification, 8 October 2026: owner selected Dibyanshu Ji as intended handover contact, inviting Kaushal Ji to suggest alternatives/additional participants. Removed the contact-nomination question and moved hosting selection into a discussion with Society IT during handover. Scope and acceptance/timing remain the two questions in the draft. No email sent.
-
-Closing clarification, 8 October 2026: added the owner's explanation that office projects and other commitments limited availability over the last two to three months, prompting recognition of the need for institutional/team support. Further assistance is offered subject to availability, without undoing the transfer of ongoing responsibility. Recorded the hoped-for official launch on 24 November 2026 as an aspiration, not an agreed deadline or waiver of readiness checks. Siddhi Day's 24 November 1926 date is documented by the [Sri Aurobindo Ashram](https://www.sriaurobindoashram.org/darshan/dates.php). No email sent.
-
-Communication update, 8 October 2026: the owner reports that the email has now been sent. Added the required operational responsibility table to Phase 0. No reply, institutional acceptance or final role allocation has been reported; P0-01 remains open. The stored draft is retained as preparation evidence, not an independently verified copy of the sent message. Earlier "not sent" notes describe the drafting history.
-
-Scope clarification, 8 October 2026: owner confirms the website is not officially publicly launched and accepts current archive coverage for handover. No additional issues or complete historical ingestion are required. Simplified P0-05 so a detailed uptime agreement does not block prelaunch preparation; data preservation, backup/recovery verification and cost ownership still apply. The already-sent email preparation file is unchanged; this clarification supersedes its open archive-batch question for future planning.
+Coordination history, updated 13 October 2026: owner reports Society acceptance and continued participation. Earlier correspondence drafts/reviews are privately archived. Current 104-issue coverage is accepted for source handover; English-only new ingestion, paused Agnishikha and excluded Dynamic Pages remain settled. The specific admin Edit-button wrapping behavior still needs fresh viewport verification. Final operating roles and release acceptance remain open.
 
 Service planning update, 8 October 2026: recorded ownership clarifications and ordered VT/R2/GH/ADM/BM/SB/FORM/DNS steps under P0-07. Society-dependent actions remain open. No hard personal-resource cutoff was requested; beginning of 2027 is a tentative preference. Local Supabase inventory completed; read-only remote schema/bucket inspection failed at DNS resolution, so remote status and preservation requirements are unresolved. No services, accounts, credentials, repository visibility or application code changed in this planning step. Google Form replacement under the receiving account is the proposed path if its account type prevents direct transfer.
 
@@ -556,7 +372,7 @@ Local integration cleanup, 8 October 2026: SB-03/04/05 completed with private pr
 
 ## Current work and blockers
 
-- **Current, 13 October:** Society acceptance reported; owner continues participating. Immediate priority is complete source through Git. P3-02/03 offline recovery verified; app/assets/receiving demonstration remains open. P6-01 support review prepared; native tooling and Next migration remain release work. No commit/push/deployment/access invitation made in this readiness review. Earlier acceptance-pending and departure assumptions are superseded by the owner's update; detailed operating roles remain open.
+- **Current, 13 October:** source `c44eb45` is published and hosted CI passed; live deployment unchanged. Recipient `dibyanshudsg` is verified; invitation held by owner while cleanup proceeds. All 366 tracked files were classified in the local audit. The first 12 removals are privately preserved and applied, with references repaired and personal correspondence/continuation notes removed from this tracker. Optional mobile/history material remains. Cleanup verification and guarded publication are tracked in the publication report. Operating roles, app/assets recovery, dependency/support and production gates remain open.
 
 - **Discussion preparation, 10 October:** [Society package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) provides a brief, decision/service inventory, supporting-document index and draft admin/acceptance walkthrough. P0-07/P8-06/07/08 progress only; no new receiving owner, accepted exception, restore demonstration or final transfer completion is claimed. Nothing sent. Remaining dependency/security and local recovery work can continue independently.
 - **Current, 10 October:** P4-10 CI preparation and compatible P6-01 patches passed fresh Linux verification. [Evidence and remaining risks](docs/handover/P4-10_P6-01_CI_SECURITY_REVIEW.md). First hosted CI execution, native dependency risks and framework support planning remain open. Commit/push remains separate; rescan subsequent package changes. P4-03 old PR/external-copy exposure remains unresolved; rotation stays deferred under ADM-04. P2-08/09 await Dibyanshu Ji's Cloudflare work and isolated staging; request pending/unsent. Original index/environment preserved. No live schema/ledger change, source publication or deployment occurred. SB-06 waits for coordinated deployment/account decision.

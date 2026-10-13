@@ -80,6 +80,8 @@ Magazine
 
 ## 4. Current Implementation Status
 
+Source publication, 13 October: the [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identifies the reviewed GitHub source and hosted verification. The live website remains unchanged. Original workspace HEAD is deliberately not advanced; do not pull/reset the dirty workspace to match GitHub.
+
 13 October owner update: Society acceptance is reported and the owner will continue participating. Immediate delivery is the complete reviewed Git source for Dibyanshu Ji. Operational access, final release acceptance and hosted checks remain open. See the tracker; earlier withdrawal/acceptance-pending text in dated correspondence is historical.
 
 Deployed release evidence: [19 September 2026](PRODUCTION_RELEASE_2026-09-19.md). The 10 October local candidate includes private PDF delivery, patched dependencies and locally verified CI; publication, hosted CI and origin closure remain open. Start with the [Society discussion package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) for handover context. Active unfinished work belongs in [TO DO LIST.md](TO%20DO%20LIST.md).
@@ -120,7 +122,7 @@ Domain/CDN setup and spending are explicitly deferred. EPUB/MOBI conversion, pub
 - **Implemented as**: Tailwind CSS 4 custom theme in `globals.css` with `gold-*` and `flame-*` color scales
 
 ### Logo
-- File: `images/AIM_logo.png`
+- Runtime file: `apps/web/public/logo.png`; original brand artwork is preserved separately from developer source.
 - A luminous golden flame with a figure of light — deeply spiritual
 - Logo should be used as-is, not modified
 - Copied to `apps/web/public/logo.png` for web use
@@ -278,7 +280,7 @@ The website uses Vercel, Turso and R2. Manual indexing uses GitHub Actions. Publ
 - **Current technical handover specification**: [TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)
 - **Handover findings and acceptance**: [HANDOVER_ASSESSMENT_2026-10-08.md](HANDOVER_ASSESSMENT_2026-10-08.md)
 - **DigitalOcean options and migration sequence**: [DIGITALOCEAN_MIGRATION.md](DIGITALOCEAN_MIGRATION.md)
-- **Logo**: `images/AIM_logo.png` — Golden flame with luminous figure
+- **Logo**: `apps/web/public/logo.png` — Golden flame with luminous figure
 - **Source PDFs**: `AIM 2026/` and `Agnishikha 2026/` folders (not in git)
 - **TODO**: `TO DO LIST.md` — task tracking
 - **History**: [archived plans and verification](docs/archive/README.md)

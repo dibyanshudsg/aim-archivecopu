@@ -10,7 +10,7 @@ All 12 supplied originals (10 PDFs and two JPEG covers, 183,182,461 bytes) match
 
 An additional 800 extraction/review evidence files (385,301,801 bytes) from `.codex-logs/indexing-pilot` and `.codex-logs/search-rebuild-v2` were copied into the restricted private evidence folder and hash-verified. This includes downloaded working PDFs, generated text/JSON and review images; these are distinguished from supplied originals. Reusable OCR model files were excluded. JSON evidence was parsed successfully.
 
-The detailed `preservation.json` report has SHA-256 `ce356548c51b848a65e15dacbd64b5f1a5126e6da49662bc71fd19b21475344f`. Verification script: `scripts/verify-preservation.py`.
+The detailed `preservation.json` report has SHA-256 `ce356548c51b848a65e15dacbd64b5f1a5126e6da49662bc71fd19b21475344f`. The one-time verification script is privately retained under `D:\AIM (Project Directory)\SOURCE_cleanup_2026-10-13`, following the 13 October source cleanup. The dated result is unchanged.
 
 ## Database and live object reconciliation
 

@@ -1,6 +1,6 @@
 # Source reconciliation and release exclusions
 
-Updated 10 October 2026. Cloudflare work and the draft request remain pending, as instructed. This preparation does not deploy, push, merge, reset, rewrite history or change remote settings.
+Publication update, 13 October 2026: [complete source candidate published](SOURCE_PUBLICATION_2026-10-13.md) as `c44eb459325dfd8835a0a632b2ece735d7e15764` from an isolated checkout. The dirty original workspace remains preserved. The live website did not change; Cloudflare work/request remain pending. The 10 October reconciliation records below are historical preparation evidence.
 
 Latest candidate extension: [P4-10/P6-01 CI/security review](P4-10_P6-01_CI_SECURITY_REVIEW.md). Four CI files and updated dependency/runtime pins passed fresh Linux verification in a 356-file snapshot. Final companion documentation is assembled and scanned separately under `.cache/p6-security/candidate-final`; earlier archive identities below remain historical evidence. First hosted CI execution and native dependency/support risks remain open.
 

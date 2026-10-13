@@ -1,10 +1,10 @@
 # Runtime, installation and configuration
 
-P4-05/06, 10 October 2026. This describes the local handover candidate, not a new production release. [Clean Linux verification](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md) passed for the identified assembled source snapshot; a release commit/push remains separate. Current production configuration is inventoried in [batch evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md).
+P4-05/06 baseline, 10 October; publication update, 13 October 2026. This describes the published source candidate, not a new production release. [Source publication and hosted verification](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identify the Git commit and live-service boundary. [Clean Linux verification](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md) and [batch evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md) remain dated preparation records.
 
 ## Runtime contract
 
-- Web/operator baseline: Node **22.23.3** (`.node-version`), pnpm **10.33.0** (`packageManager`). Engines require 22.23.3+ within major 22; `verify:runtime` requires the exact tested pin. Both local workflows read the version file; neither this upgrade nor the new CI has been published. Hosted Node settings remain a release check.
+- Web/operator baseline: Node **22.23.3** (`.node-version`), pnpm **10.33.0** (`packageManager`). Engines require 22.23.3+ within major 22; `verify:runtime` requires the exact tested pin. Both published workflows read the version file. Vercel runtime settings remain a release check; publishing source did not deploy it.
 - [P4-10/P6-01 verification](docs/handover/P4-10_P6-01_CI_SECURITY_REVIEW.md) passed on a fresh Linux installation. The Windows host runtime and installed dependencies were not replaced: select the pinned Node version and run the frozen install before using this updated candidate locally. Remaining native dependency findings and the Next 15 support horizon keep P6-01 open.
 - Next **15.5.27**, PDF.js **4.8.69**, canvas 3.x and the lockfile form the compatibility baseline. Do not upgrade PDF.js to v5 without reworking and testing server canvas rendering.
 - Preserve root `pnpm.overrides` for both React type packages. The native Expo app is a skeleton; root command success does not certify native delivery.
