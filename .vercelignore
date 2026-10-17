@@ -33,4 +33,6 @@ coverage/
 **/.next-verify/
 **/.next-performance/
 **/.env*
+scripts/enroll-existing-owner-once.cjs
+scripts/verify-production-owner-login.cjs
 **/*.traineddata*
