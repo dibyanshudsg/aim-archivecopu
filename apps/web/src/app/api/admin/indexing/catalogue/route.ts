@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export const runtime='nodejs';
 export const maxDuration=60;
@@ -54,7 +55,9 @@ export async function POST(request: NextRequest) {
   if (!admin) return await adminAccessFailure();
   const limited = await adminMutationRateLimit(request, admin.id, 'indexing');
   if (limited) return limited;
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const body = await boundedJson(request, 16 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = bodySchema.safeParse(body.value);
   if (!parsed.success)
     return NextResponse.json(
       { error: 'Choose a valid action and at most 100 issues.' },

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { adminApiFailure, authorizeAdmin, sameOrigin } from '@/lib/admin-request';
 import { findAdminAccount, listAdminRoles, resetAdminPassword, updateAdminAccount } from '@/lib/db/admin-accounts';
 import { hashAdminPassword } from '@/lib/admin-password';
+import { boundedJson } from '@/lib/request-body';
 
 const schema = z.object({ name: z.string().trim().min(2).max(100).optional(), roleId: z.string().min(1).max(100).optional(), isActive: z.boolean().optional() }).strict();
 type Context = { params: Promise<{ id: string }> };
@@ -13,7 +14,9 @@ export async function PATCH(request: NextRequest, { params }: Context) {
   if (error) return error;
   if (!sameOrigin(request)) return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
   const { id } = await params;
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const body = await boundedJson(request, 4 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid user changes.' }, { status: 400 });
   if (parsed.data.roleId && !(await listAdminRoles()).some(role => role.id === parsed.data.roleId)) return NextResponse.json({ error: 'Choose an existing role.' }, { status: 400 });
   if (id === admin!.id && (parsed.data.isActive === false || parsed.data.roleId && parsed.data.roleId !== admin!.roleId))

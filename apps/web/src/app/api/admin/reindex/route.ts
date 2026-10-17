@@ -5,13 +5,15 @@ import { listReindexCandidatesFromDb } from '@/lib/db';
 import { queueIssueIndexing } from '@/lib/db/indexing-repository';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin('indexing.manage');
   if (!admin) return await adminAccessFailure();
   const limited = await adminMutationRateLimit(request, admin.id, 'indexing');
   if (limited) return limited;
-  const body = await request.json().catch(() => ({}));
-  const issues = await listReindexCandidatesFromDb(body.force === true);
+  const body = await boundedJson(request, 1024);
+  if (!body.ok) return body.response;
+  const issues = await listReindexCandidatesFromDb((body.value as { force?: unknown }).force === true);
   let queued = 0;
   const errors: { issueId: string; error: string }[] = [];
   for (const issue of issues) {

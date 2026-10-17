@@ -16,6 +16,7 @@ import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { deliverPdf } from '@/lib/pdf-delivery';
 import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -47,8 +48,9 @@ export async function POST(
     return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
   }
 
-  const body = await request.json().catch(() => null);
-  const upload = verifyReplacementTicket(body?.uploadTicket, admin.id, id);
+  const body = await boundedJson(request, 8 * 1024);
+  if (!body.ok) return body.response;
+  const upload = verifyReplacementTicket((body.value as { uploadTicket?: unknown } | null)?.uploadTicket, admin.id, id);
   if (!upload) return NextResponse.json({ error: 'Upload authorization is invalid or expired. Upload again.' }, { status: 400 });
   if (upload.source !== issue.pdf_url) return NextResponse.json({ error: 'The PDF changed during upload. Refresh and try again.' }, { status: 409 });
   const originalKey = pdfKeyFromLocator(issue.pdf_url);

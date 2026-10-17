@@ -5,6 +5,7 @@ import { getDispatchState, startIndexing, releaseUnconfirmedStart } from '@/lib/
 import { z } from 'zod';
 import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -32,13 +33,9 @@ export async function POST(request: NextRequest) {
   if (limited) return limited;
   if (request.headers.get('origin') !== request.nextUrl.origin)
     return NextResponse.json({ error: 'Start indexing from this website.' }, { status: 403 });
-  const raw = await request.text();
-  let input: unknown;
-  try {
-    input = raw ? JSON.parse(raw) : {};
-  } catch {
-    return NextResponse.json({ error: 'Choose a valid indexing action.' }, { status: 400 });
-  }
+  const body = await boundedJson(request, 1024);
+  if (!body.ok) return body.response;
+  const input = body.value;
   const parsed = z
     .object({ action: z.enum(['start', 'release']).optional() })
     .strict()
@@ -51,12 +48,8 @@ export async function POST(request: NextRequest) {
     const result = parsed.data.action === 'release' ? await releaseUnconfirmedStart() : await startIndexing(admin.id);
     await settleAdminOperation(operation, action, true);
     return NextResponse.json(result, { status: 202 });
-  } catch (error) {
+  } catch {
     await settleAdminOperation(operation, action, false);
-    const message =
-      error instanceof Error && /already|No eligible|not configured|Refresh/.test(error.message)
-        ? error.message
-        : 'Could not start indexing. Refresh before retrying.';
-    return NextResponse.json({ error: message }, { status: 409 });
+    return NextResponse.json({ error: 'Could not start indexing. Refresh before retrying.' }, { status: 409 });
   }
 }

@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminApiFailure, authorizeAdmin, sameOrigin } from '@/lib/admin-request';
 import { deleteAdminRole, updateAdminRole } from '@/lib/db/admin-accounts';
 import { roleSchema } from '@/lib/admin-role-validation';
+import { boundedJson } from '@/lib/request-body';
 
 type Context = { params: Promise<{ id: string }> };
 export async function PUT(request: NextRequest, { params }: Context) {
   const { admin, error } = await authorizeAdmin('roles.manage', request);
   if (error) return error;
   if (!sameOrigin(request)) return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
-  const parsed = roleSchema.safeParse(await request.json().catch(() => null));
+  const body = await boundedJson(request, 8 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = roleSchema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: 'Enter a role name and valid permissions.' }, { status: 400 });
   try {
     const changed = await updateAdminRole((await params).id, parsed.data, admin!.id);

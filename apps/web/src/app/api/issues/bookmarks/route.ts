@@ -21,8 +21,7 @@ export async function GET(request: NextRequest) {
         },
       },
     );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, code: 'DB_ERROR' }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Could not load bookmarked issues.', code: 'DB_ERROR' }, { status: 500 });
   }
 }

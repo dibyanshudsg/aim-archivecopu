@@ -5,6 +5,7 @@ import { setAdminPassword, findAdminAccount } from '@/lib/db/admin-accounts';
 import { sameOrigin } from '@/lib/admin-request';
 import { adminLandingPath } from '@/lib/admin-permissions';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin();
@@ -12,8 +13,10 @@ export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
   const limited = await adminMutationRateLimit(request, admin.id, 'credential');
   if (limited) return limited;
-  let body: { currentPassword?: unknown; newPassword?: unknown };
-  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid request' }, { status: 400 }); }
+  const parsedBody = await boundedJson(request, 4 * 1024);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value as { currentPassword?: unknown; newPassword?: unknown } | null;
+  if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   if (typeof body.currentPassword !== 'string' || !validateAdminPassword(body.newPassword))
     return NextResponse.json({ error: 'Enter your current password and a new password of at least 12 characters.' }, { status: 400 });
   const valid = admin.passwordHash

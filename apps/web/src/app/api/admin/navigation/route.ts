@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
-import { adminAccessFailure } from '@/lib/admin-request';
+import { adminAccessFailure, adminApiFailure } from '@/lib/admin-request';
 import { getAdminNavigation } from '@/lib/admin-data';
 
 export async function GET() {
@@ -10,10 +10,6 @@ export async function GET() {
   try {
     return NextResponse.json(await getAdminNavigation());
   } catch (error) {
-    return NextResponse.json({ error: getErrorMessage(error, 'Failed to read navigation') }, { status: 500 });
+    return adminApiFailure(error, 'Failed to read navigation');
   }
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
 }

@@ -6,6 +6,7 @@ import { revalidateNavigationSurfaces } from '@/lib/navigation-revalidation';
 import { formatZodError, navigationItemSchema } from '@/lib/validations';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin('navigation.manage');
@@ -13,7 +14,9 @@ export async function POST(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id);
   if (limited) return limited;
 
-  const parsed = navigationItemSchema.safeParse(await request.json());
+  const body = await boundedJson(request, 8 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = navigationItemSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }

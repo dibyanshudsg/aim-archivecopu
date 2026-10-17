@@ -5,6 +5,7 @@ import { renameTopicInDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 /** POST /api/admin/topics/rename  body: { from, to } → rename across every issue */
 export async function POST(request: NextRequest) {
@@ -13,7 +14,9 @@ export async function POST(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id);
   if (limited) return limited;
 
-  const { from, to } = await request.json();
+  const body = await boundedJson(request, 4096);
+  if (!body.ok) return body.response;
+  const { from, to } = body.value as { from?: unknown; to?: unknown };
   if (!from || !to || typeof from !== 'string' || typeof to !== 'string') {
     return NextResponse.json({ error: 'from and to are required' }, { status: 400 });
   }

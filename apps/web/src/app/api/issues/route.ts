@@ -14,8 +14,7 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, code: 'DB_ERROR' }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Could not load issues.', code: 'DB_ERROR' }, { status: 500 });
   }
 }

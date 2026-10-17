@@ -7,6 +7,7 @@ import { getMagazineNameFromDb, getAdminIssueFileRowFromDb } from '@/lib/db';
 import { replacementTicket } from '@/lib/replacement-upload';
 import { PDF_HEADERS } from '@/lib/pdf-access';
 import { createR2PresignedPutUrl, r2PublicUrl } from '@/lib/r2-client';
+import { boundedJson } from '@/lib/request-body';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,9 @@ export async function POST(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id, 'upload');
   if (limited) return limited;
 
-  const body = await request.json().catch(() => null);
+  const parsedBody = await boundedJson(request, 4096);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value as Record<string, unknown>;
   const magazineId = typeof body?.magazine_id === 'string' ? body.magazine_id : '';
   const filename = typeof body?.filename === 'string' ? body.filename : '';
   const contentType = typeof body?.content_type === 'string' ? body.content_type : '';

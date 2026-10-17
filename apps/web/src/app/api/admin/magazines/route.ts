@@ -6,6 +6,7 @@ import { createAdminMagazineInDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export async function GET() {
   const admin = await verifyAdmin('catalogue.view');
@@ -25,8 +26,9 @@ export async function POST(request: NextRequest) {
   if (limited) return limited;
 
   const { magazineSchema, formatZodError } = await import('@/lib/validations');
-  const body = await request.json();
-  const parsed = magazineSchema.safeParse(body);
+  const body = await boundedJson(request, 4096);
+  if (!body.ok) return body.response;
+  const parsed = magazineSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }

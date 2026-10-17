@@ -7,6 +7,7 @@ import { clearIssueCoverByStorageKeyInDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 /**
  * GET /api/admin/storage
@@ -45,12 +46,9 @@ export async function DELETE(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id);
   if (limited) return limited;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
+  const parsedBody = await boundedJson(request, 4096);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
 
   const key =
     typeof body === 'object' && body !== null && 'key' in body && typeof (body as { key: unknown }).key === 'string'

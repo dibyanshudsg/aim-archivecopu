@@ -15,6 +15,7 @@ import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { getDb } from '@/lib/db/client';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 export async function PUT(
   request: NextRequest,
@@ -27,8 +28,9 @@ export async function PUT(
 
   const { id } = await params;
   const { issueUpdateSchema, formatZodError } = await import('@/lib/validations');
-  const body = await request.json();
-  const parsed = issueUpdateSchema.safeParse(body);
+  const body = await boundedJson(request, 64 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = issueUpdateSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }

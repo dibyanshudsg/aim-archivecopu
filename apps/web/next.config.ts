@@ -6,6 +6,23 @@ import { dirname, relative, resolve } from 'node:path';
 // Vercel cannot package a path as both a symlink and a parent directory.
 const pdfJsDirectory = dirname(realpathSync(require.resolve('pdfjs-dist/package.json')));
 const pdfJsFontFiles = `${relative(__dirname, pdfJsDirectory).replace(/\\/g, '/')}/standard_fonts/**/*`;
+// The reader follows short-lived signed redirects to R2; its worker and fonts
+// are hosted by this application. Next.js still emits inline bootstrap scripts,
+// so script-src must permit those until nonce-based dynamic rendering is adopted.
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.r2.cloudflarestorage.com https://pub-3ed08073797148cf93d772ea1eb341f9.r2.dev",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.r2.cloudflarestorage.com",
+  "worker-src 'self' blob:",
+  "frame-src 'none'",
+].join('; ');
 
 const nextConfig: NextConfig = {
   // Allow verification builds alongside an active local development server.
@@ -23,7 +40,7 @@ const nextConfig: NextConfig = {
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'Content-Security-Policy', value: "base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'" },
+          { key: 'Content-Security-Policy', value: contentSecurityPolicy },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },

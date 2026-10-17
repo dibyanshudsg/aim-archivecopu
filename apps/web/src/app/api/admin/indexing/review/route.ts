@@ -5,6 +5,7 @@ import { adminAccessFailure } from '@/lib/admin-request';
 import { resolvePageReview } from '@/lib/db/indexing-page-reviews';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 const schema = z.object({
   issueId: z.string().min(1).max(100),
@@ -22,7 +23,9 @@ export async function POST(request: NextRequest) {
   if (limited) return limited;
   if (request.headers.get('origin') !== request.nextUrl.origin)
     return NextResponse.json({ error: 'Open the review from this website.' }, { status: 403 });
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const body = await boundedJson(request, 32 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success)
     return NextResponse.json(
       { error: 'Enter a valid page decision and review note.' },
@@ -32,11 +35,7 @@ export async function POST(request: NextRequest) {
     await resolvePageReview(parsed.data, admin.id);
     await auditAdmin(admin.id, 'indexing.reviewed', parsed.data.issueId, `Page ${parsed.data.page}: ${parsed.data.decision}`);
     return NextResponse.json({ saved: true });
-  } catch (error) {
-    const message =
-      error instanceof Error && /Refresh|Enter verified|short note/.test(error.message)
-        ? error.message
-        : 'Could not save the review. Refresh before retrying.';
-    return NextResponse.json({ error: message }, { status: 409 });
+  } catch {
+    return NextResponse.json({ error: 'Could not save the review. Refresh before retrying.' }, { status: 409 });
   }
 }

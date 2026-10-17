@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
-import { adminAccessFailure } from '@/lib/admin-request';
+import { adminAccessFailure, adminApiFailure } from '@/lib/admin-request';
+import { boundedJson } from '@/lib/request-body';
 import { upsertSiteSettingsInDb } from '@/lib/db';
 import { getAdminSiteSettings } from '@/lib/admin-data';
 import { formatZodError, siteSettingsSchema } from '@/lib/validations';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) return message;
-  }
-  return fallback;
-}
 
 export async function GET() {
   const admin = await verifyAdmin('settings.view');
@@ -24,8 +16,7 @@ export async function GET() {
     const settings = await getAdminSiteSettings();
     return NextResponse.json(settings);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to read settings');
-    return NextResponse.json({ error: message }, { status: 500 });
+    return adminApiFailure(error, 'Failed to read settings');
   }
 }
 
@@ -35,8 +26,9 @@ export async function PATCH(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id);
   if (limited) return limited;
 
-  const body = await request.json();
-  const parsed = siteSettingsSchema.safeParse(body);
+  const body = await boundedJson(request, 16 * 1024);
+  if (!body.ok) return body.response;
+  const parsed = siteSettingsSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }
@@ -46,7 +38,6 @@ export async function PATCH(request: NextRequest) {
     await auditAdmin(admin.id, 'settings.updated');
     return NextResponse.json(parsed.data);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to save settings');
-    return NextResponse.json({ error: message }, { status: 500 });
+    return adminApiFailure(error, 'Failed to save settings');
   }
 }

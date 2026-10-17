@@ -5,6 +5,7 @@ import { deleteTopicFromDb, listTopicCountsFromDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { auditAdmin } from '@/lib/db/admin-accounts';
 import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { boundedJson } from '@/lib/request-body';
 
 /** GET /api/admin/topics → list of all topics with usage counts */
 export async function GET() {
@@ -21,7 +22,9 @@ export async function DELETE(request: NextRequest) {
   const limited = await adminMutationRateLimit(request, admin.id);
   if (limited) return limited;
 
-  const { name } = await request.json();
+  const body = await boundedJson(request, 4096);
+  if (!body.ok) return body.response;
+  const { name } = body.value as { name?: unknown };
   if (!name || typeof name !== 'string') {
     return NextResponse.json({ error: 'name is required' }, { status: 400 });
   }
