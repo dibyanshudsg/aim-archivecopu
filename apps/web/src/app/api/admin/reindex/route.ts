@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { listReindexCandidatesFromDb } from '@/lib/db';
 import { queueIssueIndexing } from '@/lib/db/indexing-repository';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 export async function POST(request: NextRequest) {
-  if (!(await verifyAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'indexing');
+  if (limited) return limited;
   const body = await request.json().catch(() => ({}));
   const issues = await listReindexCandidatesFromDb(body.force === true);
   let queued = 0;
@@ -18,5 +24,6 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+  if (queued) await auditAdmin(admin.id, 'indexing.queued', undefined, `${queued} issues`);
   return NextResponse.json({ queued, errors, total: issues.length }, { status: 202 });
 }

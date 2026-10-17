@@ -22,6 +22,7 @@ function useMediaQuery(query: string): boolean {
 }
 
 export default function SlideReader({
+  issueId,
   pdfUrl,
   fallbackCoverUrl,
   fallbackTitle,
@@ -30,6 +31,7 @@ export default function SlideReader({
   year,
   language,
 }: {
+  issueId: string;
   pdfUrl: string;
   fallbackCoverUrl: string | null;
   fallbackTitle: string;
@@ -39,12 +41,13 @@ export default function SlideReader({
   language: Language;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const bookCardRef = useRef<HTMLDivElement>(null);
+  const [baseBookWidth, setBaseBookWidth] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const pdfRetry = usePdfRetry(pdfUrl);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [width, setWidth] = useState<number | null>(null);
   /** 1 = next-page motion, -1 = prev-page motion. */
   const [pageDirection, setPageDirection] = useState(1);
   /** Flips true the first time react-pdf signals page 1 has finished
@@ -57,32 +60,29 @@ export default function SlideReader({
   const reduceMotion = useReducedMotion();
   /** True at lg+ (≥1024px) — drives two-page-spread mode. */
   const isSpread = useMediaQuery('(min-width: 1024px)');
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const measure = () => {
+      const styles = window.getComputedStyle(scroller);
+      const available = scroller.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+      const preferred = isSpread
+        ? Math.max(480, window.innerHeight * 1.5 - 352)
+        : Math.max(230, window.innerHeight * 0.75 - 176);
+      setBaseBookWidth(Math.max(1, Math.round(Math.min(available, preferred))));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [isSpread]);
   /** Step size — turn the whole spread (2 pages) on desktop, single page on
    *  smaller viewports. */
   const step = isSpread ? 2 : 1;
-
-  // Measure the BOOK CARD (not the outer reader) so the PDF renders at the
-  // exact display width of the book — accounting for the space taken by the
-  // outside arrow buttons and their gaps.
-  useLayoutEffect(() => {
-    if (bookCardRef.current) {
-      const w = bookCardRef.current.clientWidth;
-      if (w > 0) setWidth(Math.round(w));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!bookCardRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w && w > 0) {
-        const next = Math.round(w);
-        setWidth((current) => (current === next ? current : next));
-      }
-    });
-    ro.observe(bookCardRef.current);
-    return () => ro.disconnect();
-  }, []);
 
   // Snap page to an odd anchor when toggling into spread mode so the spread
   // is always (page, page+1).
@@ -118,23 +118,43 @@ export default function SlideReader({
   const canGoNext = numPages ? page < numPages : true;
 
   const SPREAD_GAP_PX = 8;
-  const measuredWidth = width ?? 0;
-  const perPageWidth = measuredWidth
+  const widthByColumn = baseBookWidth
     ? isSpread
-      ? Math.max(120, Math.floor((measuredWidth - SPREAD_GAP_PX) / 2))
-      : measuredWidth
+      ? Math.max(120, Math.floor((baseBookWidth - SPREAD_GAP_PX) / 2))
+      : baseBookWidth
     : 0;
+  // The archive PDFs can be as tall as 1.6 × their width. Fit the full page
+  // inside the viewport-sized book card instead of clipping its top and foot.
+  const baseBookHeight = baseBookWidth ? baseBookWidth * (isSpread ? 2 / 3 : 4 / 3) : 0;
+  const perPageWidth = widthByColumn && baseBookHeight
+    ? Math.min(widthByColumn, Math.max(120, Math.floor((baseBookHeight - 2) / 1.6)))
+    : widthByColumn;
 
-  // Force the PDF canvas to render at minimum 2× the CSS resolution so text
-  // stays crisp on Retina, 4K, and browser-zoomed displays.
+  // Render fresh PDF pixels for the chosen display size. CSS enlargement of
+  // a smaller canvas makes the text soft, even on a high-density display.
   const hiDPI =
     typeof window !== 'undefined'
-      ? Math.min(2, window.devicePixelRatio || 1)
+      ? Math.max(2, Math.min(3, window.devicePixelRatio || 1))
       : 2;
 
-  // ---------- Zoom (in-place reader zoom) ----------
+  // Grow the entire book in the page flow, and remember each issue's level.
   const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2];
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    try {
+      const saved = Number(window.localStorage.getItem(`aim-preview-zoom:${issueId}`));
+      return ZOOM_STEPS.includes(saved) ? saved : 1;
+    } catch {
+      return 1;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`aim-preview-zoom:${issueId}`, String(zoom));
+    } catch {
+      // The preview still works when browser storage is unavailable.
+    }
+  }, [issueId, zoom]);
   function zoomIn() {
     const i = ZOOM_STEPS.indexOf(zoom);
     if (i >= 0 && i < ZOOM_STEPS.length - 1) setZoom(ZOOM_STEPS[i + 1]);
@@ -150,11 +170,8 @@ export default function SlideReader({
   const canZoomOut = zoom > ZOOM_STEPS[0];
   const renderedPageWidth = perPageWidth ? Math.round(perPageWidth * zoom) : 0;
 
-  // Reset zoom whenever the slide changes (new issue) so the next reader
-  // doesn't inherit the previous user's zoom level. Same trigger resets the
-  // loading cover so it covers the new issue's page-1 render.
+  // Cover the PDF until the first page of a newly selected file has rendered.
   useEffect(() => {
-    setZoom(1);
     setPage1Rendered(false);
   }, [pdfUrl]);
 
@@ -209,37 +226,34 @@ export default function SlideReader({
       {/* Book row — three flex siblings: left arrow, book card, right arrow.
           Desktop arrows live OUTSIDE the card; on mobile/tablet the arrows
           are in the page indicator pill below. */}
-      <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+      <div className="relative flex items-center justify-center gap-2 sm:gap-3 lg:gap-4">
         {!loadError && (
           <button
             type="button"
             onClick={goPrev}
             disabled={!canGoPrev}
             aria-label={isSpread ? 'Previous spread' : 'Previous page'}
-            className="z-20 hidden h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-md transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white/70 disabled:text-gray-300 disabled:shadow-none lg:flex"
+            className="absolute left-2 top-1/2 z-40 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-md transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white/70 disabled:text-gray-300 disabled:shadow-none lg:flex"
           >
             <ChevronLeft className="h-6 w-6" strokeWidth={2.5} />
           </button>
         )}
 
+        <div ref={scrollerRef} className="flex w-full items-center overflow-x-auto px-1 lg:px-14" style={{ justifyContent: 'safe center' }}>
         <motion.div
           ref={bookCardRef}
+          style={{ width: baseBookWidth ? Math.round(baseBookWidth * zoom) : undefined, transition: reduceMotion ? 'none' : 'width 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.18}
           onDragEnd={handleSwipe}
-          className={cn(
-            'relative flex aspect-[3/4] min-w-0 flex-1 cursor-grab items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 via-flame-50/60 to-gold-50 shadow-[0_8px_28px_rgba(190,140,46,0.12)] active:cursor-grabbing lg:aspect-[3/2]',
-            // Allow scrolling within the book card when the user has zoomed
-            // beyond the natural fit.
-            zoom > 1 ? 'overflow-auto' : 'overflow-hidden',
-          )}
+          className="home-preview-book relative flex min-w-0 cursor-grab items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-gold-50 via-flame-50/60 to-gold-50 shadow-[0_8px_28px_rgba(190,140,46,0.12)] active:cursor-grabbing"
         >
           {/* "Magazine on a table" shadow */}
           <div className="pointer-events-none absolute inset-x-1/4 bottom-3 h-3 rounded-full bg-black/10 blur-xl" />
 
           {loadError ? (
-            <div className="relative mx-auto aspect-[3/4] max-w-md">
+            <div className={cn('relative mx-auto aspect-[3/4] max-w-md', isSpread ? 'w-[48%]' : 'w-full')}>
               <CoverFallback
                 coverUrl={fallbackCoverUrl}
                 magazineName={magazineName}
@@ -275,22 +289,14 @@ export default function SlideReader({
               }
               className="flex h-full w-full items-center justify-center"
             >
-              <AnimatePresence mode="wait" custom={pageDirection} initial={false}>
                 <motion.div
                   key={`${isSpread ? 'spread' : 'single'}-${page}`}
                   custom={pageDirection}
                   initial={
-                    reduceMotion
-                      ? { opacity: 0 }
-                      : { x: pageDirection * 80, opacity: 0, scale: 0.97 }
+                    reduceMotion ? false : { x: pageDirection * 20, opacity: 0.75 }
                   }
-                  animate={{ x: 0, opacity: 1, scale: 1 }}
-                  exit={
-                    reduceMotion
-                      ? { opacity: 0 }
-                      : { x: -pageDirection * 80, opacity: 0, scale: 0.97 }
-                  }
-                  transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
                   className={cn(
                     'flex w-full items-stretch justify-center',
                     isSpread ? 'gap-2' : 'gap-0',
@@ -327,7 +333,7 @@ export default function SlideReader({
                   {isSpread && numPages && page + 1 <= numPages && (
                     <Page
                       pageNumber={page + 1}
-                      width={perPageWidth}
+                      width={renderedPageWidth}
                       devicePixelRatio={hiDPI}
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
@@ -336,7 +342,6 @@ export default function SlideReader({
                     />
                   )}
                 </motion.div>
-              </AnimatePresence>
             </Document>
           )}
 
@@ -382,12 +387,12 @@ export default function SlideReader({
             )}
           </AnimatePresence>
 
-          {/* Floating zoom pill — top-right corner of the book card. Always
-              visible. Compact: in / level / out. Top-right placement keeps
-              it clear of horizontal page-turn swipes (which start from the
-              middle vertically). */}
-          {!loadError && (
-            <div className="pointer-events-auto absolute right-2 top-2 z-30 flex items-center gap-0.5 rounded-full border border-flame-200/70 bg-white/95 p-0.5 shadow-md sm:right-3 sm:top-3">
+        </motion.div>
+        </div>
+
+        {/* Keep zoom controls visible even when the book is wider than the card. */}
+        {!loadError && (
+            <div className="pointer-events-auto absolute right-2 top-2 z-40 flex items-center gap-0.5 rounded-full border border-flame-200/70 bg-white/95 p-0.5 shadow-md sm:right-3 sm:top-3">
               <button
                 type="button"
                 onClick={zoomOut}
@@ -416,7 +421,6 @@ export default function SlideReader({
               </button>
             </div>
           )}
-        </motion.div>
 
         {!loadError && (
           <button
@@ -424,7 +428,7 @@ export default function SlideReader({
             onClick={goNext}
             disabled={!canGoNext}
             aria-label={isSpread ? 'Next spread' : 'Next page'}
-            className="z-20 hidden h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-md transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white/70 disabled:text-gray-300 disabled:shadow-none lg:flex"
+            className="absolute right-2 top-1/2 z-40 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-flame-300 bg-white text-flame-600 shadow-md transition-all hover:border-flame-500 hover:bg-flame-50 hover:text-flame-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white/70 disabled:text-gray-300 disabled:shadow-none lg:flex"
           >
             <ChevronRight className="h-6 w-6" strokeWidth={2.5} />
           </button>
@@ -482,7 +486,7 @@ function PdfLoadingSpread({
     <div className="flex h-full w-full items-center justify-center">
       <div
         className={cn(
-          'flex max-h-full items-center justify-center',
+          'flex h-full max-h-full items-center justify-center',
           isSpread ? 'gap-2' : 'gap-0',
         )}
       >
@@ -520,7 +524,8 @@ function PdfCoverImage({
       height={Math.round(safeWidth * 1.4)}
       sizes="(max-width: 1024px) 100vw, 50vw"
       priority
-      className={cn('h-auto max-h-full w-auto object-contain', className)}
+      style={{ width: safeWidth, height: Math.round(safeWidth * 1.4), maxHeight: '100%', maxWidth: '100%' }}
+      className={cn('block shrink-0 object-contain', className)}
     />
   );
 }

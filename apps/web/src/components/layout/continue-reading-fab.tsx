@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookMarked, X, Trash2 } from 'lucide-react';
+import { BookOpenText, X, Trash2 } from 'lucide-react';
 import { formatMonthYear } from '@/lib/utils';
 import { isEmbargoed } from '@/lib/embargo';
 import { readerPath, rememberDirectResume, rememberReaderSource } from '@/lib/reader-url';
@@ -104,7 +104,7 @@ export function ContinueReadingFab({ inline = false }: { inline?: boolean }) {
           ? 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-flame-700 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-500 md:hidden'
           : 'fixed right-6 bottom-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-lg focus-visible:ring-2 focus-visible:ring-flame-700 md:flex'}
       >
-        <BookMarked className="h-6 w-6" />
+        <BookOpenText className="h-6 w-6" />
         {count > 0 && (
           <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-flame-600 px-1 text-[11px] font-bold text-white shadow ring-2 ring-white">
             {count}
@@ -148,7 +148,7 @@ export function ContinueReadingFab({ inline = false }: { inline?: boolean }) {
 
             {entries.length === 0 ? (
               <div className="px-6 py-10 text-center">
-                <BookMarked className="mx-auto h-8 w-8 text-gray-200" />
+                <BookOpenText className="mx-auto h-8 w-8 text-gray-200" />
                 <p className="mt-3 text-sm text-gray-500">
                   Open any issue and your reading position will show up here.
                 </p>

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure, adminApiFailure } from '@/lib/admin-request';
 import { getAdminIssueFileRowFromDb, updateIssueCoverInDb } from '@/lib/db';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { uploadToR2 } from '@/lib/r2-client';
 import { pdfKeyFromLocator } from '@/lib/pdf-access';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { deliverCover } from '@/lib/cover-delivery';
+import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   return deliverCover(request, (await params).id, false, true);
@@ -19,8 +22,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'upload');
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -49,6 +54,8 @@ export async function POST(
   const orientation: SpreadOrientation =
     orientationRaw === 'front-left' ? 'front-left' : 'front-right';
 
+  const operation = await beginAdminOperation(admin.id, 'issue.cover_updated', id);
+
   try {
     const buf = Buffer.from(await cover.arrayBuffer());
     if (coverSource === 'pdf-first-page') {
@@ -56,18 +63,18 @@ export async function POST(
       const publicUrl = await uploadToR2(thumbnailKey, buf, cover.type || 'image/jpeg');
       await updateIssueCoverInDb(id, publicUrl);
       refreshPublicArchiveCaches(id);
+      await settleAdminOperation(operation, 'issue.cover_updated', true);
       return NextResponse.json({ cover_image_url: publicUrl, cropped: false });
     }
 
     const result = await cropAndUploadCover(buf, storageKey, orientation);
     await updateIssueCoverInDb(id, result.publicUrl);
     refreshPublicArchiveCaches(id);
+    await settleAdminOperation(operation, 'issue.cover_updated', true);
 
     return NextResponse.json({ cover_image_url: result.publicUrl, cropped: result.cropped });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Cover upload failed' },
-      { status: 500 },
-    );
+    await settleAdminOperation(operation, 'issue.cover_updated', false);
+    return adminApiFailure(err, 'Cover upload failed');
   }
 }

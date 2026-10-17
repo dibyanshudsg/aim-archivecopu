@@ -14,6 +14,10 @@ import {
   LogOut,
   Menu,
   Settings,
+  UsersRound,
+  ShieldCheck,
+  ScrollText,
+  KeyRound,
   Navigation,
   X,
   ExternalLink,
@@ -24,13 +28,17 @@ import { UIProvider, useUI } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/admin/magazines', icon: BookCopy, label: 'Magazines' },
-  { href: '/admin/issues', icon: FileText, label: 'Issues' },
-  { href: '/admin/indexing', icon: SearchCheck, label: 'Search Indexing' },
-  { href: '/admin/navigation', icon: Navigation, label: 'Navigation' },
-  { href: '/admin/storage', icon: HardDrive, label: 'Storage' },
-  { href: '/admin/settings', icon: Settings, label: 'Settings' },
+  { href: '/admin', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard.view' },
+  { href: '/admin/magazines', icon: BookCopy, label: 'Magazines', permission: 'catalogue.view' },
+  { href: '/admin/issues', icon: FileText, label: 'Issues', permission: 'catalogue.view' },
+  { href: '/admin/indexing', icon: SearchCheck, label: 'Search Indexing', permission: 'indexing.view' },
+  { href: '/admin/navigation', icon: Navigation, label: 'Navigation', permission: 'navigation.view' },
+  { href: '/admin/storage', icon: HardDrive, label: 'Storage', permission: 'storage.view' },
+  { href: '/admin/settings', icon: Settings, label: 'Settings', permission: 'settings.view' },
+  { href: '/admin/users', icon: UsersRound, label: 'Admin Users', permission: 'users.manage' },
+  { href: '/admin/roles', icon: ShieldCheck, label: 'Roles & Permissions', permission: 'roles.manage' },
+  { href: '/admin/activity', icon: ScrollText, label: 'Activity Log', permission: 'audit.view' },
+  { href: '/admin/account', icon: KeyRound, label: 'Your Account', permission: null },
 ];
 
 const COLLAPSED_WIDTH = 64;
@@ -44,6 +52,7 @@ interface AdminUser {
   id: string;
   email: string;
   name: string;
+  permissions: string[];
 }
 
 export function AdminDashboardShell({
@@ -196,7 +205,7 @@ function AdminDashboardFrame({
 
         {/* Nav */}
         <nav className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto py-4', collapsed ? 'px-2' : 'px-3')}>
-          {navItems.map((item) => {
+          {navItems.filter(item => !item.permission || admin.permissions.includes(item.permission)).map((item) => {
             const active =
               pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
             return (
@@ -304,7 +313,7 @@ function AdminDashboardFrame({
                 <p className="font-heading text-sm font-bold">AIM Archive</p>
               </div>
               <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-                {navItems.map((item) => {
+                {navItems.filter(item => !item.permission || admin.permissions.includes(item.permission)).map((item) => {
                   const active = pathname === item.href;
                   return (
                     <Link

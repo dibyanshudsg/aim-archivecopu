@@ -1,7 +1,9 @@
 // Registry audit: fail for any web/shared/root finding; report excluded native
 // skeleton findings without treating them as accepted security exceptions.
 const { spawnSync } = require('node:child_process');
-const result = spawnSync('pnpm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+const executable = process.platform === 'win32' ? 'cmd.exe' : 'pnpm';
+const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm.cmd audit --json'] : ['audit', '--json'];
+const result = spawnSync(executable, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 if (result.error || ![0, 1].includes(result.status)) throw new Error('Dependency advisory service failed');
 const report = JSON.parse(result.stdout);
 if (!report.advisories || !report.metadata?.vulnerabilities) throw new Error('Incomplete advisory response');

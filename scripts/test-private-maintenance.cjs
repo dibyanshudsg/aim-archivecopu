@@ -5,7 +5,7 @@ process.env.R2_PUBLIC_BASE_URL = fixtures.currentBase;
 process.env.R2_LEGACY_PUBLIC_BASE_URLS = '';
 process.env.R2_ACCOUNT_ID = 'fixture'; process.env.R2_BUCKET = 'fixture';
 process.env.R2_ACCESS_KEY_ID = 'fixture'; process.env.R2_SECRET_ACCESS_KEY = 'fixture';
-process.env.ADMIN_SESSION_SECRET = 'isolated-test-only';
+process.env.ADMIN_SESSION_SECRET = 'isolated-test-only-session-secret-2026';
 global.fetch = async () => { throw new Error('Unexpected network'); };
 const { root, fromWeb } = require('./register-web-typescript.cjs');
 const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'aim-private-maintenance-'));
@@ -39,7 +39,7 @@ const { replacementTicket, verifyReplacementTicket } = require('../apps/web/src/
 const repo = require('../apps/web/src/lib/db/admin-repository.ts');
 const { POST: presign } = require('../apps/web/src/app/api/admin/upload/presign/route.ts');
 const { POST: replace } = require('../apps/web/src/app/api/admin/issues/[id]/pdf/route.ts');
-const post = data => new Request('https://site.example.test', { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } });
+const post = data => new Request('https://site.example.test', { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json', Origin: 'https://site.example.test' } });
 const query = (sql,args=[]) => db.execute({sql,args});
 const pdf = objects.get('fixtures/released.pdf').body;
 let issue;
@@ -57,7 +57,7 @@ const complete = ticket => replace(post({uploadTicket:ticket}),{params:Promise.r
     await db.executeMultiple(fs.readFileSync(path.join(root,'packages/turso/migrations',name),'utf8'));
   }
   await query("INSERT INTO magazines(id,name,language,created_at,updated_at) VALUES('fixture-magazine','Synthetic','english','now','now')");
-  await query('INSERT INTO admins VALUES(?,?,?,?)',[admin.id,admin.email,admin.name,'now']);
+  await query('INSERT INTO admins (id,email,name,created_at) VALUES(?,?,?,?)',[admin.id,admin.email,admin.name,'now']);
   issue = await repo.createAdminIssueInDb({magazine_id:'fixture-magazine',title:'Synthetic replacement',theme:null,year:2020,month:1,description:null,topics:[],pdf_url:fixtures.issues[0].pdf_url,cover_image_url:fixtures.issues[0].cover_image_url,file_size_bytes:pdf.length,is_published:false});
   assert.deepEqual(await readPrivatePdf(issue.pdf_url),pdf);
   for (const url of fixtures.adversarial.locators) { const before=calls.length; await assert.rejects(readPrivatePdf(url)); assert.equal(calls.length,before); }
@@ -87,6 +87,10 @@ const complete = ticket => replace(post({uploadTicket:ticket}),{params:Promise.r
   objects.set(upload.proof.key,{body:pdf,contentType:'application/pdf'});
   await query("INSERT INTO issue_search_index(id,issue_id,page_number,content,created_at) VALUES('old-text',?,1,'original text','now')",[issue.id]);
   const response=await complete(upload.uploadTicket); assert.equal(response.status,200); const saved=await response.json();
+  const audit=(await query("SELECT action FROM admin_audit_log WHERE action LIKE 'issue.pdf_replaced%' ")).rows.map(row=>String(row.action));
+  assert.ok(audit.includes('issue.pdf_replaced'));
+  assert.ok(audit.includes('issue.pdf_replaced.failed'));
+  assert.ok(!audit.includes('issue.pdf_replaced.pending'));
   assert.equal(saved.indexing,'queued'); assert.ok(saved.pdf_url.includes('-revision-')); assert.ok(!saved.pdf_url.includes('staging/'));
   assert.ok(objects.has('fixtures/released.pdf'),'Old PDF retained'); assert.ok(!objects.has(upload.proof.key),'Staging object cleaned');
   assert.equal((await query('SELECT * FROM issue_search_index WHERE issue_id=?',[issue.id])).rows.length,0);
@@ -112,5 +116,5 @@ const complete = ticket => replace(post({uploadTicket:ticket}),{params:Promise.r
   await query('DELETE FROM admins WHERE id=?',[admin.id]);
   assert.equal((await coverRequest()).status,401,'Removed admin loses draft cover access');
   assert.ok(replacementTicket({adminId:admin.id,issueId:issue.id,source:issue.pdf_url,key:'staging/replacement-abc.pdf',size:pdf.length}));
-  console.log('PASS authenticated private PDF reads, locator/type/size rejection, draft cover authorization/removal, replacement proof expiry/tampering/scope, storage failures, immutable promotion, old-file retention, replay/concurrency fencing and atomic index reset/cover preservation. No remote requests.');
+  console.log('PASS authenticated private PDF reads, locator/type/size rejection, draft cover authorization/removal, replacement proof expiry/tampering/scope, storage failures, immutable promotion, old-file retention, replay/concurrency fencing, settled audit outcomes and atomic index reset/cover preservation. No remote requests.');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>db.close());

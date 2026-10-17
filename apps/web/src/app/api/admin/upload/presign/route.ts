@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { getMagazineNameFromDb, getAdminIssueFileRowFromDb } from '@/lib/db';
 import { replacementTicket } from '@/lib/replacement-upload';
 import { PDF_HEADERS } from '@/lib/pdf-access';
@@ -21,8 +24,10 @@ function buildStorageKey(magazineName: string, year: number, filename: string): 
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'upload');
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   const magazineId = typeof body?.magazine_id === 'string' ? body.magazine_id : '';
@@ -38,6 +43,7 @@ export async function POST(request: NextRequest) {
     const issue = await getAdminIssueFileRowFromDb(body.issue_id);
     if (!issue) return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
     const key = `staging/replacement-${crypto.randomUUID()}.pdf`;
+    await auditAdmin(admin.id, 'issue.pdf_upload_authorized', issue.id);
     return NextResponse.json({
       uploadUrl: createR2PresignedPutUrl(key),
       uploadTicket: replacementTicket({ adminId: admin.id, issueId: issue.id, source: issue.pdf_url, key, size }),
@@ -58,6 +64,7 @@ export async function POST(request: NextRequest) {
   if (!magazineName) return NextResponse.json({ error: 'Magazine not found' }, { status: 404 });
 
   const storageKey = buildStorageKey(magazineName, year, filename);
+  await auditAdmin(admin.id, 'issue.upload_authorized', magazineId);
   return NextResponse.json({
     uploadUrl: createR2PresignedPutUrl(storageKey),
     publicUrl: r2PublicUrl(storageKey),

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   if (process.env.NEXT_PUBLIC_ENABLE_WEB_VITALS !== 'true') return new NextResponse(null, { status: 204 });
+  const limited = await publicRateLimit(request, 'vitals');
+  if (limited) return limited;
   if (request.headers.get('origin') !== request.nextUrl.origin) return new NextResponse(null, { status: 403 });
   if (Number(request.headers.get('content-length') || 0) > 512) return new NextResponse(null, { status: 413 });
   // The body reader is bounded even if Content-Length was omitted.

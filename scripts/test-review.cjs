@@ -85,6 +85,8 @@ client.getDb = () => ({ execute, batch: inputs => Promise.all(inputs.map(execute
   assert.equal(lockedText[0].page_number, null); assert.equal(lockedText[0].pdf_url, null);
   assert.ok(!lockedText[0].snippet.includes('RESTRICTED_CANARY'));
   assert.deepEqual(await search.listSearchTopics({query:''}), ['Faith']);
+  // Rate limiting has its own transactional suite; this fixture exercises search data and errors.
+  require('../apps/web/src/lib/rate-limit.ts').publicRateLimit = async () => null;
   const { GET } = require('../apps/web/src/app/api/search/route.ts');
   const { NextRequest } = require('../apps/web/node_modules/next/server');
   const request = (query) => GET(new NextRequest('http://localhost/api/search?'+query));

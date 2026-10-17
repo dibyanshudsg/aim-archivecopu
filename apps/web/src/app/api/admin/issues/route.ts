@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure, adminApiFailure } from '@/lib/admin-request';
+import { adminReadRateLimit } from '@/lib/rate-limit';
 import {
   listAdminIssuesPage,
   type AdminIssueListInput,
@@ -21,16 +23,15 @@ const SORT_DIRS = new Set<AdminIssueSortDir>(['asc', 'desc']);
 const STATUS_FILTERS = new Set<AdminIssueStatusFilter>(['all', 'published', 'draft']);
 
 export async function GET(request: Request) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.view');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminReadRateLimit(request, admin.id);
+  if (limited) return limited;
 
   try {
     return NextResponse.json(await listAdminIssuesPage(parseInput(request)));
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to load issues' },
-      { status: 500 },
-    );
+    return adminApiFailure(error, 'Failed to load issues');
   }
 }
 
@@ -43,7 +44,7 @@ function parseInput(request: Request): AdminIssueListInput {
   return {
     page: clampNumber(searchParams.get('page'), 1, 1, 100000),
     pageSize: clampNumber(searchParams.get('pageSize'), 25, 1, 5000),
-    q: normalizeFilter(searchParams.get('q')),
+    q: searchParams.get('q')?.trim() ?? '',
     magazineId: normalizeFilter(searchParams.get('magazine')),
     year: normalizeFilter(searchParams.get('year')),
     status: STATUS_FILTERS.has(status as AdminIssueStatusFilter)

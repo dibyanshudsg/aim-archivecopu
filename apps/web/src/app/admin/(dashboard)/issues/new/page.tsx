@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, FileText, X, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
+import { AdminPageTitle } from '../../admin-page-title';
 import { MONTH_NAMES } from '@aim-archive/shared';
 import type { MonthIndex } from '@aim-archive/shared';
 import { formatFileSize } from '@/lib/utils';
@@ -390,7 +391,7 @@ export default function UploadIssuePage() {
         <Link href="/admin/issues" className="rounded-lg p-1 text-gray-400 hover:text-gray-600">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Upload New Issue</h1>
+        <AdminPageTitle title="Upload New Issue" />
       </div>
 
       <form

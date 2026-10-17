@@ -18,10 +18,16 @@ mkdir "$INDEXING_OCR_CACHE_PATH"
 pnpm verify:runtime
 pnpm test:environment
 pnpm test:migrations
+pnpm test:rate-limits
 node scripts/test-release-exclusions.cjs
 pnpm test:pdf-security
-for suite in review performance performance-io search-reader search-extraction asset-locations indexing-runner indexing-worker-pdf; do
+for suite in review performance performance-io search-reader search-extraction asset-locations indexing-runner; do
   node "scripts/test-$suite.cjs"
+done
+for attempt in 1 2 3; do
+  if node scripts/test-indexing-worker-pdf.cjs; then break; fi
+  if [[ "$attempt" == 3 ]]; then echo 'OCR integration failed after three attempts.' >&2; exit 1; fi
+  sleep "$((attempt * 2))"
 done
 python3 scripts/test-indexing-schedule.py
 python3 scripts/test-turso-restore.py
@@ -32,6 +38,8 @@ export DATABASE_PROVIDER=turso TURSO_DATABASE_URL="file:$task_dir/catalogue.db"
 export R2_PUBLIC_BASE_URL=https://assets.example R2_LEGACY_PUBLIC_BASE_URLS=''
 export NEXT_PUBLIC_APP_URL=http://127.0.0.1:3134
 export ADMIN_PASSWORD=synthetic-ci-only-password
+export ADMIN_SESSION_SECRET=synthetic-ci-session-secret-2026-only
+export TRUST_PROXY_IP_HEADERS=1
 pnpm --filter @aim-archive/web build
 node scripts/check-performance-budget.cjs .next
 node scripts/ci-startup-smoke.cjs

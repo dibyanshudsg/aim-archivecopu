@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react';
+import { adminLandingPath } from '@/lib/admin-permissions';
 
 const LOGIN_SUCCESS_KEY = 'aim-admin-login-success';
 
@@ -39,7 +40,9 @@ export default function AdminLoginPage() {
         sessionStorage.setItem(LOGIN_SUCCESS_KEY, '1');
       } catch {}
 
-      router.replace('/admin');
+      const data = await res.json().catch(() => ({}));
+      const permissions = Array.isArray(data.admin?.permissions) ? data.admin.permissions : [];
+      router.replace(data.mustChangePassword ? '/admin/password' : adminLandingPath(permissions));
     } catch {
       setError('Something went wrong');
       setLoading(false);

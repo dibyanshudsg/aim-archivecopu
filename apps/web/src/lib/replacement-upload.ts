@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 type Upload = { adminId: string; issueId: string; source: string; key: string; size: number; exp: number };
 function sign(value: string) {
-  const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD;
-  if (!secret) throw new Error('Missing session secret');
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (!secret || secret.length < 32) throw new Error('Missing independent session secret');
   return createHmac('sha256', secret).update('replacement-upload:' + value).digest();
 }
 export function replacementTicket(input: Omit<Upload, 'exp'>): string {

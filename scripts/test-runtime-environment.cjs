@@ -21,6 +21,7 @@ function walk(dir) {
 walk(path.join(root, 'apps/web/src'));
 for (const file of ['apps/web/next.config.ts', 'scripts/dev-web.cjs']) inspect(path.join(root, file));
 names.delete('NODE_ENV'); // Set by Next/pnpm, not a user secret or example setting.
+names.delete('VERCEL'); // Set by Vercel itself, not a user-configured variable.
 for (const name of names) {
   assert.ok(exampleNames.has(name), `Missing example: ${name}`);
   assert.ok(turbo.globalEnv.includes(name), `Missing strict-mode propagation: ${name}`);
@@ -36,7 +37,9 @@ const result = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['e
   cwd: root, env, encoding: 'utf8', shell: process.platform === 'win32', maxBuffer: 8 * 1024 * 1024,
 });
 if (result.error || result.status !== 0) throw new Error('Turbo dry-run failed; no raw output disclosed.');
-const plan = JSON.parse(result.stdout.slice(result.stdout.indexOf('{')));
+const planStart = result.stdout.search(/^\{/m);
+if (planStart < 0) throw new Error('Turbo dry-run returned no JSON plan.');
+const plan = JSON.parse(result.stdout.slice(planStart));
 const configured = plan.globalCacheInputs.environmentVariables.configured;
 for (const name of names) assert.ok(configured.some(value => value.startsWith(name + '=')), `Turbo omitted ${name}`);
 console.log(`PASS ${names.size} app/dev configuration names documented and propagated by real Turbo strict-mode planning; env-file cache inputs and isolated output paths covered.`);

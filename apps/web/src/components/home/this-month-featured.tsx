@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowRight,
+  ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -23,12 +24,9 @@ const SlideReader = dynamic(() => import('./slide-reader'), { ssr: false });
 
 interface ThisMonthFeaturedProps {
   magazines: ApiMagazine[];
-  /** Issues whose 5-year embargo has just lifted — typically dated (today.year
-   *  - 5, today.month) and the immediately previous month. Server-fetched and
-   *  embargo-filtered before reaching us. */
+  /** Newest readable issue month and its previous month, filtered by the server. */
   issues: ApiIssue[];
-  /** Issue date of the "this month's release" featured edition (5 years
-   *  behind the wall clock under the rolling embargo). */
+  /** Issue date of the newest readable edition. */
   currentYear: number;
   currentMonth: number; // 1-12
   prevYear: number;
@@ -42,10 +40,8 @@ function inMonth(issue: ApiIssue, year: number, month: number) {
 }
 
 /**
- * "This Month's Editions" — manual slideshow of issues from the current
- * calendar month. Shows a single issue at a time with magazine filter chips
- * and an opt-in "Show Previous Month's Editions" toggle that expands the
- * window to include last month.
+ * Homepage issue feature. Shows one readable issue at a time with magazine
+ * filters and an opt-in previous-month selector.
  *
  * No auto-rotation. Navigation is fully manual via the control bar (or
  * keyboard ← / →). Touch swipes within the embedded reader turn pages of the
@@ -63,7 +59,14 @@ export function ThisMonthFeatured({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ---------- Filter state ----------
-  const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
+  const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>(() =>
+    magazines.find((magazine) =>
+      magazine.name.toLowerCase().includes('all india') &&
+      issues.some((issue) =>
+        issue.magazine_id === magazine.id && inMonth(issue, currentYear, currentMonth),
+      ),
+    )?.id ?? 'all',
+  );
   const [showPrevious, setShowPrevious] = useState(false);
 
   // Pre-bucket the source issues by month — stable references keep the
@@ -186,11 +189,15 @@ export function ThisMonthFeatured({
     }
   }, [currentIndex, visibleIssues]);
 
-  // Bail if there's literally nothing to show across both windows. The
-  // section is hidden entirely rather than rendering an empty card on the
-  // homepage.
+  // Give the page a useful first action when the catalogue has no readable issue.
   if (currentMonthIssues.length === 0 && prevMonthIssues.length === 0)
-    return null;
+    return (
+      <section className="mx-auto w-full max-w-[1440px] px-2 py-16 text-center sm:py-24">
+        <h1 className="font-heading text-3xl leading-tight text-gray-900 sm:text-5xl">Explore the public archive</h1>
+        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-gray-700">Readable editions will appear here as the archive grows.</p>
+        <Link href="/browse" className="mt-7 inline-flex min-h-11 items-center rounded-lg bg-flame-600 px-5 py-2.5 font-semibold text-white hover:bg-flame-700">Browse archive</Link>
+      </section>
+    );
 
   const safeIndex =
     visibleIssues.length > 0
@@ -198,82 +205,16 @@ export function ThisMonthFeatured({
       : 0;
   const currentIssue = visibleIssues[safeIndex];
 
-  // Title doesn't change with the toggle — the eyebrow carries the dates.
-  const titleText = 'Five Years Ago This Month';
-  const eyebrowText = showPrevious
-    ? `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} · ${MONTH_NAMES[prevMonth as MonthIndex]} ${prevYear}`
-    : `${MONTH_NAMES[currentMonth as MonthIndex]} ${currentYear} · NEWLY PUBLIC`;
 
   const showMagazineFilter = magazines.length > 1;
   const hasPrevContent = prevMonthIssues.length > 0;
 
   return (
-    <motion.section
-      className="relative mx-auto mt-10 max-w-5xl sm:mt-16"
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.45, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      aria-labelledby="this-month-heading"
+    <section
+      className="relative mx-auto w-full max-w-[1440px]"
+      aria-label="Newest readable issue"
     >
-      <header className="mb-6 px-6 text-center sm:px-0">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-flame-700">
-          {eyebrowText}
-        </p>
-        <div className="mt-2">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.h2
-              key={titleText}
-              id="this-month-heading"
-              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
-              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              className="font-heading mx-auto max-w-xl bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text px-1 text-2xl font-medium leading-tight tracking-normal text-transparent sm:text-3xl"
-            >
-              {titleText}
-            </motion.h2>
-          </AnimatePresence>
-        </div>
-        <p className="mt-2 text-sm text-gray-500 sm:text-base">
-          Editions whose embargo just lifted — now open to the public archive.
-        </p>
-        <p className="font-heading mt-1 text-sm text-gray-500 sm:text-base">
-          An offering at Thy Lotus Feet.
-        </p>
-      </header>
 
-      {/* Toolbar — magazine chips + previous-month toggle. Hidden when there's
-          nothing meaningful to filter. */}
-      {(showMagazineFilter || hasPrevContent) && (
-        <div
-          className="mb-6 flex flex-col items-center gap-3 px-6 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:px-0"
-          role="toolbar"
-          aria-label="Filter editions"
-        >
-          {showMagazineFilter && (
-            <MagazineFilterStrip
-              magazines={magazines}
-              value={magazineFilter}
-              available={magazinesInView}
-              onChange={setMagazineFilter}
-            />
-          )}
-          {hasPrevContent && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <PreviousMonthToggle
-                active={showPrevious}
-                onToggle={() => setShowPrevious((v) => !v)}
-              />
-              {/* When the toggle is on, gently point users at /browse for
-                  anything older than the previous month — the homepage
-                  carousel intentionally caps at two months. */}
-              <AnimatePresence initial={false}>
-                {showPrevious && <BrowseOlderHint />}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Slideshow + control bar */}
       <div
@@ -281,7 +222,7 @@ export function ThisMonthFeatured({
         className="relative"
         role="region"
         aria-roledescription="carousel"
-        aria-label="This month's editions"
+        aria-label="Latest readable editions"
       >
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {currentIssue
@@ -304,7 +245,7 @@ export function ThisMonthFeatured({
               aria-roledescription="slide"
               aria-label={`${safeIndex + 1} of ${visibleIssues.length}`}
             >
-              <AnimatePresence mode="wait" custom={direction}>
+              <AnimatePresence mode="wait" custom={direction} initial={false}>
                 <motion.div
                   key={currentIssue!.id}
                   custom={direction}
@@ -337,7 +278,39 @@ export function ThisMonthFeatured({
           </>
         )}
       </div>
-    </motion.section>
+      {/* Toolbar — magazine chips + previous-month toggle. Hidden when there's
+          nothing meaningful to filter. */}
+      {(showMagazineFilter || hasPrevContent) && (
+        <div
+          className="mt-5 flex flex-col items-center gap-3 px-6 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:px-0"
+          role="toolbar"
+          aria-label="Filter editions"
+        >
+          {showMagazineFilter && (
+            <MagazineFilterStrip
+              magazines={magazines}
+              value={magazineFilter}
+              available={magazinesInView}
+              onChange={setMagazineFilter}
+            />
+          )}
+          {hasPrevContent && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <PreviousMonthToggle
+                active={showPrevious}
+                onToggle={() => setShowPrevious((v) => !v)}
+              />
+              {/* When the toggle is on, gently point users at /browse for
+                  anything older than the previous month — the homepage
+                  carousel intentionally caps at two months. */}
+              <AnimatePresence initial={false}>
+                {showPrevious && <BrowseOlderHint />}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -359,16 +332,19 @@ function MagazineFilterStrip({
     label: string;
     disabled?: boolean;
   }[] = [
-    { value: 'all', label: 'All' },
-    ...magazines.map((m) => ({
+    ...[...magazines].sort((a, b) => {
+      const rank = (name: string) => name.toLowerCase().includes('all india') ? 0 : name.toLowerCase().includes('agnishikha') ? 1 : 2;
+      return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name);
+    }).map((m) => ({
       value: m.id,
       label: m.name,
       disabled: !available.has(m.id),
     })),
+    { value: 'all', label: 'All' },
   ];
   return (
-    <div className="flex items-start gap-2 sm:gap-3">
-      <span className="mt-1.5 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-gray-600">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-gray-600">
         Magazine
       </span>
       <div className="flex flex-wrap gap-1.5">
@@ -603,7 +579,17 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
   const reduceMotion = useReducedMotion();
   const { toggle, isBookmarked } = useBookmarks();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+  const hasOpenedPreview = useRef(false);
   const bookmarked = isBookmarked(issue.id);
+
+  function changePreview(open: boolean) {
+    if (open) hasOpenedPreview.current = true;
+    setPreviewOpen(open);
+    requestAnimationFrame(() => articleRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }));
+  }
 
   const monthName = MONTH_NAMES[issue.month as MonthIndex];
   const language = (issue.magazines.language as Language) ?? 'english';
@@ -618,113 +604,94 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
   if (!issue.pdf_url) return null;
 
   return (
-    <article className="relative overflow-hidden border-y border-flame-200/60 bg-white shadow-[0_10px_36px_rgba(190,140,46,0.12)] sm:rounded-2xl sm:border">
-      <div className={`grid items-center gap-x-8 gap-y-6 px-6 py-6 sm:px-10 sm:py-8 lg:gap-x-10 ${issue.cover_image_url ? 'md:grid-cols-[auto_minmax(0,1fr)]' : ''}`}>
-        {issue.cover_image_url && (
-          <div className="relative mx-auto h-72 w-48 max-w-full">
-            <Image src={issue.cover_image_url} alt={issue.title} fill sizes="192px" className="rounded-md object-contain" />
-          </div>
-        )}
-
-        {/* Keep the text and actions together beside the cover. */}
-        <div className="min-w-0">
-        <div className="min-w-0">
-          <p className="bg-gradient-to-r from-gold-700 to-flame-600 bg-clip-text text-[11px] font-semibold uppercase tracking-[0.14em] text-transparent">
-            {eyebrow}
-          </p>
-
-          {issue.theme ? (
-            <div className="mt-2 flex items-start gap-3">
-              <span
-                aria-hidden
-                className="mt-2 h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-gold-500 to-flame-500"
-              />
-              <h3 className="font-heading bg-gradient-to-r from-gold-700 to-flame-700 bg-clip-text pr-1 pt-1 text-2xl font-semibold leading-snug text-transparent sm:text-3xl">
-                {issue.theme}
-              </h3>
+    <article ref={articleRef} className="scroll-mt-20 overflow-hidden rounded-2xl bg-[#fffdf9] shadow-[0_18px_48px_rgba(83,58,22,0.13)]">
+      <AnimatePresence mode="wait" initial={false}>
+      {!previewOpen ? <motion.div key="issue" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -10 }} transition={{ duration: 0.24 }} onAnimationComplete={() => { if (hasOpenedPreview.current && !previewOpen) previewButtonRef.current?.focus(); }} className="grid md:grid-cols-[minmax(280px,0.76fr)_minmax(0,1fr)]">
+        <button type="button" onClick={() => changePreview(true)} aria-label={`Preview ${issue.title}`} className="feature-cover-stage relative flex min-h-[278px] items-center justify-center overflow-hidden px-7 py-8 text-left sm:min-h-[400px] sm:px-10 sm:py-10 md:min-h-[485px]">
+          <span className="feature-ember left-[18%] top-[25%]" aria-hidden="true" />
+          <span className="feature-ember right-[15%] top-[22%]" aria-hidden="true" />
+          <span className="feature-ember left-[13%] bottom-[26%]" aria-hidden="true" />
+          <span className="feature-ember right-[12%] bottom-[20%]" aria-hidden="true" />
+          {issue.cover_image_url ? (
+            <div className="feature-magazine relative aspect-[2/3] w-[150px] shrink-0 sm:w-[235px] md:w-[250px]">
+              <Image src={issue.cover_image_url} alt={issue.title} fill priority sizes="(max-width: 640px) 150px, 250px" className="object-contain" />
             </div>
           ) : (
-            <h3 className="font-heading mt-2 text-2xl font-semibold leading-snug text-gray-900 sm:text-3xl">
+            <div className="feature-magazine flex aspect-[2/3] w-[150px] items-center justify-center bg-white px-5 text-center font-heading text-xl leading-snug text-gray-800 sm:w-[235px]">
               {issue.title}
-            </h3>
-          )}
-        </div>
-
-        {issue.description && (
-          <p className="mx-auto mt-5 line-clamp-3 max-w-prose text-center text-sm leading-relaxed text-gray-600 sm:text-base md:mx-0 md:text-left">
-            {issue.description}
-          </p>
-        )}
-
-        <div className="mx-auto mt-5 grid max-w-sm grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:mx-0 md:flex md:max-w-none md:flex-wrap">
-          <Link
-            href={readerPath(issue.id)}
-            onClick={() => rememberReaderSource(issue.id, 'shelf')}
-            className="col-span-full inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.24)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_12px_28px_rgba(229,86,31,0.28)]"
-          >
-            <BookOpen className="h-4 w-4" />
-            Read issue
-          </Link>
-          <button type="button" aria-expanded={previewOpen} aria-controls={`preview-${issue.id}`} onClick={() => setPreviewOpen((open) => !open)} className="min-h-11 rounded-xl border border-flame-200 px-4 py-2 text-sm font-semibold text-flame-800 hover:bg-flame-50">
-            {previewOpen ? 'Close preview' : 'Preview here'}
-          </button>
-          <button
-            onClick={() => toggle(issue.id)}
-            aria-label={bookmarked ? 'Remove bookmark' : 'Save to bookmarks'}
-            aria-pressed={bookmarked}
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition-colors hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700"
-          >
-            <Heart
-              className={`h-4 w-4 transition-colors ${
-                bookmarked ? 'fill-red-500 text-red-500' : ''
-              }`}
-            />
-          </button>
-        </div>
-
-        </div>
-
-        {(sortedTopics.length > 0 || issue.page_count || issue.file_size_bytes) && (
-          <div className="col-span-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-gray-100 pt-5">
-            {sortedTopics.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {sortedTopics.map((topic) => (
-                  <span
-                    key={topic}
-                    className="rounded-full bg-gradient-to-r from-gold-50 to-flame-50 px-2.5 py-1 text-[11px] font-medium text-flame-700"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span />
-            )}
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600">
-              {issue.page_count && <span>{issue.page_count} pages</span>}
-              <span>{formatFileSize(issue.file_size_bytes)}</span>
             </div>
+          )}
+        </button>
+
+        <div className="flex min-w-0 flex-col justify-between px-6 pb-7 pt-8 sm:px-10 sm:pb-10 sm:pt-10 lg:px-14 lg:pt-12">
+          <div>
+            <h1 className="font-heading break-words text-[clamp(1.8rem,2.5vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#28231c]">
+              {issue.theme || issue.title}
+            </h1>
+            <p className="mt-4 text-sm font-semibold text-[#925526] sm:text-base">
+              {eyebrow}
+            </p>
+            {issue.description && (
+              <p className="mt-5 line-clamp-4 max-w-[62ch] text-sm leading-[1.8] text-gray-700 sm:text-base">
+                {issue.description}
+              </p>
+            )}
           </div>
-        )}
-      </div>
-      <div
-        id={`preview-${issue.id}`}
-        aria-hidden={!previewOpen}
-        inert={!previewOpen}
-        className="grid"
-        style={{
-          gridTemplateRows: previewOpen ? '1fr' : '0fr',
-          transition: reduceMotion
-            ? 'none'
-            : `grid-template-rows ${previewOpen ? 360 : 280}ms cubic-bezier(0.22, 1, 0.36, 1)`,
-          overflowAnchor: 'none',
-        }}
-      >
-        <div className="min-h-0 overflow-hidden">
-          {previewOpen && <SlideReader pdfUrl={issue.pdf_url} fallbackCoverUrl={issue.cover_image_url} fallbackTitle={issue.title} magazineName={issue.magazines.name} monthName={monthName} year={issue.year} language={language} />}
+
+          <div className="mt-7">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href={readerPath(issue.id)}
+                onClick={() => rememberReaderSource(issue.id, 'shelf')}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-flame-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_9px_19px_rgba(145,69,25,0.18)] transition-colors hover:bg-flame-700 sm:text-base"
+              >
+                <BookOpen className="h-5 w-5" />
+                Read issue
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <button ref={previewButtonRef} type="button" onClick={() => changePreview(true)} className="inline-flex min-h-12 items-center justify-center rounded-lg border border-gold-300 bg-white px-5 py-3 text-sm font-semibold text-[#70451e] transition-colors hover:bg-gold-50">
+                Preview pages
+              </button>
+              <button
+                type="button"
+                onClick={() => toggle(issue.id)}
+                aria-label={bookmarked ? 'Remove bookmark' : 'Save to bookmarks'}
+                aria-pressed={bookmarked}
+                className="flex h-12 w-12 items-center justify-center rounded-lg border border-gold-300 bg-white text-[#70451e] transition-colors hover:bg-gold-50"
+              >
+                <Heart className={`h-5 w-5 ${bookmarked ? 'fill-flame-600 text-flame-600' : ''}`} />
+              </button>
+            </div>
+            {(sortedTopics.length > 0 || issue.page_count) && (
+              <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[#eadfce] pt-4 text-xs text-gray-700">
+                {issue.page_count ? <span>{issue.page_count} pages</span> : null}
+                {issue.file_size_bytes ? <span>{formatFileSize(issue.file_size_bytes)}</span> : null}
+                {sortedTopics.length > 0 && <span className="hidden h-1 w-1 rounded-full bg-gold-500 sm:block" aria-hidden="true" />}
+                {sortedTopics.map((topic) => <span key={topic}>{topic}</span>)}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </motion.div> : <motion.div key="preview" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -10 }} transition={{ duration: 0.24 }} onAnimationComplete={() => { if (previewOpen) backButtonRef.current?.focus(); }}>
+        <div className="flex items-center gap-2 border-b border-[#eadfce] px-4 py-3 sm:gap-4 sm:px-8">
+          <button ref={backButtonRef} type="button" onClick={() => changePreview(false)} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gold-50 hover:text-gray-900">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+          <button type="button" onClick={() => changePreview(false)} aria-label={`Show details for ${issue.title}`} className="inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-xl border border-gold-200 bg-white px-2.5 py-2 text-left shadow-[0_4px_12px_rgba(83,58,22,0.09)] transition-colors hover:border-gold-300 hover:bg-gold-50">
+            <span className="relative h-10 w-8 shrink-0 overflow-hidden rounded-md bg-gold-50">
+              {issue.cover_image_url ? <Image src={issue.cover_image_url} alt="" fill sizes="32px" className="object-cover" /> : null}
+            </span>
+            <span className="min-w-0">
+              <strong className="block truncate text-sm font-semibold text-gray-900">{issue.magazines.name}</strong>
+              <span className="block text-xs text-gray-600">{monthName} {issue.year}</span>
+            </span>
+          </button>
+        </div>
+        <div id={`preview-${issue.id}`}>
+          <SlideReader issueId={issue.id} pdfUrl={issue.pdf_url} fallbackCoverUrl={issue.cover_image_url} fallbackTitle={issue.title} magazineName={issue.magazines.name} monthName={monthName} year={issue.year} language={language} />
+        </div>
+      </motion.div>}
+      </AnimatePresence>
     </article>
   );
 }

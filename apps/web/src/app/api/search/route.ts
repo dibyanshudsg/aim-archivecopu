@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { searchIssueMetadata, searchIssueText, listSearchTopics } from '@/lib/db';
 import { getEmbargoState } from '@/lib/embargo';
 import type { FullTextSearchResult } from '@/lib/api';
+import { publicRateLimit } from '@/lib/rate-limit';
 
 interface MagazineRel {
   id: string;
@@ -83,6 +84,8 @@ function buildMetaSnippet(issue: IssueRow, query: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const limited = await publicRateLimit(request, 'search');
+  if (limited) return limited;
   const { searchQuerySchema, parseSearchParams } = await import('@/lib/validations');
 
   const raw = parseSearchParams(request.nextUrl.searchParams);

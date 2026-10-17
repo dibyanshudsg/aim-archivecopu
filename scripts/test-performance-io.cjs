@@ -21,6 +21,8 @@ const { normalizePublicAssetUrl } = require('../apps/web/src/lib/asset-url.ts');
   assert.equal(normalizePublicAssetUrl('https://old.example/a%20b.pdf?v=1'), 'https://assets.example/a%20b.pdf?v=1');
   assert.equal(normalizePublicAssetUrl('https://old.example.attacker.test/a.pdf'), 'https://old.example.attacker.test/a.pdf');
   assert.equal(normalizePublicAssetUrl('https://unrelated.example/a.pdf'), 'https://unrelated.example/a.pdf');
+  // The metrics fixture has no database; bucket transactions are covered by the rate-limit suite.
+  require('../apps/web/src/lib/rate-limit.ts').publicRateLimit = async () => null;
   const { POST } = require('../apps/web/src/app/api/vitals/route.ts');
   const { NextRequest } = require('../apps/web/node_modules/next/server');
   process.env.NEXT_PUBLIC_ENABLE_WEB_VITALS = 'true';

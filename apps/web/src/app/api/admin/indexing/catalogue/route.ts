@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import {
   listIndexingCatalogue,
   queueWorkspaceIssues,
@@ -7,12 +8,17 @@ import {
   getIndexingIssueDetails,
 } from '@/lib/db/indexing-workspace-repository';
 import { z } from 'zod';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
 
 export const runtime='nodejs';
 export const maxDuration=60;
 
 export async function GET(request: NextRequest) {
-  if (!(await verifyAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.view');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminReadRateLimit(request, admin.id);
+  if (limited) return limited;
   const params = request.nextUrl.searchParams;
   try {
     const result = params.has('issue')
@@ -44,7 +50,10 @@ const bodySchema = z.object({
   rebuild: z.boolean().optional(),
 });
 export async function POST(request: NextRequest) {
-  if (!(await verifyAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'indexing');
+  if (limited) return limited;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(
@@ -52,7 +61,9 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   try {
-    return NextResponse.json(await queueWorkspaceIssues(parsed.data), { status: 202 });
+    const result = await queueWorkspaceIssues(parsed.data);
+    await auditAdmin(admin.id, 'indexing.queued', undefined, JSON.stringify({ action: parsed.data.action, count: parsed.data.ids?.length ?? null }));
+    return NextResponse.json(result, { status: 202 });
   } catch {
     return NextResponse.json(
       { error: 'Could not queue this batch. Refresh before retrying.' },

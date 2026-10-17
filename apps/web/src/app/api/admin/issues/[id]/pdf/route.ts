@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import {
   getAdminIssueFileRowFromDb,
   updateIssuePdfInDb,
@@ -13,6 +14,8 @@ import { verifyReplacementTicket } from '@/lib/replacement-upload';
 import { readPrivatePdf } from '@/lib/private-pdf';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
 import { deliverPdf } from '@/lib/pdf-delivery';
+import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -32,8 +35,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'upload');
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -51,6 +56,7 @@ export async function POST(
     return NextResponse.json({ error: 'Could not derive storage key' }, { status: 500 });
   }
   const storageKey = originalKey.replace(/(?:-revision-[a-f0-9-]+)?\.pdf$/i, '') + `-revision-${crypto.randomUUID()}.pdf`;
+  const operation = await beginAdminOperation(admin.id, 'issue.pdf_replaced', id);
 
   try {
     // Promote to a server-only key. Reusing the staging PUT cannot mutate an active source.
@@ -61,6 +67,7 @@ export async function POST(
     }), { abortSignal: AbortSignal.timeout(30_000) });
     await verifyR2Pdf(storageKey, upload.size);
   } catch {
+    await settleAdminOperation(operation, 'issue.pdf_replaced', false, 'Stored PDF could not be verified');
     return NextResponse.json({ error: 'Uploaded PDF could not be verified. Check storage access and retry.' }, { status: 502 });
   }
   const cacheBustedUrl = r2PublicUrl(storageKey);
@@ -80,12 +87,14 @@ export async function POST(
     await updateIssuePdfInDb(id, cacheBustedUrl, upload.size, upload.source,
       thumbnailUrl && thumbnailUrl !== issue.cover_image_url ? { previous: issue.cover_image_url, next: thumbnailUrl } : undefined);
   } catch (error) {
+    await settleAdminOperation(operation, 'issue.pdf_replaced', false, 'Stored file promoted; catalogue update failed');
     if (error instanceof Error && error.message === 'PDF_SOURCE_CHANGED') return NextResponse.json({ error: 'The PDF changed during upload. Refresh and try again.' }, { status: 409 });
     return NextResponse.json({ error: 'Could not save replacement. Refresh before retrying.' }, { status: 503 });
   }
   const indexing = await canIndexIssue(id) ? 'queued' : 'skipped';
   await deleteFromR2(upload.key).catch(() => console.error('Replacement saved; staging file cleanup remains pending.'));
   refreshPublicArchiveCaches(id);
+  await settleAdminOperation(operation, 'issue.pdf_replaced', true);
 
   return NextResponse.json({
     success: true,

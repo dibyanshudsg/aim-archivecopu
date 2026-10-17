@@ -3,6 +3,7 @@ import { uploadPdfDirect } from '@/lib/direct-pdf-upload';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { AdminPageTitle } from '../../admin-page-title';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, FileText, Trash2, Upload, X, Check, AlertCircle } from 'lucide-react';
 import { MONTH_NAMES, type MonthIndex } from '@aim-archive/shared';
@@ -228,7 +229,7 @@ export default function BulkUploadPage() {
         <Link href="/admin/issues" className="rounded-lg p-1 text-gray-400 hover:text-gray-600">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Bulk Upload</h1>
+        <AdminPageTitle title="Bulk Upload" />
       </div>
 
       <div

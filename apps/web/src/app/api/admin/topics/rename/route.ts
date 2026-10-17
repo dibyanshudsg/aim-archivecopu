@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { renameTopicInDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 /** POST /api/admin/topics/rename  body: { from, to } → rename across every issue */
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id);
+  if (limited) return limited;
 
   const { from, to } = await request.json();
   if (!from || !to || typeof from !== 'string' || typeof to !== 'string') {
@@ -17,6 +22,7 @@ export async function POST(request: NextRequest) {
   if (from === newName) return NextResponse.json({ success: true, updated: 0 });
 
   const updated = await renameTopicInDb(from, newName);
+  if (updated) await auditAdmin(admin.id, 'topic.renamed', undefined, `${from} → ${newName}`);
   refreshPublicArchiveCaches();
   return NextResponse.json({ success: true, updated });
 }

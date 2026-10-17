@@ -5,6 +5,8 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 assert.ok(process.env.TURSO_DATABASE_URL?.startsWith('file:'), 'Local fixture database required');
 assert.equal(process.env.ADMIN_PASSWORD, 'synthetic-ci-only-password');
+assert.equal(process.env.ADMIN_SESSION_SECRET, 'synthetic-ci-session-secret-2026-only');
+assert.equal(process.env.TRUST_PROXY_IP_HEADERS, '1');
 const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', '127.0.0.1', '--port', '3134'], {
   cwd: path.join(root, 'apps/web'), stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -14,7 +16,7 @@ child.stderr.on('data', data => { logs = (logs + data).slice(-8000); });
 const exited = new Promise(resolve => child.once('close', resolve));
 child.on('error', error => { console.error(error.message); process.exitCode = 1; });
 const base = 'http://127.0.0.1:3134';
-async function request(route) { return fetch(base + route, { signal: AbortSignal.timeout(5000) }); }
+async function request(route) { return fetch(base + route, { headers: { 'x-forwarded-for': '127.0.0.1' }, signal: AbortSignal.timeout(5000) }); }
 (async () => {
   let ready = false;
   for (let i = 0; i < 60; i++) {

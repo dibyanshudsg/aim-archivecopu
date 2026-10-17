@@ -99,6 +99,7 @@ function signingKey(secret: string, date: string, region: string, service: strin
  * large PDFs out of Vercel's 4.5MB request-body path.
  */
 export function createR2PresignedPutUrl(key: string, expiresInSeconds = 900): string {
+  if (process.env.LOCAL_CATALOGUE_PREVIEW_READ_ONLY === '1') throw new Error('Storage writes are disabled in the local catalogue preview.');
   const accountId = env('R2_ACCOUNT_ID');
   const accessKeyId = env('R2_ACCESS_KEY_ID');
   const secretAccessKey = env('R2_SECRET_ACCESS_KEY');
@@ -150,6 +151,7 @@ export async function uploadToR2(
   body: Buffer | Uint8Array,
   contentType: string,
 ): Promise<string> {
+  if (process.env.LOCAL_CATALOGUE_PREVIEW_READ_ONLY === '1') throw new Error('Storage writes are disabled in the local catalogue preview.');
   await getR2Client().send(
     new PutObjectCommand({
       Bucket: r2Bucket(),
@@ -179,6 +181,7 @@ export async function verifyR2Pdf(key: string, expectedSize: number): Promise<vo
  * R2 (like S3) does not error on missing keys.
  */
 export async function deleteFromR2(key: string): Promise<void> {
+  if (process.env.LOCAL_CATALOGUE_PREVIEW_READ_ONLY === '1') throw new Error('Storage writes are disabled in the local catalogue preview.');
   await getR2Client().send(
     new DeleteObjectCommand({ Bucket: r2Bucket(), Key: key }),
   );

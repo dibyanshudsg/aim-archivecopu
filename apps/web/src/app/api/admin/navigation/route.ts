@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { getAdminNavigation } from '@/lib/admin-data';
 
 export async function GET() {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('navigation.view');
+  if (!admin) return await adminAccessFailure();
 
   try {
     return NextResponse.json(await getAdminNavigation());

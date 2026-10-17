@@ -36,6 +36,22 @@ export function clearPublicRepositoryCaches(): void {
   shelfYearCache.clear();
 }
 
+/** Newest issue month whose PDF is publicly readable today. */
+export async function getNewestReadableIssueMonth(): Promise<{ year: number; month: number } | null> {
+  const cutoff = readableCutoffIssueMonth();
+  const result = await getDb().execute({
+    sql: `SELECT i.year, i.month FROM issues i
+          WHERE i.is_published = 1
+            AND ${supportedAssetSql('i.pdf_url')}
+            AND trim(i.pdf_url) <> ''
+            AND (i.year < ? OR (i.year = ? AND i.month <= ?))
+          ORDER BY i.year DESC, i.month DESC LIMIT 1`,
+    args: [cutoff.year, cutoff.year, cutoff.month],
+  });
+  const row = result.rows[0];
+  return row ? { year: Number(row.year), month: Number(row.month) } : null;
+}
+
 function embargoWindowCacheKey(): string {
   const cutoff = readableCutoffIssueMonth();
   return `${cutoff.year}-${cutoff.month}`;

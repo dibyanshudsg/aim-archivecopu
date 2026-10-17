@@ -126,9 +126,87 @@ html {
   animation: aim-shimmer 1.6s ease-in-out infinite;
 }
 
+/* A restrained physical cover treatment for the homepage's featured issue. */
+.feature-cover-stage {
+  perspective: 1200px;
+}
+
+.feature-magazine {
+  position: relative;
+  transform: rotateY(-9deg) rotateX(2deg);
+  transform-style: preserve-3d;
+  box-shadow: 18px 23px 32px rgb(44 32 18 / 0.24), 3px 5px 8px rgb(44 32 18 / 0.12);
+  transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.feature-magazine::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 2px;
+  bottom: 2px;
+  left: -9px;
+  width: 10px;
+  background: linear-gradient(90deg, #4f422e, #8d7857 55%, #382f25);
+  transform: skewY(-22deg);
+  transform-origin: right center;
+}
+
+.feature-magazine::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 1px;
+  right: -6px;
+  width: 7px;
+  background: #eee6d6;
+  transform: skewY(-22deg);
+  transform-origin: left center;
+}
+
+.feature-cover-stage:hover .feature-magazine {
+  transform: rotateY(-4deg) rotateX(1deg) translateY(-3px);
+  box-shadow: 16px 26px 37px rgb(44 32 18 / 0.26), 3px 5px 8px rgb(44 32 18 / 0.12);
+}
+
+.feature-ember {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #e8a245;
+  box-shadow: 0 0 8px 2px rgb(232 162 69 / 0.32);
+  animation: feature-ember-drift 8s ease-in-out infinite;
+}
+
+.feature-ember:nth-of-type(2) { animation-delay: -2.5s; }
+.feature-ember:nth-of-type(3) { animation-delay: -5s; }
+.feature-ember:nth-of-type(4) { animation-delay: -7s; }
+
+@keyframes feature-ember-drift {
+  0%, 100% { transform: translate3d(0, 5px, 0); opacity: 0.18; }
+  45% { transform: translate3d(6px, -11px, 0); opacity: 0.7; }
+}
+
+/* Keep the embedded preview within the device's available height. */
+.home-preview-book {
+  width: min(100%, max(230px, calc(75dvh - 176px)));
+  aspect-ratio: 3 / 4;
+  flex: none;
+}
+
+@media (min-width: 1024px) {
+  .home-preview-book {
+    width: min(100%, max(480px, calc(150dvh - 352px)));
+    aspect-ratio: 3 / 2;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aim-shimmer-line {
     animation: none;
     background: var(--color-flame-50);
   }
+  .feature-ember { animation: none; opacity: 0.3; }
+  .feature-magazine { transition: none; }
 }

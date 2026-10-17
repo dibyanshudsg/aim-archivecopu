@@ -82,9 +82,9 @@ export function LatestSubscriberEditions({ issues }: LatestSubscriberEditionsPro
   if (issues.length === 0) return null;
 
   return (
-    <section className="relative mx-auto mt-16 max-w-5xl">
+    <section className="relative mx-auto mt-16 w-full max-w-[1440px]">
       <div className="rounded-xl border border-flame-100/80 bg-white/80 p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex flex-col gap-3 border-b border-flame-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-5 grid grid-cols-1 items-center gap-3 border-b border-flame-100 pb-4 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0 text-left">
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600 ring-1 ring-flame-100">
@@ -99,14 +99,14 @@ export function LatestSubscriberEditions({ issues }: LatestSubscriberEditionsPro
                 </h2>
               </div>
             </div>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-600">
-              Recent editions remain in print circulation. Covers, themes, and topics are listed here; public reading opens five years after publication.
-            </p>
           </div>
-          <div className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gold-200 bg-gold-50 px-3 py-1.5 text-xs font-semibold text-gold-800">
+          <div className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-gold-200 bg-gold-50 px-3 py-1.5 text-xs font-semibold text-gold-800 sm:justify-self-end">
             <LockKeyhole className="h-3.5 w-3.5" />
             Metadata visible now
           </div>
+          <p className="w-full text-sm leading-relaxed text-gray-600 sm:col-span-2">
+            Recent editions remain in print circulation. Covers, themes, and topics are listed here; public reading opens five years after publication.
+          </p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">

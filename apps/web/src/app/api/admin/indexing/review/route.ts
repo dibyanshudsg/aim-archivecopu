@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { resolvePageReview } from '@/lib/db/indexing-page-reviews';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 const schema = z.object({
   issueId: z.string().min(1).max(100),
@@ -13,8 +16,10 @@ const schema = z.object({
   note: z.string().trim().min(1).max(1000),
 });
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'review');
+  if (limited) return limited;
   if (request.headers.get('origin') !== request.nextUrl.origin)
     return NextResponse.json({ error: 'Open the review from this website.' }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -25,6 +30,7 @@ export async function POST(request: NextRequest) {
     );
   try {
     await resolvePageReview(parsed.data, admin.id);
+    await auditAdmin(admin.id, 'indexing.reviewed', parsed.data.issueId, `Page ${parsed.data.page}: ${parsed.data.decision}`);
     return NextResponse.json({ saved: true });
   } catch (error) {
     const message =

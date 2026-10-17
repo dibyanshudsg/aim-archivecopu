@@ -1,4 +1,5 @@
 'use client';
+import { AdminPageTitle } from '../admin-page-title';
 
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -58,7 +59,10 @@ export function StorageClient({
     setRefreshing(true);
     try {
       const r = await fetch('/api/admin/storage');
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        const result = await r.json().catch(() => ({}));
+        throw new Error(result.error || 'Could not refresh storage inventory.');
+      }
       const d = (await r.json()) as AdminStorageData;
       setData(d);
       setError('');
@@ -131,8 +135,11 @@ export function StorageClient({
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-700">
-        {error || 'Failed to load storage data.'}
+      <div className="space-y-6">
+        <AdminPageTitle title="Storage" description="Files in Cloudflare R2 and issues with missing or unsupported file locations." />
+        <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><h2 className="font-semibold">Storage inventory unavailable</h2><p className="mt-1 text-sm">{error || 'Could not load storage data. Check the R2 connection and try again.'}</p><button type="button" onClick={() => load()} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-300 hover:bg-amber-100"><RefreshCw className="h-4 w-4" /> Try again</button></div></div>
+        </div>
       </div>
     );
   }
@@ -141,12 +148,7 @@ export function StorageClient({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-gray-900">Storage</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Files in Cloudflare R2 and issues with missing or unsupported file locations.
-          </p>
-        </div>
+        <AdminPageTitle title="Storage" description="Files in Cloudflare R2 and issues with missing or unsupported file locations." />
         <button
           onClick={() => load()}
           disabled={refreshing}

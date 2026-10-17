@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { createAdminIssueInDb, getMagazineNameFromDb } from '@/lib/db';
+import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 import { generateAndUploadThumbnail } from '@/lib/pdf-thumbnail';
 import { cropAndUploadCover, type SpreadOrientation } from '@/lib/crop-cover-spread';
 import { uploadToR2, verifyR2Pdf } from '@/lib/r2-client';
@@ -25,8 +28,11 @@ export const maxDuration = 60;
  * performs extraction after upload; completion here means the issue is saved.
  */
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'upload');
+  if (limited) return limited;
+  if (!admin.permissions.includes('catalogue.publish')) return NextResponse.json({ error: 'Publishing permission is required to upload an issue.' }, { status: 403 });
 
   const { issueUploadSchema, formatZodError } = await import('@/lib/validations');
 
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
   const orientationRaw = formData.get('cover_orientation');
   const orientation: SpreadOrientation =
     orientationRaw === 'front-left' ? 'front-left' : 'front-right';
+  const operation = await beginAdminOperation(admin.id, 'issue.created', magazineId);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -100,6 +107,7 @@ export async function POST(request: NextRequest) {
           try {
             pdfPublicUrl = await uploadToR2(storageKey, buffer, 'application/pdf');
           } catch (uploadErr) {
+            await settleAdminOperation(operation, 'issue.created', false, 'PDF upload failed');
             const message = uploadErr instanceof Error ? uploadErr.message : 'Unknown error';
             send({ type: 'error', message: 'Upload failed: ' + message });
             controller.close();
@@ -110,6 +118,7 @@ export async function POST(request: NextRequest) {
           try {
             await verifyR2Pdf(directStorageKey, directFileSize);
           } catch (downloadErr) {
+            await settleAdminOperation(operation, 'issue.created', false, 'Uploaded PDF verification failed');
             const message = downloadErr instanceof Error ? downloadErr.message : 'Unknown error';
             send({ type: 'error', message: 'Uploaded PDF could not be verified: ' + message });
             controller.close();
@@ -162,12 +171,14 @@ export async function POST(request: NextRequest) {
           is_published: true,
         });
         refreshPublicArchiveCaches(String(issue.id));
+        await settleAdminOperation(operation, 'issue.created', true, String(issue.id));
 
         send({ type: 'done', issue, indexing: issue.indexing_job_id ? 'queued' : 'skipped' });
         controller.close();
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Upload failed';
-        send({ type: 'error', message });
+        await settleAdminOperation(operation, 'issue.created', false, 'Upload or catalogue save failed');
+        console.error('Admin upload failed', { name: err instanceof Error ? err.name : 'Unknown' });
+        send({ type: 'error', message: 'Upload failed. Check the file and try again.' });
         controller.close();
       }
     },

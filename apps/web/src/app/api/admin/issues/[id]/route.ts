@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import {
   deleteAdminIssueInDb,
   getIssueStorageUrlsFromDb,
@@ -11,13 +12,18 @@ import {
   storageKeyFromUrl,
 } from '@/lib/r2-client';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
+import { getDb } from '@/lib/db/client';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.edit');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id);
+  if (limited) return limited;
 
   const { id } = await params;
   const { issueUpdateSchema, formatZodError } = await import('@/lib/validations');
@@ -27,8 +33,13 @@ export async function PUT(
     return NextResponse.json({ error: formatZodError(parsed.error), code: 'VALIDATION' }, { status: 400 });
   }
 
+  const current = await getDb().execute({ sql: 'SELECT is_published FROM issues WHERE id=? LIMIT 1', args: [id] });
+  if (current.rows[0] && Boolean(current.rows[0].is_published) !== parsed.data.is_published && !admin.permissions.includes('catalogue.publish'))
+    return NextResponse.json({ error: 'Publishing permission is required to change issue visibility.' }, { status: 403 });
+
   const data = await updateAdminIssueInDb(id, parsed.data);
   if (!data) return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
+  await auditAdmin(admin.id, 'issue.updated', id, JSON.stringify({ published: parsed.data.is_published }));
   refreshPublicArchiveCaches(id);
   return NextResponse.json(data);
 }
@@ -40,15 +51,18 @@ export async function PUT(
  * the URL resolves to the configured R2 bucket.
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('catalogue.publish');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id);
+  if (limited) return limited;
 
   const { id } = await params;
   const issue = await getIssueStorageUrlsFromDb(id);
   await deleteAdminIssueInDb(id);
+  await auditAdmin(admin.id, 'issue.deleted', id);
   refreshPublicArchiveCaches(id);
 
   const cleanups: Array<string | null | undefined> = [issue?.pdf_url, issue?.cover_image_url];

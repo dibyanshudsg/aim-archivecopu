@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { BookCopy, FileText, Eye, Download, TrendingUp, Settings, Navigation } from 'lucide-react';
 import type { AdminStats } from '@/lib/admin-data';
+import { AdminPageTitle } from './admin-page-title';
 
 export function AdminDashboardClient({ initialStats }: { initialStats: AdminStats }) {
   const [stats] = useState<AdminStats | null>(initialStats);
@@ -11,7 +12,7 @@ export function AdminDashboardClient({ initialStats }: { initialStats: AdminStat
   if (!stats) {
     return (
       <div className="space-y-6">
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Dashboard</h1>
+        <AdminPageTitle title="Dashboard" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="animate-pulse rounded-2xl border border-gray-100 bg-white p-6">
@@ -27,7 +28,7 @@ export function AdminDashboardClient({ initialStats }: { initialStats: AdminStat
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Dashboard</h1>
+        <AdminPageTitle title="Dashboard" />
         <Link
           href="/admin/issues/new"
           className="rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600"

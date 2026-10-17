@@ -1,11 +1,14 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { isEmbargoed } from '@/lib/embargo';
 import { getPublicIssueById, incrementIssueReadCount } from '@/lib/db';
+import { publicRateLimit } from '@/lib/rate-limit';
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const limited = await publicRateLimit(_request, 'catalogue');
+  if (limited) return limited;
   const { id } = await params;
   const issue = await getPublicIssueById(id);
   if (!issue) {

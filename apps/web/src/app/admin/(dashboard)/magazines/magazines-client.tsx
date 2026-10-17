@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import { LANGUAGE_NAMES } from '@aim-archive/shared';
 import { useUI } from '@/components/ui/toast';
 import type { AdminMagazine } from '@/lib/admin-data';
+import { AdminPageTitle } from '../admin-page-title';
 
 export function AdminMagazinesClient({ initialMagazines }: { initialMagazines: AdminMagazine[] }) {
   const { confirm, toast } = useUI();
@@ -72,7 +73,7 @@ export function AdminMagazinesClient({ initialMagazines }: { initialMagazines: A
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Magazines</h1>
+        <AdminPageTitle title="Magazines" />
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}

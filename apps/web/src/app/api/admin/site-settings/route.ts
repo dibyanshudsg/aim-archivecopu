@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { upsertSiteSettingsInDb } from '@/lib/db';
 import { getAdminSiteSettings } from '@/lib/admin-data';
 import { formatZodError, siteSettingsSchema } from '@/lib/validations';
+import { auditAdmin } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit } from '@/lib/rate-limit';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -14,8 +17,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export async function GET() {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('settings.view');
+  if (!admin) return await adminAccessFailure();
 
   try {
     const settings = await getAdminSiteSettings();
@@ -27,8 +30,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('settings.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id);
+  if (limited) return limited;
 
   const body = await request.json();
   const parsed = siteSettingsSchema.safeParse(body);
@@ -38,6 +43,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await upsertSiteSettingsInDb(parsed.data, admin.id);
+    await auditAdmin(admin.id, 'settings.updated');
     return NextResponse.json(parsed.data);
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to save settings');

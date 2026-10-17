@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, Layers3, LockKeyhole, X } from 'lucide-react';
+import { BookOpen, CalendarDays, CalendarRange, Filter, Languages, Layers3, LibraryBig, LockKeyhole, Tags, X } from 'lucide-react';
 import type { BrowseFilters, FilterDimension } from '@/lib/use-browse-filters';
 import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { FilterSection } from './filter-section';
@@ -71,7 +71,9 @@ export function FilterPanel({
   return (
     <div className="flex h-full w-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <span className="font-heading text-base font-semibold text-gray-900">Filters</span>
+        <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-flame-200 bg-white px-3.5 text-sm font-medium text-flame-700 shadow-sm">
+          <Filter className="h-4 w-4" /> Filters
+        </span>
         <div className="flex items-center gap-1">
           {hasActiveFilters && (
             <button
@@ -149,6 +151,7 @@ export function FilterPanel({
         )}
         <FilterSection
           title="Year"
+          Icon={CalendarRange}
           options={facets.years}
           selected={filters.years}
           onToggle={(v) => onToggle('years', v)}
@@ -157,6 +160,7 @@ export function FilterPanel({
         />
         <FilterSection
           title="Month"
+          Icon={CalendarDays}
           options={facets.months}
           selected={filters.months}
           onToggle={(v) => onToggle('months', v)}
@@ -165,6 +169,7 @@ export function FilterPanel({
         />
         <FilterSection
           title="Magazine"
+          Icon={LibraryBig}
           options={facets.magazines}
           selected={filters.magazines}
           onToggle={(v) => onToggle('magazines', v)}
@@ -173,6 +178,7 @@ export function FilterPanel({
         />
         <FilterSection
           title="Language"
+          Icon={Languages}
           options={facets.languages}
           selected={filters.languages}
           onToggle={(v) => onToggle('languages', v)}
@@ -181,6 +187,7 @@ export function FilterPanel({
         />
         <FilterSection
           title="Subjects"
+          Icon={Tags}
           options={facets.subjects}
           selected={filters.subjects}
           onToggle={(v) => onToggle('subjects', v)}

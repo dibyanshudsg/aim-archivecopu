@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { getDispatchState, startIndexing, releaseUnconfirmedStart } from '@/lib/indexing-dispatch';
 import { z } from 'zod';
+import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export async function GET(request: NextRequest) {
-  if (!(await verifyAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.view');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminReadRateLimit(request, admin.id);
+  if (limited) return limited;
   try {
     return NextResponse.json(
       await getDispatchState(request.nextUrl.searchParams.get('refresh') === '1'),
@@ -20,8 +26,10 @@ export async function GET(request: NextRequest) {
   }
 }
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('indexing.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id, 'indexing');
+  if (limited) return limited;
   if (request.headers.get('origin') !== request.nextUrl.origin)
     return NextResponse.json({ error: 'Start indexing from this website.' }, { status: 403 });
   const raw = await request.text();
@@ -37,14 +45,14 @@ export async function POST(request: NextRequest) {
     .safeParse(input);
   if (!parsed.success)
     return NextResponse.json({ error: 'Choose a valid indexing action.' }, { status: 400 });
+  const action = parsed.data.action === 'release' ? 'indexing.released' : 'indexing.started';
+  const operation = await beginAdminOperation(admin.id, action);
   try {
-    return NextResponse.json(
-      parsed.data.action === 'release'
-        ? await releaseUnconfirmedStart()
-        : await startIndexing(admin.id),
-      { status: 202 },
-    );
+    const result = parsed.data.action === 'release' ? await releaseUnconfirmedStart() : await startIndexing(admin.id);
+    await settleAdminOperation(operation, action, true);
+    return NextResponse.json(result, { status: 202 });
   } catch (error) {
+    await settleAdminOperation(operation, action, false);
     const message =
       error instanceof Error && /already|No eligible|not configured|Refresh/.test(error.message)
         ? error.message

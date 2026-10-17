@@ -100,8 +100,8 @@ export function SearchClient({ navigation }: SearchClientProps) {
     <div className="flex min-h-screen flex-col">
       <Header navigation={navigation} />
       <main className="flex-1">
-        <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
-          <div className="mx-auto max-w-3xl">
+        <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1440px]">
             <h1 className="font-heading text-center text-3xl font-bold text-gray-900 sm:text-4xl">
               Search the Archive
             </h1>
@@ -228,9 +228,9 @@ export function SearchClient({ navigation }: SearchClientProps) {
           </div>
         </section>
 
-        <div className="mx-auto max-w-5xl px-6 py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-[1504px] px-4 py-8 sm:px-6 lg:px-8">
           {loading ? (
-            <div className="space-y-3">
+            <div className="grid gap-3 xl:grid-cols-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse rounded-2xl border border-gray-100 bg-white p-5">
                   <div className="flex gap-4">
@@ -259,9 +259,11 @@ export function SearchClient({ navigation }: SearchClientProps) {
           ) : response ? (
             <div className="space-y-3">
               {response.limited && <p className="text-sm text-gray-600">More matches may be available. Narrow your query or filters to refine the results.</p>}
-              {response.data.map((result, i) => (
-                <SearchResultItem key={`${result.issue_id}-${result.page_number}`} result={result} index={i} query={query} />
-              ))}
+              <div className="grid items-stretch gap-3 xl:grid-cols-2">
+                {response.data.map((result, i) => (
+                  <SearchResultItem key={`${result.issue_id}-${result.page_number}`} result={result} index={i} query={query} />
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

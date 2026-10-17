@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listHomeShelfIssues } from '@/lib/db';
+import { publicRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
+  const limited = await publicRateLimit(request, 'catalogue');
+  if (limited) return limited;
   const year = Number(request.nextUrl.searchParams.get('year'));
   if (!Number.isInteger(year) || year < 1800 || year > 2200) {
     return NextResponse.json({ error: 'Invalid year' }, { status: 400 });

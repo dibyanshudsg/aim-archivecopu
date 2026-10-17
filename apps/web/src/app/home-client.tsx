@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { BookMarked, LibraryBig, Search } from 'lucide-react';
+import { BookMarked } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimatedBookshelf } from '@/components/home/animated-bookshelf';
@@ -72,7 +72,7 @@ function ContinueReadingShelf() {
 
   return (
     <motion.div
-      className="relative mx-auto mt-10 max-w-5xl"
+      className="relative mx-auto mt-10 w-full max-w-[1440px]"
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.85, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
@@ -183,57 +183,7 @@ export function HomeClient({
       <Header navigation={navigation} />
 
       <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-          <motion.div
-            className="relative mx-auto max-w-5xl text-center"
-            initial="hidden"
-            animate="visible"
-            variants={staggerContainer}
-          >
-            <motion.div variants={fadeInUp} className="mb-4 flex justify-center">
-              <Flame className="scale-75 sm:scale-100" />
-            </motion.div>
-
-            <motion.h1
-              variants={fadeInUp}
-              className="font-cursive text-4xl font-bold leading-snug sm:text-7xl sm:leading-relaxed lg:text-8xl bg-gradient-to-r from-gold-500 via-flame-500 to-flame-600 bg-clip-text text-transparent"
-            >
-              An Archive of <span className="whitespace-nowrap">Eternal Flame</span>
-            </motion.h1>
-
-            {/* Static (no Framer motion variant) — this is the LCP element on
-                /. Any Framer transform animation gates LCP measurement until
-                the element reaches its final position; rendering it statically
-                paints it on first frame. The H1 and CTAs stay animated for
-                entrance polish. */}
-            <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-gray-600 sm:mt-6 sm:text-xl">
-              Decades of spiritual wisdom from{' '}
-              <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">Sri Aurobindo</span> and{' '}
-              <span className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text font-medium text-transparent">The Mother</span>.
-              {' '}Read archive editions freely once they enter the five-year public archive.
-            </p>
-
-            <motion.div variants={fadeInUp} className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:mt-10">
-              <Link
-                href="/browse"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 hover:shadow-[0_16px_36px_rgba(229,86,31,0.24)] sm:px-8 sm:py-3.5 sm:text-base"
-              >
-                <LibraryBig className="h-4 w-4 sm:h-5 sm:w-5" />
-                Browse Archive
-              </Link>
-              <Link
-                href="/search"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-flame-300 hover:bg-flame-50 sm:px-8 sm:py-3.5 sm:text-base"
-              >
-                <Search className="h-4 w-4 sm:h-5 sm:w-5" />
-                Search Issues
-              </Link>
-            </motion.div>
-          </motion.div>
-
-          {/* This Month's Editions — manual slideshow, current month default,
-              optional "Show Previous Month's Editions" toggle */}
+        <section className="relative overflow-hidden bg-gradient-to-b from-[#fffaf1] via-[#fffdf8] to-white px-4 pb-12 pt-5 sm:px-6 sm:pb-20 sm:pt-9 lg:px-8">
           <ThisMonthFeatured
             magazines={carouselMagazines}
             issues={carouselIssues}
@@ -243,10 +193,29 @@ export function HomeClient({
             prevMonth={carouselPrevMonth}
           />
 
+          <section className="mx-auto mt-12 w-full max-w-[1440px] border-y border-gold-200/70 px-4 py-10 sm:mt-16 sm:px-6 lg:px-10" aria-labelledby="archive-intro-title">
+            <div className="mx-auto flex w-full max-w-[1080px] flex-col items-center gap-4 sm:w-fit sm:flex-row sm:gap-7">
+              <div className="flex shrink-0 justify-center sm:-translate-x-5" aria-hidden="true">
+                <Flame className="scale-[0.8] sm:scale-[0.9]" />
+              </div>
+              <div className="min-w-0 text-left">
+                <h2 id="archive-intro-title" className="font-cursive text-5xl leading-tight text-flame-700 sm:text-[4rem] lg:text-[4.25rem]">
+                  An Archive of Eternal Flame
+                </h2>
+                <p className="mt-2 text-base leading-relaxed text-gray-700 sm:text-lg">
+                  Writings of Sri Aurobindo and The Mother, preserved for discovery and reading.
+                </p>
+                <p className="mt-2 text-base leading-relaxed text-gray-700 sm:text-lg">
+                  Editions become freely readable after five years.
+                </p>
+              </div>
+            </div>
+          </section>
+
 
           {/* Dynamic Bookshelf */}
           <motion.div
-            className="relative mx-auto mt-16 max-w-5xl"
+            className="relative mx-auto mt-16 w-full max-w-[1440px]"
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
@@ -259,7 +228,7 @@ export function HomeClient({
 
           {/* Archive Stats */}
           <motion.div
-            className="relative mx-auto mt-16 grid max-w-3xl grid-cols-3 gap-8 border-t border-flame-100 pt-10 text-center"
+            className="relative mx-auto mt-16 grid w-full max-w-[1440px] grid-cols-3 gap-4 border-t border-flame-100 pt-10 text-center sm:gap-8"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1, duration: 0.6 }}
@@ -277,7 +246,7 @@ export function HomeClient({
               </div>
             ))}
           </motion.div>
-          <p className="mx-auto mt-5 max-w-3xl text-center text-sm text-gray-600">
+          <p className="mx-auto mt-5 w-full max-w-[1440px] text-center text-sm leading-relaxed text-gray-600">
             {collection.languages.length ? `Languages in the listed collection: ${collection.languages.join(', ')}.` : 'No editions are listed yet.'}
             {' '}Counts describe the online catalogue, including restricted editions, not the complete print collection.
           </p>
@@ -287,7 +256,7 @@ export function HomeClient({
         {/* CTA Section */}
         <section className="bg-gradient-to-b from-white to-flame-50 px-6 py-20 lg:px-8">
           <motion.div
-            className="mx-auto max-w-2xl text-center"
+            className="mx-auto max-w-5xl text-center"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}

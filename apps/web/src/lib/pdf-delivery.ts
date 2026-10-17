@@ -16,7 +16,7 @@ async function currentIssue(id: string): Promise<PdfAccessIssue | null> {
 }
 
 export async function currentAdmin(): Promise<boolean> {
-  const admin = await verifyAdmin();
+  const admin = await verifyAdmin('catalogue.view');
   if (!admin) return false;
   const { rows } = await getDb().execute({ sql: 'SELECT id FROM admins WHERE id=? AND email=? LIMIT 1', args: [admin.id, admin.email] });
   return rows.length === 1;
@@ -68,7 +68,13 @@ export function createPdfDelivery(overrides: Partial<PdfDeliveryDependencies> = 
       const filename = (current?.title || id).replace(/[\x00-\x1f\x7f/\\]/g, '-').slice(0, 160) + '.pdf';
       const encodedFilename = encodeURIComponent(filename).replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase());
       const disposition = `${mode === 'download' ? 'attachment' : 'inline'}; filename="${id}.pdf"; filename*=UTF-8''${encodedFilename}`;
-      if (mode !== 'admin') {
+      // Local catalogue copies cannot configure the Society bucket's browser
+      // CORS policy. Stream the already-authorized public PDF through the
+      // loopback preview only; hosted delivery keeps short-lived R2 redirects.
+      const localPublicPreview = mode === 'public' &&
+        process.env.LOCAL_CATALOGUE_PREVIEW_READ_ONLY === '1' &&
+        process.env.TURSO_DATABASE_URL?.startsWith('file:');
+      if (mode !== 'admin' && !localPublicPreview) {
         const now = deps.now();
         const command = head
           ? new HeadObjectCommand({ Bucket, Key: key })

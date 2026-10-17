@@ -21,7 +21,7 @@ async function seed(client) {
 try {
   const fresh = db();
   assert.equal((await migrationState(fresh, migrations)).needsBaseline, false);
-  assert.equal((await applyMigrations(fresh, migrations)).applied.length, 8);
+  assert.equal((await applyMigrations(fresh, migrations)).applied.length, 11);
   assert.equal(await count(fresh, 'navigation_menus'), 5);
   assert.equal(await count(fresh, 'navigation_items'), 15);
   assert.deepEqual((await applyMigrations(fresh, migrations)).applied, []);
@@ -32,7 +32,7 @@ try {
   const upgrade = db();
   await applyMigrations(upgrade, migrations, { through: migrations[5].file });
   await seed(upgrade);
-  assert.equal((await applyMigrations(upgrade, migrations)).applied.length, 2);
+  assert.equal((await applyMigrations(upgrade, migrations)).applied.length, 5);
   assert.equal((await upgrade.execute("SELECT count(*) n FROM issue_text_fts WHERE issue_text_fts MATCH 'aspiration'")).rows[0].n, 1);
   assert.equal((await upgrade.execute("SELECT count(*) n FROM issue_metadata_fts WHERE issue_metadata_fts MATCH 'aspiration'")).rows[0].n, 1);
   await upgrade.execute("UPDATE issue_search_index SET content='A peaceful silence'");
@@ -89,5 +89,5 @@ try {
   const checksum = readMigrations(dir)[0].checksum;
   fs.writeFileSync(path.join(dir, '00001_fixture.sql'), 'CREATE TABLE fixture(id TEXT);\n');
   assert.equal(readMigrations(dir)[0].checksum, checksum, 'CRLF must not change migration identity');
-  console.log('PASS fresh schema, all eight migrations, no-op repeat, populated upgrade/FTS triggers, baseline preservation/refusal, rollback, checksum/gap/schema drift, explicit CLI targets and read-only status.');
+  console.log('PASS fresh schema, all eleven migrations, no-op repeat, populated upgrade/FTS triggers, baseline preservation/refusal, rollback, checksum/gap/schema drift, explicit CLI targets and read-only status.');
 } finally { for (const client of clients) client.close(); }

@@ -3,8 +3,10 @@
   "private": true,
   "scripts": {
     "verify:runtime": "node scripts/verify-runtime-setup.cjs",
+    "verify:admin-release": "node scripts/verify-admin-release-env.cjs",
     "test:environment": "node scripts/test-runtime-environment.cjs",
     "test:migrations": "node scripts/test-turso-migrations.mjs",
+    "test:rate-limits": "node scripts/test-rate-limits.cjs",
     "test:pdf-security": "node scripts/test-pdf-security.cjs",
     "test:review": "node scripts/test-review.cjs",
     "test:indexing": "node scripts/test-indexing.cjs",

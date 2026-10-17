@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, type LucideIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface FilterOption<T extends string | number> {
@@ -12,6 +12,7 @@ export interface FilterOption<T extends string | number> {
 
 interface FilterSectionProps<T extends string | number> {
   title: string;
+  Icon: LucideIcon;
   options: FilterOption<T>[];
   selected: T[];
   onToggle: (value: T) => void;
@@ -22,6 +23,7 @@ interface FilterSectionProps<T extends string | number> {
 
 export function FilterSection<T extends string | number>({
   title,
+  Icon,
   options,
   selected,
   onToggle,
@@ -37,10 +39,15 @@ export function FilterSection<T extends string | number>({
   return (
     <div className="border-b border-gray-100">
       <button
+        type="button"
         onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors hover:bg-flame-50/60"
+        aria-expanded={open}
+        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-semibold text-gray-900 transition-colors hover:bg-flame-50/60"
       >
-        <span className="flex items-center gap-2">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-flame-50 text-flame-700">
+            <Icon className="h-4 w-4" aria-hidden="true" />
+          </span>
           {title}
           {activeCount > 0 && (
             <span className="rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
@@ -49,7 +56,7 @@ export function FilterSection<T extends string | number>({
           )}
         </span>
         <ChevronDown
-          className={`h-4 w-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`}
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`}
         />
       </button>
       <AnimatePresence initial={false}>

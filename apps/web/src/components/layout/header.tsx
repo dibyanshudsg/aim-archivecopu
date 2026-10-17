@@ -166,7 +166,7 @@ export function Header({
     >
       <nav
         className={cn(
-          'mx-auto flex max-w-7xl items-center',
+          'mx-auto flex w-full max-w-[1504px] items-center',
           contextualControlsVisible
             ? 'gap-0.5 px-1 py-2 transition-[gap,padding] duration-200 ease-out min-[600px]:gap-2 min-[600px]:px-3 sm:px-4 sm:py-3 md:gap-3 md:px-6 md:py-4 lg:px-8 motion-reduce:transition-none'
             : 'gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8',
@@ -318,7 +318,7 @@ export function Header({
             </button>
           )}
           <ContinueReadingFab inline />
-          <Link
+          {pathname !== '/bookmarks' && <Link
             href="/bookmarks"
             onMouseEnter={() => prefetchRoute('/bookmarks')}
             onFocus={() => prefetchRoute('/bookmarks')}
@@ -351,7 +351,7 @@ export function Header({
                 </motion.span>
               )}
             </AnimatePresence>
-          </Link>
+          </Link>}
           <motion.div layout="position" className="shrink-0 md:hidden">
                 <button
                   type="button"

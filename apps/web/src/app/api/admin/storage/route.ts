@@ -1,24 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { adminAccessFailure } from '@/lib/admin-request';
 import { getAdminStorageData } from '@/lib/admin-data';
 import { deleteFromR2 } from '@/lib/r2-client';
 import { clearIssueCoverByStorageKeyInDb } from '@/lib/db';
 import { refreshPublicArchiveCaches } from '@/lib/public-cache';
+import { beginAdminOperation, settleAdminOperation } from '@/lib/db/admin-accounts';
+import { adminMutationRateLimit, adminReadRateLimit } from '@/lib/rate-limit';
 
 /**
  * GET /api/admin/storage
  * Returns a cross-referenced view of every object in R2 and every issue
  * whose file locations are missing or unsupported.
  */
-export async function GET() {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(request: Request) {
+  const admin = await verifyAdmin('storage.view');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminReadRateLimit(request, admin.id);
+  if (limited) return limited;
 
   try {
     return NextResponse.json(await getAdminStorageData());
   } catch (error) {
+    console.error('Storage inventory failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to load storage data' },
+      { error: 'Storage inventory is unavailable. Check the R2 connection and try again.' },
       { status: 500 },
     );
   }
@@ -34,8 +40,10 @@ export async function GET() {
  * pointing at the now-missing file; caller is expected to re-upload.
  */
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const admin = await verifyAdmin('storage.manage');
+  if (!admin) return await adminAccessFailure();
+  const limited = await adminMutationRateLimit(request, admin.id);
+  if (limited) return limited;
 
   let body: unknown;
   try {
@@ -50,14 +58,19 @@ export async function DELETE(request: NextRequest) {
       : null;
   if (!key) return NextResponse.json({ error: 'Missing key' }, { status: 400 });
 
+  const operation = await beginAdminOperation(admin.id, 'storage.deleted', key);
+
   try {
     await deleteFromR2(key);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: 'Delete failed: ' + message }, { status: 500 });
+    await settleAdminOperation(operation, 'storage.deleted', false);
+    console.error('Storage deletion failed:', err);
+    return NextResponse.json({ error: 'Could not delete the storage object. Check the R2 connection and try again.' }, { status: 500 });
   }
 
-  await clearIssueCoverByStorageKeyInDb(key);
+  try { await clearIssueCoverByStorageKeyInDb(key); }
+  catch (error) { await settleAdminOperation(operation, 'storage.deleted', false, 'Storage deletion succeeded; catalogue cleanup failed'); throw error; }
+  await settleAdminOperation(operation, 'storage.deleted', true);
   refreshPublicArchiveCaches();
 
   return NextResponse.json({ success: true });

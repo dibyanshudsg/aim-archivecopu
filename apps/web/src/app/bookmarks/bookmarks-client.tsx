@@ -204,8 +204,8 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
       <Header navigation={navigation} />
       <HeaderSearchDropdown />
       <main className="flex-1">
-        <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-12 lg:px-8">
-          <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">
                 My Bookmarks
@@ -252,7 +252,7 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
           </div>
         </section>
 
-        <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-[1504px] px-4 py-8 sm:px-6 lg:px-8">
           {!bookmarksHydrated || issuesLoading ? (
             <BookmarksLoadingState count={bookmarkedIds.length} />
           ) : issuesError ? (
@@ -307,7 +307,7 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {normalized.map((issue, i) => (
                     <IssueCard key={issue.id} issue={issue} index={i} source="bookmarks" />
                   ))}

@@ -13,7 +13,7 @@ db.exec(fs.readFileSync(path.join(root, 'packages/turso/migrations/00001_initial
 db.prepare('INSERT INTO magazines(id,name,created_at,updated_at) VALUES(?,?,?,?)').run('fixture-magazine','Synthetic',fixtures.now,fixtures.now);
 for (const i of fixtures.issues) db.prepare('INSERT INTO issues(id,magazine_id,title,year,month,is_published,pdf_url,cover_image_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
   .run(i.id,i.magazine_id,i.title,i.year,i.month,i.is_published,i.pdf_url,i.cover_image_url,fixtures.now,fixtures.now);
-db.prepare('INSERT INTO admins VALUES(?,?,?,?)').run('test-admin','admin@example.test','Synthetic admin',fixtures.now);
+db.prepare('INSERT INTO admins (id,email,name,created_at) VALUES(?,?,?,?)').run('test-admin','admin@example.test','Synthetic admin',fixtures.now);
 require('../apps/web/src/lib/db/client.ts').getDb = () => ({ execute: async ({sql,args}) => ({rows: db.prepare(sql).all(...args)}) });
 let authenticated = false;
 require('../apps/web/src/lib/admin-auth.ts').verifyAdmin = async () => authenticated ? {id:'test-admin',email:'admin@example.test',name:'Synthetic admin'} : null;
@@ -148,6 +148,8 @@ function signatureValid(raw, method, at) {
   objects.set('fixtures/released.pdf',{...object,contentType:'text/html'});assert.equal((await request(released.id)).status,404);
   objects.set('fixtures/released.pdf',object);
   require('../apps/web/src/lib/pdf-delivery.ts').deliverPdf=handle;
+  // Rate-limit behavior has its own shared-bucket regression; keep this fixture focused on PDF authorization.
+  require('../apps/web/src/lib/rate-limit.ts').publicRateLimit=async()=>null;
   const accessRoute=require('../apps/web/src/app/api/issues/[id]/access/route.ts');
   const publicRoute=require('../apps/web/src/app/api/issues/[id]/pdf/route.ts');
   const adminRoute=require('../apps/web/src/app/api/admin/issues/[id]/pdf/route.ts');

@@ -30,7 +30,7 @@ export function Footer({ navigation }: { navigation?: PublicNavigation }) {
 
   return (
     <footer className="border-t border-flame-100 bg-gradient-to-b from-flame-50/40 to-white">
-      <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
+      <div className="mx-auto w-full max-w-[1504px] px-4 pb-5 pt-12 sm:px-6 lg:px-8">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
@@ -95,11 +95,11 @@ export function Footer({ navigation }: { navigation?: PublicNavigation }) {
           </div>
         )}
 
-        <div className={`${feedbackFormUrl ? 'mt-8' : 'mt-12 border-t border-flame-100 pt-8'} flex flex-wrap items-center justify-between gap-4`}>
-          <p className="text-sm text-gray-400">
+        <div className={`${feedbackFormUrl ? 'mt-8' : 'mt-12 border-t border-flame-100 pt-8'} grid grid-cols-1 items-center gap-4 text-center sm:grid-cols-[1fr_auto_1fr]`}>
+          <p className="text-sm text-gray-500 sm:col-start-2">
             &copy; {currentYear} Sri Aurobindo Society. All rights reserved.
           </p>
-          <Link href="/admin" className="inline-flex min-h-10 items-center rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-600 hover:border-flame-300 hover:text-flame-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flame-600">
+          <Link href="/admin" className="inline-flex min-h-10 items-center justify-self-center rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-600 hover:border-flame-300 hover:text-flame-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flame-600 sm:col-start-3 sm:row-start-1 sm:mr-16 sm:justify-self-end">
             Admin
           </Link>
         </div>

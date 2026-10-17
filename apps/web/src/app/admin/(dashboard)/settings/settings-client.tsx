@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ExternalLink, MessageSquareText, Save, Settings } from 'lucide-react';
 import { useUI } from '@/components/ui/toast';
 import type { AdminSiteSettings } from '@/lib/admin-data';
+import { AdminPageTitle } from '../admin-page-title';
 
 interface SiteSettingsForm {
   feedback_form_url: string;
@@ -55,7 +56,7 @@ export function AdminSettingsClient({
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Settings</h1>
+        <AdminPageTitle title="Settings" />
         <div className="rounded-2xl border border-gray-100 bg-white p-6">
           <div className="h-5 w-40 animate-pulse rounded bg-gray-100" />
           <div className="mt-5 h-11 animate-pulse rounded-xl bg-gray-100" />
@@ -71,10 +72,7 @@ export function AdminSettingsClient({
         <p className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-semibold uppercase text-transparent">
           Site controls
         </p>
-        <h1 className="font-heading text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage public links and small site-level controls without changing code.
-        </p>
+        <AdminPageTitle title="Settings" description="Manage public links and small site-level controls without changing code." />
       </div>
 
       {error && (

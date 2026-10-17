@@ -45,6 +45,7 @@ import { useUI } from '@/components/ui/toast';
 import type { AdminIssue, AdminIssueListResult, AdminMagazine } from '@/lib/admin-data';
 import { renderPdfFirstPageCoverFromUrl } from '@/lib/pdf-cover-client';
 import { IndexingPanel } from '@/components/admin/indexing-panel';
+import { AdminPageTitle } from '../admin-page-title';
 
 type Issue = AdminIssue;
 
@@ -550,7 +551,7 @@ export function AdminIssuesClient({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-wide text-gray-900">Issues</h1>
+          <AdminPageTitle title="Issues" />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button

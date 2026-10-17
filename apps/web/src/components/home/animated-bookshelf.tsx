@@ -1118,7 +1118,9 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
   const [yearError, setYearError] = useState(false);
   const [yearRetry, setYearRetry] = useState(0);
   const [sortMode, setSortMode] = useState<SortMode>('uploaded');
-  const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>('all');
+  const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>(() =>
+    suppliedIssues.find((issue) => issue.magazines.name.toLowerCase().includes('all india'))?.magazines.id ?? 'all',
+  );
   const issuesPerRow = useIssuesPerRow();
   const activeCopy = sortCopy[sortMode];
   const currentYear = new Date().getFullYear();
@@ -1169,7 +1171,10 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
 
     return Array.from(byId.entries())
       .map(([id, name]) => ({ id, name, label: magazineShortName(name) }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => {
+        const rank = (name: string) => name.toLowerCase().includes('all india') ? 0 : name.toLowerCase().includes('agnishikha') ? 1 : 2;
+        return rank(a.name) - rank(b.name) || a.label.localeCompare(b.label);
+      });
   }, [suppliedIssues]);
   const yearIssues = useMemo(
     () => issues.filter((issue) => issue.year === selectedYear),
@@ -1221,7 +1226,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-[1440px]">
       <motion.div
         className="relative"
         initial={false}
@@ -1229,8 +1234,8 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
         <div className="rounded-xl border border-flame-100/80 bg-gradient-to-b from-white to-flame-50/40 p-5 shadow-sm sm:p-7">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-flame-100 pb-4">
-            <div className="w-full text-left sm:w-auto">
+          <div className="mb-6 grid grid-cols-1 items-center gap-4 border-b border-flame-100 pb-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <div className="min-w-0 text-left">
               <p className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-semibold uppercase text-transparent">{activeCopy.eyebrow}</p>
               <h2 className="font-heading text-2xl font-bold text-gray-900">{activeCopy.heading}</h2>
               <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
@@ -1239,28 +1244,9 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
               </p>
               {yearError && <button type="button" onClick={() => setYearRetry(value => value + 1)} className="min-h-11 px-3 text-sm font-semibold text-flame-800">Try again</button>}
             </div>
-            <div className="flex w-full flex-col items-center gap-2 sm:w-auto sm:flex-1">
+            <div className="flex w-full flex-col items-center gap-2 justify-self-center lg:w-auto">
               {magazineOptions.length > 1 && (
                 <div className="inline-flex max-w-full rounded-full border border-flame-100 bg-white/95 p-1 shadow-[0_8px_24px_rgba(120,84,28,0.08)] ring-1 ring-white">
-                  <button
-                    type="button"
-                    aria-pressed={magazineFilter === 'all'}
-                    onClick={() => setMagazineFilter('all')}
-                    className={`relative isolate min-h-11 min-w-11 rounded-full px-3 text-xs font-semibold transition-colors ${
-                      magazineFilter === 'all'
-                        ? 'text-white'
-                        : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
-                    }`}
-                  >
-                    {magazineFilter === 'all' && (
-                      <motion.span
-                        layoutId="bookshelf-magazine-active"
-                        className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_14px_rgba(190,140,46,0.24)]"
-                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 34 }}
-                      />
-                    )}
-                    All
-                  </button>
                   {magazineOptions.map((option) => {
                     const active = magazineFilter === option.id;
                     return (
@@ -1287,6 +1273,25 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    aria-pressed={magazineFilter === 'all'}
+                    onClick={() => setMagazineFilter('all')}
+                    className={`relative isolate min-h-11 min-w-11 rounded-full px-3 text-xs font-semibold transition-colors ${
+                      magazineFilter === 'all'
+                        ? 'text-white'
+                        : 'text-gray-600 hover:bg-flame-50/80 hover:text-flame-800'
+                    }`}
+                  >
+                    {magazineFilter === 'all' && (
+                      <motion.span
+                        layoutId="bookshelf-magazine-active"
+                        className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-gold-500 to-flame-500 shadow-[0_6px_14px_rgba(190,140,46,0.24)]"
+                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 34 }}
+                      />
+                    )}
+                    All
+                  </button>
                 </div>
               )}
               <div
@@ -1325,7 +1330,7 @@ export function AnimatedBookshelf({ issues: suppliedIssues, years }: AnimatedBoo
             </div>
             <Link
               href={browseHref}
-              className="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-flame-200 bg-white px-4 py-2 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50 sm:mx-0"
+              className="inline-flex min-h-11 items-center justify-center justify-self-center rounded-lg border border-flame-200 bg-white px-4 py-2 text-sm font-semibold text-flame-700 transition-colors hover:border-flame-300 hover:bg-flame-50 lg:justify-self-end"
             >
               Browse all
             </Link>
