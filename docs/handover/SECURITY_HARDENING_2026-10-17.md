@@ -20,6 +20,8 @@ Review Vercel Firewall traffic and 429 responses after launch and after shared S
 ## Verification
 
 - `scripts/test-request-body-limits.cjs`: declared and actual oversize, invalid and null JSON.
-- TypeScript check and Next.js 15.5.28 production build completed. The isolated checkout's ESLint dependency was incomplete; rerun clean Linux CI after source synchronization.
+- TypeScript check and Next.js 15.5.28 production build completed locally. Vercel's Linux build then passed its compile, lint and type checks for deployment `dpl_6qBbGKAZ54qoa7eykewmZ8a2fcWe`. The isolated Windows checkout's ESLint package install was incomplete, so that local lint run is not evidence.
 - Local production HTTP smoke: Home, Browse, Search, Bookmarks, Admin login, and `/api/issues` returned 200 with CSP headers.
 - Vercel WAF rule was published and read back enabled. A 429 at the edge has not been forced with live traffic; monitor Firewall analytics before adjusting the threshold.
+- The public production alias returned 200 for Home, `/api/issues` and Admin login with CSP and `X-Frame-Options: DENY`. The verified unaliased deployment also returned 200 for Browse, Search and Bookmarks. This was read-only HTTP smoke, not a full browser or Admin mutation rehearsal.
+- The Vercel CLI Firewall overview returned a Hobby-plan 402, so live 429 counts were not retrieved in this check.

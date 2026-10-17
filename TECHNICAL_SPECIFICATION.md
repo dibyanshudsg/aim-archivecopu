@@ -1,10 +1,10 @@
 # AIM Archive current technical specification
 
-Baseline verified against the local workspace and read-only service checks on 8 October 2026; runtime/setup and handover status reconciled with the 10 October local verification records. Local source, remote Git and the deployed website are not identical. Start with the [Society discussion package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) for current decisions and limitations. The [handover assessment](HANDOVER_ASSESSMENT_2026-10-08.md) remains dated evidence; the [active tracker](TO%20DO%20LIST.md) owns current status.
+The architecture below began as an 8 October baseline and includes dated observations. For the deployed 17 October source, start with the [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md). GitHub `main` matches the deployed release; the original dirty local workspace is an older working copy. The [handover assessment](HANDOVER_ASSESSMENT_2026-10-08.md) remains dated evidence; the [active tracker](TO%20DO%20LIST.md) owns open work.
 
 ## Runtime architecture
 
-Source publication, 13 October: [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identifies the published candidate and verification. The original workspace's HEAD remains old; GitHub `main` now contains reconciled source. The public website remains the September deployment.
+Source publication on 13 October is recorded in the [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md). The subsequent 17 October release deployed the current source to Vercel; see [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md).
 
 13 October update: the owner reports Society acceptance and will continue participating. Today’s requested delivery is complete source through Git for Dibyanshu Ji; final operational acceptance, hosting/access and release checks remain separate. [Fresh offline database restore](docs/handover/P3_LOCAL_RESTORE_2026-10-13.md) passed; [dependency/support review](docs/handover/P6_SUPPORT_REVIEW_2026-10-13.md) records unresolved release risks.
 
@@ -16,9 +16,9 @@ External integrations are Turso/libSQL for database access, Cloudflare R2's S3-c
 
 Launch status clarified by the owner on 8 October 2026: the website is deployed for review but has not officially launched to the public. Historical "production release" records describe deployments, not an official launch. The existing 104-issue catalogue is sufficient for the owner's handover acceptance; additional historical ingestion is not a prerequisite. The hoped-for official launch is 24 November 2026, subject to Society agreement and readiness.
 
-The Next.js web server reads and writes Turso through server-side libSQL repositories and stores PDFs/covers in R2 using the S3 API. English extraction runs in a separate manually dispatched GitHub Actions worker. The recorded deployed baseline uses direct public asset URLs and worker downloads through stored URLs. The local candidate instead authorizes short-lived released-PDF grants, streams authenticated admin PDFs, separates cover delivery and uses authenticated worker reads. Browser PDF uploads use authenticated short-lived PUT URLs. Local changes have not been deployed; public-origin closure remains open.
+The Next.js web server reads and writes Turso through server-side libSQL repositories and stores PDFs/covers in R2 using the S3 API. English extraction runs in a separate manually dispatched GitHub Actions worker. The deployed app authorizes short-lived released-PDF grants, streams authenticated admin PDFs, separates cover delivery and uses authenticated worker reads. Browser PDF uploads use authenticated short-lived PUT URLs. The old direct public R2 origin remains an accepted exception awaiting Society IT closure.
 
-The table below describes the local candidate, not freshly inspected hosted versions.
+The table below describes the implementation; consult the current handover status for the parts verified on the host.
 
 | Layer | Implementation |
 |---|---|
@@ -89,9 +89,9 @@ Use source-quality checks for PDFs and covers; preserve the display title conven
 
 ## Authentication and worker operations
 
-Admins are authorized by database email records and one shared `ADMIN_PASSWORD`. Sessions are HMAC-signed, expire after seven days, and use HttpOnly, SameSite=Lax cookies, with Secure in production. Prefer a distinct `ADMIN_SESSION_SECRET`; code falls back to the login password. Removing an admin database record invalidates authorization checks for that identity. All admins have equal access.
+Admins use individual password hashes and assigned roles/permissions in the database. Sessions are signed using the required independent `ADMIN_SESSION_SECRET`, expire after seven days, and use HttpOnly, SameSite=Lax cookies, with Secure in production. Account and role changes revoke affected sessions. Legacy shared-password enrollment is controlled separately and disabled in normal operation. Admin activity is audited.
 
-Login limiting is process-local, eight attempts per IP/email pair in 15 minutes. It is not a shared multi-instance limiter. Configure trusted reverse-proxy headers before self-hosting and test rotation/offboarding.
+Login limits use shared database buckets for account and IP identity; public and Admin route limits are also configured in the application. A Vercel firewall rule adds a 120-per-IP, 10-minute edge limit for Admin login. Configure trusted reverse-proxy headers before self-hosting and test rotation/offboarding. See [security hardening](docs/handover/SECURITY_HARDENING_2026-10-17.md).
 
 Indexing is manual-only. Upload/replacement queues work; Admin Start dispatches the GitHub workflow. Current worker limits are three jobs per run, a 20-minute claiming window, a 45-minute job watchdog and a 75-minute outer workflow timeout. Database leases/checkpoints support retry and resume. Existing saved search remains available when no worker runs.
 
@@ -105,7 +105,9 @@ Store values in the receiving team's secret manager and hosting configuration. T
 |---|---|
 | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Web/worker database connection; token not needed for a local file target |
 | `DATABASE_PROVIDER` | Existing compatibility setting, normally `turso`; changing it does not implement a PostgreSQL adapter |
-| `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` | Web login and session signing |
+| `ADMIN_SESSION_SECRET` | Required independent web session signing secret |
+| `ADMIN_PASSWORD`, `ADMIN_LEGACY_ENROLLMENT` | Controlled legacy owner enrollment only; not current multi-admin login |
+| `RATE_LIMIT_SECRET`, `RATE_LIMIT_SCALE`, `TRUST_PROXY_IP_HEADERS` | Rate-limit identity key, capacity scale and trusted-ingress setting |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Server storage credentials and bucket |
 | `R2_PUBLIC_BASE_URL` | Current permitted asset base; required for web/worker eligibility and allowed image host |
 | `R2_LEGACY_PUBLIC_BASE_URLS` | Optional comma-separated former origins for precise URL aliasing |

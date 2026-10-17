@@ -1,5 +1,9 @@
 # AIM Archive Society discussion package
 
+**17 October update:** GitHub `main` and the deployed Vercel review site now contain the current web release. Begin with [current handover status](CURRENT_STATUS_2026-10-17.md), then use this index for earlier discussion material and evidence. Statements below about an unpublished/undeployed candidate are dated 10–13 October preparation notes. The old `codex/github-indexing-2026-09-06` branch was fully contained in `main` and removed from GitHub; only `main` remains.
+
+The current [rate-limit table](../../RATE_LIMITING.md) and [security release note](SECURITY_HARDENING_2026-10-17.md) are the operational references for the October release.
+
 Prepared locally on 10 October; updated 13 October 2026. Owner reports Society acceptance and will continue participating. The immediate request is complete reviewed source through Git for Dibyanshu Ji. This package has not been sent by the assistant; final technical transfer, receiving access and operational acceptance remain pending.
 
 ## Read in this order

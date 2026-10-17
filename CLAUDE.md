@@ -1,5 +1,7 @@
 # AIM Archive — Project Bible
 
+**Current release, 17 October 2026:** GitHub `main` and the Vercel review site contain the deployed web release with individual Admin accounts/roles, audit logging, rate limits, CSP and request-body limits. See [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md). Older dated implementation and release notes below are historical where they conflict.
+
 > **All India Magazine Digital Archive** — A state-of-the-art spiritual magazine archive platform (Web + Android + iOS) for Sri Aurobindo Society's publications.
 
 ---
@@ -14,7 +16,7 @@ A modern, beautiful digital archive platform to preserve and provide free public
 - **Parent Website**: https://aim.aurosociety.org/ (legacy — this project is a fresh, modern rebuild)
 - **Target Subdomain**: https://aimarchive.aurosociety.org/ (preferred; setup/spending deferred)
 - **Audience**: Devotees, spiritual seekers, researchers, and all people worldwide
-- **Admin Team**: Multiple admins (no role hierarchy — all admins have equal access)
+- **Admin Team**: Individual Admin accounts with assigned roles and permissions.
 
 ### Why
 The magazines — especially **All India Magazine** (English) and **Agnishikha** (Hindi) — contain excerpts from the writings of Sri Aurobindo and The Mother on spirituality, philosophy, and self-improvement. Archives go back to ~1990. This platform preserves them digitally and makes them universally accessible with modern search, browse, and reading experiences.
@@ -65,7 +67,7 @@ Magazine
 
 ## 3. Tech Stack
 
-- Web candidate (10 October, not deployed): Next.js 15.5.27, Node 22.23.3, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Zustand, Lucide and Zod. See SETUP.md for the tested runtime contract.
+- Deployed web release (17 October): Next.js 15.5.28, source pin Node 22.23.3, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Zustand, Lucide and Zod. See SETUP.md for the runtime contract and Vercel patch-version observation.
 - Database: Turso/libSQL through `@libsql/client` and server repositories in `apps/web/src/lib/db/`.
 - Storage: Cloudflare R2 for PDFs and covers. Catalogue assets use the configured R2 base; unsupported locations are excluded from public queries.
 - Search: FTS5 trigram indexes for page text and metadata, with SQL fallback when unavailable. Migrations 00007 and 00008 were applied for the September 19 release.
@@ -80,11 +82,11 @@ Magazine
 
 ## 4. Current Implementation Status
 
-Source publication, 13 October: the [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identifies the reviewed GitHub source and hosted verification. The live website remains unchanged. Original workspace HEAD is deliberately not advanced; do not pull/reset the dirty workspace to match GitHub.
+Source publication on 13 October is in the [delivery record](docs/handover/SOURCE_PUBLICATION_2026-10-13.md). The live review site now runs the 17 October release matching GitHub `main`. Original workspace HEAD is deliberately not advanced; do not pull/reset that dirty workspace to match GitHub.
 
 13 October owner update: Society acceptance is reported and the owner will continue participating. Immediate delivery is the complete reviewed Git source for Dibyanshu Ji. Operational access, final release acceptance and hosted checks remain open. See the tracker; earlier withdrawal/acceptance-pending text in dated correspondence is historical.
 
-Deployed release evidence: [19 September 2026](PRODUCTION_RELEASE_2026-09-19.md). The 10 October local candidate includes private PDF delivery, patched dependencies and locally verified CI; publication, hosted CI and origin closure remain open. Start with the [Society discussion package](docs/handover/SOCIETY_DOCUMENT_INDEX.md) for handover context. Active unfinished work belongs in [TO DO LIST.md](TO%20DO%20LIST.md).
+Deployed release evidence: [17 October handover status](docs/handover/CURRENT_STATUS_2026-10-17.md) and [security hardening](docs/handover/SECURITY_HARDENING_2026-10-17.md). The older [19 September record](PRODUCTION_RELEASE_2026-09-19.md) is historical. Direct old R2-origin closure, isolated staging and receiving checks remain open. Active unfinished work belongs in [TO DO LIST.md](TO%20DO%20LIST.md).
 
 ### Public web
 
@@ -188,7 +190,7 @@ Runtime configuration is stored privately in `apps/web/.env.local` and Vercel; n
 
 - Database: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
 - R2: account/bucket credentials and public asset URL configuration.
-- Admin: environment password/session configuration and the admins table; no default password fallback.
+- Admin: individual password hashes, roles, permissions and sessions in the database; independent `ADMIN_SESSION_SECRET` in private hosting configuration. Legacy shared-password enrollment is disabled in normal operation.
 - GitHub repository: `MugdhanilK/aim-archive`, branch `main`. Manual worker dispatch configuration is documented in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
 - `aimarchive.aurosociety.org` is the preferred website domain, with setup/spending deferred. An asset hostname has not been selected. See [asset delivery plan](ASSET_DELIVERY_PLAN.md).
 
@@ -315,7 +317,7 @@ The website uses Vercel, Turso and R2. Manual indexing uses GitHub Actions. Publ
 The existing Vercel project is `aim-archive`, linked through `.vercel/project.json`; production is https://aim-archive.vercel.app.
 
 1. Verify the intended changes and run `pnpm.cmd build` from `apps/web`, plus checks appropriate to the change.
-2. Check required private configuration: Turso database URL/token, R2 settings, admin password/session secret and public app URL. GitHub Admin dispatch additionally requires the connection described in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
+2. Check required private configuration: Turso database URL/token, R2 settings, independent Admin session secret and public app URL. GitHub Admin dispatch additionally requires the connection described in [GITHUB_INDEXING.md](GITHUB_INDEXING.md).
 3. When deployment is authorized, use the existing Vercel project. Git-based deployment requires a verified connection and an authorized push; CLI deployment from the repository root uses `pnpm.cmd dlx vercel --prod`.
 4. Verify deployment readiness and real public flows; record the result in a dated release report.
 

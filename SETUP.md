@@ -1,12 +1,12 @@
 # Runtime, installation and configuration
 
-P4-05/06 baseline, 10 October; publication update, 13 October 2026. This describes the published source candidate, not a new production release. [Source publication and hosted verification](docs/handover/SOURCE_PUBLICATION_2026-10-13.md) identify the Git commit and live-service boundary. [Clean Linux verification](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md) and [batch evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md) remain dated preparation records.
+Runtime setup for the deployed GitHub `main` source, updated 17 October 2026. Start with the [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md). Earlier [source publication](docs/handover/SOURCE_PUBLICATION_2026-10-13.md), [Linux verification](docs/handover/P4-08_09_CANDIDATE_VERIFICATION.md) and [batch evidence](docs/handover/P4_BATCH1_REPRODUCIBILITY.md) are dated preparation records.
 
 ## Runtime contract
 
-- Web/operator baseline: Node **22.23.3** (`.node-version`), pnpm **10.33.0** (`packageManager`). Engines require 22.23.3+ within major 22; `verify:runtime` requires the exact tested pin. Both published workflows read the version file. Vercel runtime settings remain a release check; publishing source did not deploy it.
+- Web/operator baseline: Node **22.23.3** (`.node-version`), pnpm **10.33.0** (`packageManager`). Engines require 22.23.3+ within major 22; `verify:runtime` requires the exact tested pin. Both published workflows read the version file. The 17 October Vercel build passed on its Node 22.x runtime, observed as 22.23.2; reconcile the minor patch mismatch during receiving setup.
 - [P4-10/P6-01 verification](docs/handover/P4-10_P6-01_CI_SECURITY_REVIEW.md) passed on a fresh Linux installation. The Windows host runtime and installed dependencies were not replaced: select the pinned Node version and run the frozen install before using this updated candidate locally. Remaining native dependency findings and the Next 15 support horizon keep P6-01 open.
-- Next **15.5.27**, PDF.js **4.8.69**, canvas 3.x and the lockfile form the compatibility baseline. Do not upgrade PDF.js to v5 without reworking and testing server canvas rendering.
+- Next **15.5.28**, PDF.js **4.8.69**, canvas 3.x and the lockfile form the compatibility baseline. Do not upgrade PDF.js to v5 without reworking and testing server canvas rendering.
 - Preserve root `pnpm.overrides` for both React type packages. The native Expo app is a skeleton; root command success does not certify native delivery.
 
 Install from the repository root using the pinned tools:
@@ -44,13 +44,14 @@ Normal installation and builds need neither Google Fonts nor Python font tools. 
 
 ## Environment contract
 
-Copy `apps/web/.env.local.example` only for a **new** isolated setup; populate values privately. Do not overwrite the existing environment file. Next loads its web environment files; ordinary operator scripts vary, so follow each command's target instructions. Existing login/session configuration must remain unchanged until a new owner instruction.
+Copy `apps/web/.env.local.example` only for a **new** isolated setup; populate values privately. Do not overwrite the existing environment file. Next loads its web environment files; ordinary operator scripts vary, so follow each command's target instructions. Production Admin accounts have individual passwords and roles. Preserve its independent session secret until a coordinated rotation; the legacy shared password is for controlled enrollment only.
 
 | Names | Scope and behavior |
 |---|---|
 | `DATABASE_PROVIDER`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Server/worker. Provider is `turso`; token may be omitted for isolated `file:` databases. Build/prerender may read the selected DB. |
-| `ADMIN_PASSWORD` | Server-only login and current fallback signing secret. Never use a public prefix. |
-| `ADMIN_SESSION_SECRET` | Optional independent signing secret. Omission preserves password fallback; changing it invalidates sessions and outstanding replacement-upload tickets. Do not provision/change it on this installation without authorization. |
+| `ADMIN_SESSION_SECRET` | Required independent signing secret, at least 32 characters. Changing it invalidates sessions and outstanding replacement-upload tickets; coordinate rotation. |
+| `ADMIN_PASSWORD`, `ADMIN_LEGACY_ENROLLMENT` | Legacy owner enrollment only. Keep enrollment disabled (`0`) in normal operation; do not treat the shared password as the current login model. |
+| `RATE_LIMIT_SECRET`, `RATE_LIMIT_SCALE`, `TRUST_PROXY_IP_HEADERS` | Optional dedicated HMAC key, configured limit scale and trusted-ingress override. Outside Vercel production, enable proxy IP headers only behind an ingress that overwrites them. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Server/worker private storage. Separate staging and production credentials; worker uses a dedicated read scope. |
 | `R2_PUBLIC_BASE_URL` | Stored asset-locator namespace and allowed host. Required even when its public origin is closed; this name does not imply public access is safe. |
 | `R2_LEGACY_PUBLIC_BASE_URLS` | Optional exact former locator bases. URL mapping only; does not grant or revoke access. |
@@ -62,7 +63,7 @@ Copy `apps/web/.env.local.example` only for a **new** isolated setup; populate v
 | `INDEXING_LOCAL_WORKER` | Launch-environment dev opt-in; default off. |
 | `NEXT_DIST_DIR` | Build/dev output; default `.next`. Use `.next-*` for isolated builds covered by Turbo/lint rules. |
 
-Turbo strict-mode tasks receive all 18 names above. Environment files and `.node-version` are global cache inputs; CLI environment values also participate in hashes. Cache hashes are not a secret-storage mechanism: keep local/remote caches access-controlled. Environment files remain excluded from Git/deployment. See [Turbo's environment guidance](https://turborepo.dev/docs/crafting-your-repository/using-environment-variables).
+Turbo strict-mode tasks receive the names listed in `turbo.json`. Environment files and `.node-version` are global cache inputs; CLI environment values also participate in hashes. Cache hashes are not a secret-storage mechanism: keep local/remote caches access-controlled. Environment files remain excluded from Git/deployment. See [Turbo's environment guidance](https://turborepo.dev/docs/crafting-your-repository/using-environment-variables).
 
 GitHub secret names are mapped explicitly by the workflow: `INDEXING_TURSO_DATABASE_URL/AUTH_TOKEN` to `TURSO_*`, and `INDEXING_R2_ACCOUNT_ID/BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY` to `R2_*`. `INDEXING_REQUEST_ID` and `GITHUB_*` are workflow-run metadata, not static web settings. Repository variables supply R2 locator bases. No GitHub secret value or workflow setting was changed remotely.
 

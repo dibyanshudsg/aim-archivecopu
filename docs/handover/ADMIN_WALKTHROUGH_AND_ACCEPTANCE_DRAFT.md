@@ -1,5 +1,7 @@
 # AIM Archive admin walkthrough and acceptance draft
 
+**17 October update:** The review site now has individual Admin accounts and roles; use the [current handover status](CURRENT_STATUS_2026-10-17.md) for deployed behavior. This remains a draft for an isolated staging rehearsal, not evidence that Society operators completed it.
+
 13 October update: Society acceptance is owner-reported and the owner continues participating. The technical demonstrations below remain draft/unperformed unless separately evidenced. [Offline database restore](P3_LOCAL_RESTORE_2026-10-13.md) now passed; full service and receiving recovery remain open.
 
 Prepared 10 October 2026 for the future editorial operator and Society IT. This is a rehearsal guide based on the current local implementation, not a completed receiving-team demonstration. Finalize it against the selected deployed release. Track results under P5, P8 and P10 in the [active tracker](../../TO%20DO%20LIST.md).
@@ -8,7 +10,7 @@ Prepared 10 October 2026 for the future editorial operator and Society IT. This 
 
 Engineering must provide an identified staging release, isolated database and private fixture bucket, approved test admin access and a working manual indexing connection. Preview settings currently share production configuration in the recorded inventory: a preview URL alone does not make mutation tests safe. Use a small synthetic English PDF/cover and record its fixture IDs. Do not use production issues for practice.
 
-Current admin access uses an approved email and shared password with signed seven-day sessions. All admins have equal application privileges. Obtain credentials privately; do not paste them into this guide or screenshots. Password rotation remains deferred until the owner explicitly instructs a coordinated change.
+Current Admin access uses an individual account password, assigned role and signed seven-day session. Obtain credentials privately; do not paste them into this guide or screenshots. Coordinate any historical credential/session rotation with the receiving operators.
 
 ## Editorial walkthrough
 
