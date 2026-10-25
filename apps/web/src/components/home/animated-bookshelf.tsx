@@ -1093,14 +1093,14 @@ function YearNavigator({
         </button>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-1" aria-label="Choose archive year">
+      <div className="archive-year-scroll flex w-full max-w-full gap-1 overflow-x-auto overscroll-x-contain pb-2 sm:w-auto sm:justify-center" aria-label="Choose archive year" tabIndex={0}>
         {buildYearRange(minYear, maxYear).map((year) => (
           <button
             key={year}
             type="button"
             onClick={() => onChange(year)}
             aria-pressed={selectedYear === year}
-            className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg px-2 text-xs font-semibold transition-colors ${selectedYear === year ? 'bg-flame-100 text-flame-900' : 'text-gray-600 hover:bg-flame-50'}`}
+            className={`flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-semibold transition-colors ${selectedYear === year ? 'bg-flame-100 text-flame-900' : 'text-gray-600 hover:bg-flame-50'}`}
           >
             {year}
           </button>

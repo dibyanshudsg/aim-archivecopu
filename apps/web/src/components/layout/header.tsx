@@ -21,16 +21,6 @@ import { cn } from '@/lib/utils';
 
 const SEARCH_DROPDOWN_ROUTES = new Set(['/browse', '/bookmarks']);
 
-const DEV_PUBLIC_WARM_TARGETS = [
-  '/browse',
-  '/search',
-  '/bookmarks',
-  '/api/issues?page=1&page_size=24',
-  '/api/magazines',
-  '/api/site-settings',
-];
-const DEV_BROWSE_ROUTE_WARM_TARGETS = ['/search', '/bookmarks'];
-
 export function Header({
   navigation,
   contextualControls,
@@ -103,50 +93,6 @@ export function Header({
     return () => window.clearTimeout(timeoutId);
   }, [bookmarkedIds, pathname]);
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
-
-    let cancelled = false;
-    const timeout = window.setTimeout(async () => {
-      if (pathname === '/browse') {
-        await Promise.allSettled(
-          DEV_BROWSE_ROUTE_WARM_TARGETS.map(async (target) => {
-            if (cancelled) return;
-            router.prefetch(target);
-            try {
-              // Next disables automatic Link prefetching in development. Fetch
-              // the now-lightweight route shells so the first click does not
-              // pay the compile cost while the user waits.
-              await fetch(target, { cache: 'force-cache' });
-            } catch {
-              /* local-only convenience */
-            }
-          }),
-        );
-        return;
-      }
-
-      if (pathname !== '/') return;
-      for (const href of [...headerLinks, ...mobileLinks].map((link) => link.href)) {
-        if (!isExternalNavigationHref(href)) router.prefetch(href);
-      }
-
-      for (const target of DEV_PUBLIC_WARM_TARGETS) {
-        if (cancelled) return;
-        try {
-          await fetch(target, { cache: 'force-cache' });
-        } catch {
-          // Local-only convenience; the visible route still handles failures.
-        }
-      }
-    }, pathname === '/browse' ? 0 : 800);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-    };
-  }, [router, headerLinks, mobileLinks, pathname]);
-
   /** Active state — matches exact path or any sub-route (e.g. /browse/[id]
    *  highlights the Browse link too). The home link ("/") is exact-match
    *  only — otherwise it would match every route. */
@@ -199,16 +145,13 @@ export function Header({
             />
             <div
               className={cn(
-                contextualControlsVisible &&
-                  'hidden max-w-16 overflow-hidden min-[390px]:block min-[600px]:max-w-none min-[600px]:overflow-visible',
+                contextualControlsVisible && 'hidden md:block',
               )}
             >
               <span
                 className={cn(
                   'font-heading font-bold whitespace-nowrap text-gray-900 transition-[font-size] duration-200 ease-out motion-reduce:transition-none',
-                  contextualControlsVisible
-                    ? 'block text-[10px] tracking-[-0.02em] min-[600px]:text-xl min-[600px]:tracking-normal'
-                    : 'text-xl',
+                  'text-xl',
                 )}
               >
                 AIM Archive
@@ -270,13 +213,18 @@ export function Header({
                       onFocus={() => prefetchRoute(link.href)}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                        'relative rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                         active
                           ? 'bg-gradient-to-r from-gold-100 to-flame-100 text-flame-700'
                           : 'text-gray-600 hover:bg-flame-50 hover:text-flame-700',
                       )}
                     >
                       {link.label}
+                      {pathname === '/browse' && link.href === '/bookmarks' && bookmarkCount > 0 && (
+                        <span className="absolute -top-2 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 px-1 text-[10px] font-bold text-white shadow-sm">
+                          {bookmarkCount > 99 ? '99+' : bookmarkCount}
+                        </span>
+                      )}
                     </NavigationAnchor>
                   );
                 })}
@@ -318,7 +266,7 @@ export function Header({
             </button>
           )}
           <ContinueReadingFab inline />
-          {pathname !== '/bookmarks' && <Link
+          {pathname !== '/bookmarks' && pathname !== '/browse' && <Link
             href="/bookmarks"
             onMouseEnter={() => prefetchRoute('/bookmarks')}
             onFocus={() => prefetchRoute('/bookmarks')}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -8,6 +8,7 @@ import { Search as SearchIcon, X, SlidersHorizontal } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { SearchResultItem } from '@/components/search/search-result-item';
+import { SearchResultSkeleton } from '@/components/search/search-result-skeleton';
 import { fetchMagazines, searchIssues } from '@/lib/api';
 import type { ApiMagazine, SearchResponse } from '@/lib/api';
 import type { PublicNavigation } from '@/lib/navigation';
@@ -39,6 +40,8 @@ export function SearchClient({ navigation }: SearchClientProps) {
   const [retry, setRetry] = useState(0);
   const [topics, setTopics] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(Boolean(yearFrom || yearTo || magazineFilter !== 'all'));
+  const initialQueryRef = useRef(Boolean(query.trim()));
+  const hasRequestedSearchRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,6 +67,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
 
     setLoading(true);
     const timer = setTimeout(() => {
+      hasRequestedSearchRef.current = true;
       searchIssues({
         query,
         magazineId: magazineFilter !== 'all' ? magazineFilter : undefined,
@@ -74,7 +78,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
         .then((data) => { if (!controller.signal.aborted) setResponse(data); })
         .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Search could not load. Please try again.'); })
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    }, 300);
+    }, initialQueryRef.current && !hasRequestedSearchRef.current ? 0 : 300);
 
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query, magazineFilter, yearFrom, yearTo, availability, retry]);
@@ -82,6 +86,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
   useEffect(() => {
     const controller = new AbortController();
     setTopics([]);
+    if (query.trim()) return () => controller.abort();
     const params = new URLSearchParams({ suggestions: '1', availability });
     if (magazineFilter !== 'all') params.set('magazine_id', magazineFilter);
     if (yearFrom) params.set('year_from', yearFrom);
@@ -91,7 +96,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
       .then((data) => { if (!controller.signal.aborted) setTopics(data.topics ?? []); })
       .catch(() => {});
     return () => controller.abort();
-  }, [availability, magazineFilter, yearFrom, yearTo]);
+  }, [query, availability, magazineFilter, yearFrom, yearTo]);
 
   const hasSearched = query.trim().length > 0;
   const total = response?.total ?? 0;
@@ -231,18 +236,7 @@ export function SearchClient({ navigation }: SearchClientProps) {
         <div className="mx-auto w-full max-w-[1504px] px-4 py-8 sm:px-6 lg:px-8">
           {loading ? (
             <div className="grid gap-3 xl:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="animate-pulse rounded-2xl border border-gray-100 bg-white p-5">
-                  <div className="flex gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-gray-100" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 w-48 rounded bg-gray-100" />
-                      <div className="h-3 w-32 rounded bg-gray-100" />
-                      <div className="h-3 w-full rounded bg-gray-100" />
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {Array.from({ length: 4 }, (_, i) => <SearchResultSkeleton key={i} />)}
             </div>
           ) : error ? (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-900">

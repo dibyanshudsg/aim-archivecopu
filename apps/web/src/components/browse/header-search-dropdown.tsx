@@ -3,35 +3,34 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search as SearchIcon, X } from 'lucide-react';
-import { useBrowseFilters } from '@/lib/use-browse-filters';
 import { useSearchDropdown } from '@/lib/use-search-dropdown';
 
-export function HeaderSearchDropdown() {
+export function HeaderSearchDropdown({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
   const isOpen = useSearchDropdown((s) => s.isOpen);
   const close = useSearchDropdown((s) => s.close);
-  const { filters, setQuery } = useBrowseFilters();
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const syncingFromUrlRef = useRef(false);
+  const debounceRef = useRef<number | null>(null);
 
   // Local input state owns the value so typing never waits on the URL/API
   // roundtrip. The URL update is debounced below.
-  const [localQuery, setLocalQuery] = useState(filters.query);
+  const [localQuery, setLocalQuery] = useState(query);
   // Sync local ← URL when the URL changes externally (e.g. chip removed).
   useEffect(() => {
-    syncingFromUrlRef.current = true;
-    setLocalQuery(filters.query);
-  }, [filters.query]);
+    setLocalQuery(query);
+  }, [query]);
 
   useEffect(() => {
-    if (syncingFromUrlRef.current) {
-      syncingFromUrlRef.current = false;
-      return;
-    }
-    if (localQuery.trim() === filters.query) return;
-    const timeout = window.setTimeout(() => setQuery(localQuery), 300);
-    return () => window.clearTimeout(timeout);
-  }, [filters.query, localQuery, setQuery]);
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const updateQuery = (value: string) => {
+    setLocalQuery(value);
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => onQueryChange(value), 300);
+  };
 
   // Auto-focus the input on open + close on Escape.
   useEffect(() => {
@@ -66,9 +65,7 @@ export function HeaderSearchDropdown() {
                   ref={inputRef}
                   type="text"
                   value={localQuery}
-                  onChange={(e) => {
-                    setLocalQuery(e.target.value);
-                  }}
+                  onChange={(e) => updateQuery(e.target.value)}
                   placeholder="Search issues, topics, magazines…"
                   // Suppress the global flame focus ring — the animated gold
                   // underline below is this input's focus indicator. The
@@ -79,8 +76,9 @@ export function HeaderSearchDropdown() {
                 {localQuery ? (
                   <button
                     onClick={() => {
+                      if (debounceRef.current) window.clearTimeout(debounceRef.current);
                       setLocalQuery('');
-                      setQuery('');
+                      onQueryChange('');
                     }}
                     aria-label="Clear search text"
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"

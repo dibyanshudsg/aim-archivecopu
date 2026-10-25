@@ -101,7 +101,7 @@ export function ContinueReadingFab({ inline = false }: { inline?: boolean }) {
         aria-expanded={open}
         title="Continue reading"
         className={inline
-          ? 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-flame-700 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-500 md:hidden'
+          ? 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-flame-200 bg-white text-flame-700 shadow-sm hover:border-flame-300 hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-500 md:hidden'
           : 'fixed right-6 bottom-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-lg focus-visible:ring-2 focus-visible:ring-flame-700 md:flex'}
       >
         <BookOpenText className="h-6 w-6" />

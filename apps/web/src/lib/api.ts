@@ -77,11 +77,12 @@ export async function fetchMagazines(signal?: AbortSignal): Promise<ApiMagazine[
 
 const bookmarkedIssueRequests = new AsyncTtlCache<ApiIssue[]>(60_000, 32);
 
-export function fetchBookmarkedIssues(ids: string[]): Promise<ApiIssue[]> {
+export function fetchBookmarkedIssues(ids: string[], refresh = false): Promise<ApiIssue[]> {
   if (ids.length === 0) return Promise.resolve([]);
   const key = [...new Set(ids)].sort().join(',');
+  if (refresh) bookmarkedIssueRequests.clear();
   const searchParams = new URLSearchParams({ ids: key });
-  return bookmarkedIssueRequests.get(key, () => fetch(`${BASE_URL}/api/issues/bookmarks?${searchParams}`)
+  return bookmarkedIssueRequests.get(key, () => fetch(`${BASE_URL}/api/issues/bookmarks?${searchParams}`, refresh ? { cache: 'no-store' } : undefined)
     .then(async (res) => {
       if (!res.ok) throw new Error('Failed to fetch bookmarked issues');
       const result = (await res.json()) as { data: ApiIssue[] };

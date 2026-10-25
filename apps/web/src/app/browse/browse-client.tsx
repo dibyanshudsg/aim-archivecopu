@@ -34,6 +34,7 @@ import type { AvailabilityFilter, BrowseFacets } from '@/lib/public-issues';
 import { useBulkSelection } from '@/lib/use-bulk-selection';
 import { downloadAsZip, type ZipDownloadProgress } from '@/lib/download-zip';
 import { HeaderSearchDropdown } from '@/components/browse/header-search-dropdown';
+import { useSearchDropdown } from '@/lib/use-search-dropdown';
 import type { PublicNavigation } from '@/lib/navigation';
 import {
   consumeBrowseReturnTarget,
@@ -139,6 +140,8 @@ function BrowseContent({
 
   const gridTopRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const mobileToolbarRef = useRef<HTMLDivElement>(null);
+  const searchBarOpen = useSearchDropdown((state) => state.isOpen);
   const currentCacheKey = useMemo(() => browseCacheKey(filters), [filters]);
   const responseCacheRef = useRef(new TtlCache<BrowseCacheEntry>(60_000, 32));
   const inFlightRequestRef = useRef(new Map<string, { promise: Promise<BrowseCacheEntry>; controller: AbortController }>());
@@ -315,7 +318,8 @@ function BrowseContent({
         setShowScrollTop(nextVisible);
       }
 
-      const toolbarBottom = toolbarRef.current?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY;
+      const activeToolbar = window.matchMedia('(max-width: 767px)').matches ? mobileToolbarRef.current : toolbarRef.current;
+      const toolbarBottom = activeToolbar?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY;
       const headerBottom =
         document.querySelector<HTMLElement>('[data-site-header]')?.getBoundingClientRect().bottom ?? 64;
       const nextDocked = toolbarBottom <= headerBottom;
@@ -600,23 +604,38 @@ function BrowseContent({
         contextualControlsVisible={controlsDocked}
       />
       <main className="relative flex-1">
-      <HeaderSearchDropdown />
+      <HeaderSearchDropdown query={filters.query} onQueryChange={setQuery} />
 
-      <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-6 py-8 lg:px-8 lg:py-9">
+      <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-9">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="font-heading text-3xl font-bold text-gray-900 sm:text-4xl">{copy.heading}</h1>
               <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600 sm:text-lg">{copy.subtitle}</p>
             </div>
-            <AvailabilityTabs
-              value={filters.availability}
-              onChange={handleAvailabilityChange}
-              onPrefetch={prefetchAvailability}
-            />
+            <div className="hidden md:block">
+              <AvailabilityTabs
+                value={filters.availability}
+                onChange={handleAvailabilityChange}
+                onPrefetch={prefetchAvailability}
+              />
+            </div>
           </div>
         </div>
       </section>
+
+      <motion.div layout className={`flex px-4 py-4 md:hidden ${searchBarOpen ? 'flex-col-reverse' : 'flex-col'}`}>
+        <motion.div layout="position" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className={searchBarOpen ? 'mt-3' : 'mb-3'}>
+          <MobileAvailabilityMenu value={filters.availability} onChange={handleAvailabilityChange} onPrefetch={prefetchAvailability} searchBarOpen={searchBarOpen} />
+        </motion.div>
+        <motion.div layout="position" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} ref={mobileToolbarRef} className="flex flex-wrap items-center gap-2">
+          {!panelOpen && <button type="button" onClick={() => setPanelVisibility(true)} data-filter-trigger className="inline-flex h-11 items-center gap-2 rounded-xl border border-flame-200 bg-white px-3 text-sm font-medium text-flame-700 shadow-sm"><Filter className="h-4 w-4" />Filters{activeFilterCount > 0 && <span className="rounded-full bg-flame-500 px-1.5 text-[10px] font-bold text-white">{activeFilterCount}</span>}</button>}
+          <SortMenu sort={filters.sort} dir={filters.dir} onChange={setSortChoice} />
+          <button type="button" onClick={() => (selectionEnabled ? disableSelection() : enableSelection())} aria-pressed={selectionEnabled} aria-label={selectionEnabled ? 'Done selecting' : 'Select issues'} className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600"><CheckSquare className="h-4 w-4" /></button>
+          <ViewToggle view={filters.view} onChange={setView} />
+          <span className="w-full text-sm font-medium text-gray-600">{issueCountText}</span>
+        </motion.div>
+      </motion.div>
 
       <div className="flex">
         {/* Desktop docked panel — always mounted, animates width so the
@@ -672,7 +691,7 @@ function BrowseContent({
 
         {/* Grid area */}
         <div ref={gridTopRef} className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
-          <div ref={toolbarRef} className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div ref={toolbarRef} className="mb-4 hidden flex-col gap-3 md:flex lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               {!panelOpen && (
                 <button
@@ -1080,6 +1099,60 @@ function SortMenu({
             })}
           </motion.div>
         )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MobileAvailabilityMenu({
+  value,
+  onChange,
+  onPrefetch,
+  searchBarOpen,
+}: {
+  value: AvailabilityFilter;
+  onChange: (availability: AvailabilityFilter) => void;
+  onPrefetch: (availability: AvailabilityFilter) => void;
+  searchBarOpen: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selected = availabilityOptions.find((option) => option.id === value) ?? availabilityOptions[0];
+  const SelectedIcon = selected.Icon;
+
+  useEffect(() => setOpen(false), [searchBarOpen]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button type="button" aria-expanded={open} aria-haspopup="listbox" aria-label={`Edition availability: ${selected.label}`} onClick={() => setOpen((current) => !current)} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-flame-200 bg-white px-3 text-left text-gray-800 shadow-sm transition-colors hover:bg-flame-50 focus-visible:ring-2 focus-visible:ring-flame-300">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-flame-50 text-flame-700"><SelectedIcon className="h-4 w-4" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{selected.label}</span><span className="block text-xs text-gray-600">{selected.helper}</span></span>
+        <ChevronDown className={`h-4 w-4 text-flame-700 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {open && <motion.div role="listbox" aria-label="Edition availability" initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-flame-100 bg-white p-1.5 shadow-[0_14px_36px_rgba(120,84,28,0.14)]">
+          {availabilityOptions.map(({ id, label, helper, Icon }) => <button key={id} type="button" role="option" aria-selected={value === id} onPointerEnter={() => onPrefetch(id)} onFocus={() => onPrefetch(id)} onClick={() => { onChange(id); setOpen(false); }} className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-2.5 text-left transition-colors ${value === id ? 'bg-flame-50 text-flame-800' : 'text-gray-700 hover:bg-warm-white'}`}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-flame-700"><Icon className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="block text-xs text-gray-600">{helper}</span></span>
+            {value === id && <Check className="h-4 w-4 text-flame-700" />}
+          </button>)}
+        </motion.div>}
       </AnimatePresence>
     </div>
   );

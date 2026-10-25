@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { IssueCard } from '@/components/magazine/issue-card';
+import { IssueCardSkeleton } from '@/components/magazine/issue-card-skeleton';
 import { ActiveFilterChips } from '@/components/browse/active-filter-chips';
 import { BulkActionBar } from '@/components/browse/bulk-action-bar';
 import { BulkDownloadModal } from '@/components/browse/bulk-download-modal';
@@ -27,13 +28,16 @@ interface BookmarksClientProps {
 }
 
 export function BookmarksClient({ navigation }: BookmarksClientProps) {
-  const { bookmarkedIds, clear } = useBookmarks();
+  const { bookmarkedIds, clear, toggle } = useBookmarks();
   const { filters, toggleArray, setQuery, clearAll, hasActiveFilters } = useBrowseFilters();
   const [bookmarksHydrated, setBookmarksHydrated] = useState(false);
   const [allIssues, setAllIssues] = useState<ApiIssue[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(true);
   const [issuesError, setIssuesError] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
+  const [checking, setChecking] = useState(false);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const manualRetryRef = useRef(false);
 
   useEffect(() => {
     setBookmarksHydrated(useBookmarks.persist.hasHydrated());
@@ -43,27 +47,46 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
   useEffect(() => {
     if (!bookmarksHydrated) return;
     if (bookmarkedIds.length === 0) {
+      manualRetryRef.current = false;
       setAllIssues([]);
       setIssuesError(false);
       setIssuesLoading(false);
+      setChecking(false);
+      setCheckMessage(null);
       return;
     }
 
     let cancelled = false;
-    setIssuesLoading(true);
-    setIssuesError(false);
-    fetchBookmarkedIssues(bookmarkedIds)
+    const manualRetry = manualRetryRef.current;
+    manualRetryRef.current = false;
+    if (!manualRetry) {
+      setIssuesLoading(true);
+      setIssuesError(false);
+    }
+    fetchBookmarkedIssues(bookmarkedIds, manualRetry)
       .then((issues) => {
-        if (!cancelled) setAllIssues(issues);
+        if (cancelled) return;
+        setAllIssues(issues);
+        if (manualRetry) {
+          const found = new Set(issues.map((issue) => issue.id));
+          const missing = bookmarkedIds.filter((id) => !found.has(id)).length;
+          setCheckMessage(missing === 0
+            ? 'All saved issues are available now.'
+            : `Checked again. ${missing} saved issue${missing === 1 ? ' is' : 's are'} still unavailable.`);
+        }
       })
       .catch((error) => {
         if (!cancelled) {
           console.error(error);
-          setIssuesError(true);
+          if (manualRetry) setCheckMessage('Could not check right now. Your saved bookmarks are unchanged.');
+          else setIssuesError(true);
         }
       })
       .finally(() => {
-        if (!cancelled) setIssuesLoading(false);
+        if (!cancelled) {
+          if (manualRetry) setChecking(false);
+          else setIssuesLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -100,6 +123,14 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
     }
     return out;
   }, [bookmarkedIds, byId]);
+  const unavailableIds = useMemo(() => bookmarkedIds.filter((id) => !byId.has(id)), [bookmarkedIds, byId]);
+
+  const checkAgain = () => {
+    manualRetryRef.current = true;
+    setCheckMessage(null);
+    setChecking(true);
+    setRetryVersion((version) => version + 1);
+  };
 
   const filtered = useMemo(
     () => applyFilters(bookmarkedIssues, filters),
@@ -111,8 +142,8 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
   );
   const normalized = useMemo(() => sorted.map(normalizeIssue), [sorted]);
 
-  const totalBookmarks = issuesLoading ? bookmarkedIds.length : bookmarkedIssues.length;
-  const isFiltered = totalBookmarks > 0 && totalBookmarks !== sorted.length;
+  const totalBookmarks = bookmarkedIds.length;
+  const isFiltered = bookmarkedIssues.length > 0 && bookmarkedIssues.length !== sorted.length;
 
   // Bulk selection / download state. Identical pattern to Browse — different
   // dataset (bookmarked subset) and a "Download all" shortcut on this page.
@@ -202,7 +233,7 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header navigation={navigation} />
-      <HeaderSearchDropdown />
+      <HeaderSearchDropdown query={filters.query} onQueryChange={setQuery} />
       <main className="flex-1">
         <section className="border-b border-flame-100 bg-gradient-to-b from-gold-50 via-flame-50/50 to-white px-4 py-12 sm:px-6 lg:px-8">
           <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4">
@@ -213,13 +244,15 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
               <p className="mt-2 text-lg text-gray-600">
                 {!bookmarksHydrated || issuesLoading
                   ? 'Loading saved issues…'
+                  : unavailableIds.length > 0
+                  ? `${bookmarkedIssues.length} of ${totalBookmarks} saved issue${totalBookmarks !== 1 ? 's' : ''} available`
                   : isFiltered
                   ? `${sorted.length} of ${totalBookmarks} saved issue${totalBookmarks !== 1 ? 's' : ''}`
                   : `${totalBookmarks} saved issue${totalBookmarks !== 1 ? 's' : ''}`}
               </p>
               <p className="mt-2 text-sm text-gray-600">Saved in this browser; not synced across devices.</p>
             </div>
-            {!issuesLoading && totalBookmarks > 0 && (
+            {!issuesLoading && bookmarkedIssues.length > 0 && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleDownloadAll}
@@ -284,6 +317,17 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
             </div>
           ) : (
             <>
+              {(checking || checkMessage) && <p role="status" aria-live="polite" className="mb-4 text-sm font-medium text-flame-800">{checking ? 'Checking saved issues…' : checkMessage}</p>}
+              {unavailableIds.length > 0 && (
+                <div role="status" className="mb-6 rounded-xl border border-flame-200 bg-flame-50 px-4 py-4 text-sm text-gray-700">
+                  <p className="font-semibold text-flame-800">{unavailableIds.length} saved issue{unavailableIds.length !== 1 ? 's are' : ' is'} unavailable</p>
+                  <p className="mt-1">The saved reference is still in this browser, but the issue could not be found in the public archive.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={checkAgain} disabled={checking} className="rounded-lg border border-flame-300 bg-white px-3 py-2 font-medium text-flame-800 disabled:cursor-wait disabled:opacity-60">{checking ? 'Checking…' : 'Check again'}</button>
+                    <button type="button" onClick={() => unavailableIds.forEach(toggle)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 font-medium text-gray-700">Remove unavailable bookmark{unavailableIds.length !== 1 ? 's' : ''}</button>
+                  </div>
+                </div>
+              )}
               <ActiveFilterChips
                 filters={filters}
                 magazines={allMagazines}
@@ -292,7 +336,7 @@ export function BookmarksClient({ navigation }: BookmarksClientProps) {
                 onClearAll={clearAll}
               />
 
-              {sorted.length === 0 ? (
+              {bookmarkedIssues.length === 0 ? null : sorted.length === 0 ? (
                 <div className="py-20 text-center">
                   <p className="text-lg text-gray-400">
                     No bookmarks match your filters
@@ -338,19 +382,12 @@ function BookmarksLoadingState({ count }: { count: number }) {
   const cardCount = Math.min(Math.max(count, 4), 8);
   return (
     <div
-      className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4"
+      className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
       aria-label="Loading saved issues"
       aria-live="polite"
     >
       {Array.from({ length: cardCount }).map((_, index) => (
-        <div key={index} className="overflow-hidden rounded-xl border border-flame-100 bg-white">
-          <div className="aspect-[3/4] animate-pulse bg-flame-50" />
-          <div className="space-y-3 p-4">
-            <div className="h-4 w-4/5 animate-pulse rounded bg-gray-100" />
-            <div className="h-3 w-3/5 animate-pulse rounded bg-gray-100" />
-            <div className="h-3 w-full animate-pulse rounded bg-gray-100" />
-          </div>
-        </div>
+        <IssueCardSkeleton key={index} />
       ))}
     </div>
   );

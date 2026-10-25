@@ -18,6 +18,7 @@ import { MONTH_NAMES } from '@aim-archive/shared';
 import type { Language, MonthIndex } from '@aim-archive/shared';
 import { useBookmarks } from '@/lib/bookmarks-store';
 import { readerPath, rememberReaderSource } from '@/lib/reader-url';
+import { Flame } from './flame';
 import { cn, formatFileSize } from '@/lib/utils';
 const SlideReader = dynamic(() => import('./slide-reader'), { ssr: false });
 
@@ -282,7 +283,7 @@ export function ThisMonthFeatured({
           nothing meaningful to filter. */}
       {(showMagazineFilter || hasPrevContent) && (
         <div
-          className="mt-5 flex flex-col items-center gap-3 px-6 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:px-0"
+          className="mt-5 flex flex-col items-center gap-3 px-4 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-3 sm:px-0"
           role="toolbar"
           aria-label="Filter editions"
         >
@@ -295,7 +296,7 @@ export function ThisMonthFeatured({
             />
           )}
           {hasPrevContent && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto">
               <PreviousMonthToggle
                 active={showPrevious}
                 onToggle={() => setShowPrevious((v) => !v)}
@@ -343,11 +344,11 @@ function MagazineFilterStrip({
     { value: 'all', label: 'All' },
   ];
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-gray-600">
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">
         Magazine
       </span>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex w-full min-w-0 gap-1.5 sm:w-auto">
         {options.map((opt) => {
           const active = opt.value === value;
           const disabled = !!opt.disabled;
@@ -360,7 +361,8 @@ function MagazineFilterStrip({
               aria-pressed={active}
               title={disabled ? 'No editions in the current view' : undefined}
               className={cn(
-                'min-h-11 min-w-11 rounded-full px-3 py-1.5 text-xs font-medium transition-all',
+                'min-h-11 min-w-0 whitespace-nowrap rounded-full px-1.5 py-1.5 text-[clamp(10px,2.8vw,12px)] font-medium transition-all sm:min-w-11 sm:flex-none sm:px-3 sm:text-xs',
+                opt.label.length > 15 ? 'flex-[2.1]' : opt.label.length > 6 ? 'flex-[1.3]' : 'flex-[0.6]',
                 active
                   ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_4px_14px_rgba(190,140,46,0.22)]'
                   : disabled
@@ -391,7 +393,7 @@ function PreviousMonthToggle({
       onClick={onToggle}
       aria-pressed={active}
       className={cn(
-        'inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all',
+        'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full px-2 py-2 text-[clamp(10px,2.9vw,12px)] font-semibold transition-all sm:w-auto sm:px-4 sm:text-xs',
         active
           ? 'border border-flame-300 bg-flame-50 text-flame-700 shadow-sm'
           : 'border border-gray-200 bg-white text-gray-600 hover:border-flame-300 hover:bg-flame-50 hover:text-flame-700',
@@ -579,6 +581,7 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
   const reduceMotion = useReducedMotion();
   const { toggle, isBookmarked } = useBookmarks();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [coverState, setCoverState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const articleRef = useRef<HTMLElement>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const backButtonRef = useRef<HTMLButtonElement>(null);
@@ -614,7 +617,25 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
           <span className="feature-ember right-[12%] bottom-[20%]" aria-hidden="true" />
           {issue.cover_image_url ? (
             <div className="feature-magazine relative aspect-[2/3] w-[150px] shrink-0 sm:w-[235px] md:w-[250px]">
-              <Image src={issue.cover_image_url} alt={issue.title} fill priority sizes="(max-width: 640px) 150px, 250px" className="object-contain" />
+              {coverState !== 'loaded' && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#fffaf1]">
+                  {coverState === 'loading' ? (
+                    <Flame className="pointer-events-none scale-[0.8] sm:scale-100" />
+                  ) : (
+                    <span className="px-5 text-center font-heading text-base leading-snug text-gray-800 sm:text-xl">{issue.title}</span>
+                  )}
+                </div>
+              )}
+              <Image
+                src={issue.cover_image_url}
+                alt={issue.title}
+                fill
+                priority
+                sizes="(max-width: 640px) 150px, 250px"
+                onLoad={() => setCoverState('loaded')}
+                onError={() => setCoverState('error')}
+                className={cn('object-contain', coverState === 'loaded' ? 'opacity-100' : 'opacity-0')}
+              />
             </div>
           ) : (
             <div className="feature-magazine flex aspect-[2/3] w-[150px] items-center justify-center bg-white px-5 text-center font-heading text-xl leading-snug text-gray-800 sm:w-[235px]">
@@ -639,17 +660,17 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
           </div>
 
           <div className="mt-7">
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_3rem] items-center gap-2 sm:flex sm:flex-wrap sm:gap-2.5">
               <Link
                 href={readerPath(issue.id)}
                 onClick={() => rememberReaderSource(issue.id, 'shelf')}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-flame-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_9px_19px_rgba(145,69,25,0.18)] transition-colors hover:bg-flame-700 sm:text-base"
+                className="inline-flex min-h-12 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-flame-600 px-1 py-3 text-[clamp(0.7rem,3vw,0.875rem)] font-semibold text-white shadow-[0_9px_19px_rgba(145,69,25,0.18)] transition-colors hover:bg-flame-700 sm:gap-2 sm:px-6 sm:text-base"
               >
                 <BookOpen className="h-5 w-5" />
                 Read issue
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="hidden h-4 w-4 sm:block" />
               </Link>
-              <button ref={previewButtonRef} type="button" onClick={() => changePreview(true)} className="inline-flex min-h-12 items-center justify-center rounded-lg border border-gold-300 bg-white px-5 py-3 text-sm font-semibold text-[#70451e] transition-colors hover:bg-gold-50">
+              <button ref={previewButtonRef} type="button" onClick={() => changePreview(true)} className="inline-flex min-h-12 min-w-0 items-center justify-center whitespace-nowrap rounded-lg border border-gold-300 bg-white px-1 py-3 text-[clamp(0.7rem,3vw,0.875rem)] font-semibold text-[#70451e] transition-colors hover:bg-gold-50 sm:px-5 sm:text-sm">
                 Preview pages
               </button>
               <button

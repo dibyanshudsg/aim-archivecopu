@@ -1,44 +1,69 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { BrowseLoading } from '@/app/browse/loading';
+import { SearchLoading } from '@/app/search/search-loading';
+import { BookmarksLoading } from '@/app/bookmarks/bookmarks-loading';
+import { HomeLoading } from '@/app/loading';
+
+const loadingPages = {
+  '/': HomeLoading,
+  '/browse': BrowseLoading,
+  '/search': SearchLoading,
+  '/bookmarks': BookmarksLoading,
+} as const;
+type LoadingPath = keyof typeof loadingPages;
 
 /**
- * Wraps the app's page content with a subtle slide-in + fade on every route
- * change. We deliberately do NOT use `<AnimatePresence mode="wait">` here —
- * with Next.js App Router that pattern can leave the newly mounted page
- * stuck at its `initial` state (blank screen) because AnimatePresence's
- * exit/enter orchestration races with the router's own mount/unmount of the
- * server-rendered content. The simpler, robust pattern is a key-on-pathname
- * remount: when the path changes, this `motion.div` is unmounted and a fresh
- * one mounts with its initial state, then animates in. Old content is just
- * replaced (no exit animation) — slight loss of polish, but never blank.
- *
- * Respects `prefers-reduced-motion`: a plain fade is used instead of a slide
- * for users who've opted out of motion.
+ * Fast navigations go directly to content. Slower ones get a loading view
+ * after a short delay, while the current page stays visible at click time.
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const reduceMotion = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [pendingPath, setPendingPath] = useState<LoadingPath | null>(null);
+  const [showPending, setShowPending] = useState(false);
+  useEffect(() => { setPendingPath(null); setShowPending(false); }, [pathname]);
+  useEffect(() => {
+    if (!pendingPath) return;
+    const reveal = window.setTimeout(() => setShowPending(true), 350);
+    const timeout = window.setTimeout(() => setPendingPath(null), 15000);
+    const clear = () => { setPendingPath(null); setShowPending(false); };
+    window.addEventListener('popstate', clear);
+    return () => {
+      window.clearTimeout(reveal);
+      window.clearTimeout(timeout);
+      window.removeEventListener('popstate', clear);
+    };
+  }, [pendingPath]);
+
+  function handleNavigationClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+    if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
+    const destination = new URL(anchor.href, window.location.href);
+    if (destination.origin !== window.location.origin || destination.pathname === pathname) return;
+    if (destination.pathname in loadingPages) {
+      setShowPending(false);
+      setPendingPath(destination.pathname as LoadingPath);
+    }
+  }
 
   // Admin routes have their own persistent sidebar shell. Keying the whole
   // app by pathname remounts that shell on every sidebar click, which causes a
   // white flash and repeats admin boot work. Keep admin transitions local.
   if (pathname?.startsWith('/admin')) return <>{children}</>;
 
-  return (
-    <motion.div
-      key={pathname ?? 'root'}
-      // Keep the first server/client render identical and visible. Motion
-      // preferences are available for subsequent client-side navigation.
-      initial={!mounted ? false : reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-    >
+  const PendingLoading = pendingPath ? loadingPages[pendingPath] : null;
+
+  return <>
+    <div onClickCapture={handleNavigationClick}>
       {children}
-    </motion.div>
-  );
+    </div>
+    {showPending && PendingLoading && pathname !== pendingPath && (
+      <div className="route-loading-scroll fixed inset-0 z-[60] overflow-y-auto bg-white" aria-label="Opening page">
+        <PendingLoading />
+      </div>
+    )}
+  </>;
 }

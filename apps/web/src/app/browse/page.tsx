@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { BrowseClient } from './browse-client';
+import { BrowseLoading } from './loading';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import { getPublicNavigationFromDb } from '@/lib/db';
 import {
@@ -46,7 +47,7 @@ export default async function BrowsePage({
   ]);
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<BrowseLoading navigation={navigation} />}>
       <BrowseClient
         initialIssues={issues}
         initialMagazines={magazines}

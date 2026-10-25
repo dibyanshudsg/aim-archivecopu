@@ -49,6 +49,26 @@
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
+  scrollbar-gutter: stable;
+}
+
+.archive-year-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gold-400) transparent;
+}
+
+.archive-year-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.archive-year-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.archive-year-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: var(--color-gold-400);
 }
 
 /* Selection color */
@@ -124,6 +144,34 @@ html {
   );
   background-size: 200% 100%;
   animation: aim-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes archive-skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+.archive-skeleton-wave {
+  overflow: hidden;
+}
+
+/* The immediate loading view scrolls over the current page; avoid showing
+   a second vertical scrollbar beside the browser's normal one. */
+.route-loading-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.route-loading-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.archive-skeleton-wave::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.72), transparent);
+  transform: translateX(-100%);
+  animation: archive-skeleton-sweep 1.5s ease-in-out infinite;
 }
 
 /* A restrained physical cover treatment for the homepage's featured issue. */
@@ -207,6 +255,7 @@ html {
     animation: none;
     background: var(--color-flame-50);
   }
+  .archive-skeleton-wave::after { animation: none; opacity: 0; }
   .feature-ember { animation: none; opacity: 0.3; }
   .feature-magazine { transition: none; }
 }

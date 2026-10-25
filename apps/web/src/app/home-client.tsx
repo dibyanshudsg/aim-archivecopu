@@ -193,19 +193,19 @@ export function HomeClient({
             prevMonth={carouselPrevMonth}
           />
 
-          <section className="mx-auto mt-12 w-full max-w-[1440px] border-y border-gold-200/70 px-4 py-10 sm:mt-16 sm:px-6 lg:px-10" aria-labelledby="archive-intro-title">
-            <div className="mx-auto flex w-full max-w-[1080px] flex-col items-center gap-4 sm:w-fit sm:flex-row sm:gap-7">
+          <section className="mx-auto mt-8 w-full max-w-[1440px] border-y border-gold-200/70 px-2 py-6 sm:mt-16 sm:px-6 sm:py-10 lg:px-10" aria-labelledby="archive-intro-title">
+            <div className="mx-auto flex w-full max-w-[1080px] flex-col items-center gap-2 sm:w-fit sm:flex-row sm:gap-7">
               <div className="flex shrink-0 justify-center sm:-translate-x-5" aria-hidden="true">
                 <Flame className="scale-[0.8] sm:scale-[0.9]" />
               </div>
-              <div className="min-w-0 text-left">
-                <h2 id="archive-intro-title" className="font-cursive text-5xl leading-tight text-flame-700 sm:text-[4rem] lg:text-[4.25rem]">
+              <div className="min-w-0 text-center sm:text-left">
+                <h2 id="archive-intro-title" className="whitespace-nowrap font-cursive text-[clamp(1.6rem,8.4vw,3rem)] leading-tight text-flame-700 sm:text-[4rem] lg:text-[4.25rem]">
                   An Archive of Eternal Flame
                 </h2>
-                <p className="mt-2 text-base leading-relaxed text-gray-700 sm:text-lg">
+                <p className="mt-1 text-base leading-relaxed text-gray-700 sm:mt-2 sm:text-lg">
                   Writings of Sri Aurobindo and The Mother, preserved for discovery and reading.
                 </p>
-                <p className="mt-2 text-base leading-relaxed text-gray-700 sm:text-lg">
+                <p className="mt-1 text-base leading-relaxed text-gray-700 sm:mt-2 sm:text-lg">
                   Editions become freely readable after five years.
                 </p>
               </div>
@@ -215,7 +215,7 @@ export function HomeClient({
 
           {/* Dynamic Bookshelf */}
           <motion.div
-            className="relative mx-auto mt-16 w-full max-w-[1440px]"
+            className="relative mx-auto mt-10 w-full max-w-[1440px] sm:mt-16"
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}

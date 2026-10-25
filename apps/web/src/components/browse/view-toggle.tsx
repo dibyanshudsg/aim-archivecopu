@@ -11,7 +11,7 @@ interface Props {
 
 export function ViewToggle({ view, onChange, compact = false }: Props) {
   return (
-    <div className="inline-flex shrink-0 items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className={cn('inline-flex shrink-0 items-center overflow-hidden rounded-xl border bg-white', compact ? 'border-flame-200 shadow-sm' : 'border-gray-200')}>
       {compact && (
         <button
           type="button"

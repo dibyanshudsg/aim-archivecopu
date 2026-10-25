@@ -1,12 +1,17 @@
 import { getPublicNavigationFromDb } from '@/lib/db';
 import { SearchClient } from './search-client';
 import { Suspense } from 'react';
+import { SearchLoading } from './search-loading';
 
-// ISR: cache the search shell HTML for a minute. Search data and the optional
-// magazine filter load on the client so route navigation never waits on them.
+// ISR: cache the search shell HTML for a minute. Stream its loading layout
+// while navigation data resolves; search data loads on the client.
 export const revalidate = 60;
 
-export default async function SearchPage() {
+async function SearchPageContent() {
   const navigation = await getPublicNavigationFromDb();
-  return <Suspense fallback={<main className="p-8" aria-busy="true">Loading search…</main>}><SearchClient navigation={navigation} /></Suspense>;
+  return <SearchClient navigation={navigation} />;
+}
+
+export default function SearchPage() {
+  return <Suspense fallback={<SearchLoading />}><SearchPageContent /></Suspense>;
 }
