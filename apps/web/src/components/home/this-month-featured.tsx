@@ -25,20 +25,12 @@ const SlideReader = dynamic(() => import('./slide-reader'), { ssr: false });
 
 interface ThisMonthFeaturedProps {
   magazines: ApiMagazine[];
-  /** Newest readable issue month and its previous month, filtered by the server. */
+  /** One server-selected live issue per magazine. */
   issues: ApiIssue[];
-  /** Issue date of the newest readable edition. */
-  currentYear: number;
-  currentMonth: number; // 1-12
-  prevYear: number;
-  prevMonth: number; // 1-12
 }
 
 type MagazineFilter = 'all' | string;
-
-function inMonth(issue: ApiIssue, year: number, month: number) {
-  return issue.year === year && issue.month === month;
-}
+const EMPTY_ISSUES: ApiIssue[] = [];
 
 /**
  * Homepage issue feature. Shows one readable issue at a time with magazine
@@ -51,10 +43,6 @@ function inMonth(issue: ApiIssue, year: number, month: number) {
 export function ThisMonthFeatured({
   magazines,
   issues,
-  currentYear,
-  currentMonth,
-  prevYear,
-  prevMonth,
 }: ThisMonthFeaturedProps) {
   const prefersReducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,23 +51,15 @@ export function ThisMonthFeatured({
   const [magazineFilter, setMagazineFilter] = useState<MagazineFilter>(() =>
     magazines.find((magazine) =>
       magazine.name.toLowerCase().includes('all india') &&
-      issues.some((issue) =>
-        issue.magazine_id === magazine.id && inMonth(issue, currentYear, currentMonth),
-      ),
+      issues.some((issue) => issue.magazine_id === magazine.id),
     )?.id ?? 'all',
   );
   const [showPrevious, setShowPrevious] = useState(false);
 
   // Pre-bucket the source issues by month — stable references keep the
   // downstream memos cheap on re-render.
-  const currentMonthIssues = useMemo(
-    () => issues.filter((i) => inMonth(i, currentYear, currentMonth)),
-    [issues, currentYear, currentMonth],
-  );
-  const prevMonthIssues = useMemo(
-    () => issues.filter((i) => inMonth(i, prevYear, prevMonth)),
-    [issues, prevYear, prevMonth],
-  );
+  const currentMonthIssues = issues;
+  const prevMonthIssues = EMPTY_ISSUES;
 
   // The set of issues feeding the current view, before the magazine filter is
   // applied. Used both to compute `visibleIssues` and to disable magazine
@@ -213,7 +193,7 @@ export function ThisMonthFeatured({
   return (
     <section
       className="relative mx-auto w-full max-w-[1440px]"
-      aria-label="Newest readable issue"
+      aria-label="Featured issues"
     >
 
 
@@ -223,7 +203,7 @@ export function ThisMonthFeatured({
         className="relative"
         role="region"
         aria-roledescription="carousel"
-        aria-label="Latest readable editions"
+        aria-label="Featured editions"
       >
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {currentIssue
@@ -348,7 +328,7 @@ function MagazineFilterStrip({
       <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">
         Magazine
       </span>
-      <div className="flex w-full min-w-0 gap-1.5 sm:w-auto">
+      <div className="flex w-full min-w-0 flex-wrap justify-center gap-1.5 sm:w-auto sm:flex-nowrap">
         {options.map((opt) => {
           const active = opt.value === value;
           const disabled = !!opt.disabled;
@@ -361,8 +341,7 @@ function MagazineFilterStrip({
               aria-pressed={active}
               title={disabled ? 'No editions in the current view' : undefined}
               className={cn(
-                'min-h-11 min-w-0 whitespace-nowrap rounded-full px-1.5 py-1.5 text-[clamp(10px,2.8vw,12px)] font-medium transition-all sm:min-w-11 sm:flex-none sm:px-3 sm:text-xs',
-                opt.label.length > 15 ? 'flex-[2.1]' : opt.label.length > 6 ? 'flex-[1.3]' : 'flex-[0.6]',
+                'min-h-11 flex-none whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all',
                 active
                   ? 'bg-gradient-to-r from-gold-500 to-flame-500 text-white shadow-[0_4px_14px_rgba(190,140,46,0.22)]'
                   : disabled
@@ -646,7 +625,7 @@ function FeaturedSlide({ issue }: { issue: ApiIssue }) {
 
         <div className="flex min-w-0 flex-col justify-between px-6 pb-7 pt-8 sm:px-10 sm:pb-10 sm:pt-10 lg:px-14 lg:pt-12">
           <div>
-            <h1 className="font-heading break-words text-[clamp(1.8rem,2.5vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#28231c]">
+            <h1 className="font-heading break-words text-[clamp(1.35rem,5.5vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#28231c]">
               {issue.theme || issue.title}
             </h1>
             <p className="mt-4 text-sm font-semibold text-[#925526] sm:text-base">

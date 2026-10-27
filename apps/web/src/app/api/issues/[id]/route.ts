@@ -1,5 +1,4 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { isEmbargoed } from '@/lib/embargo';
 import { getPublicIssueById, incrementIssueReadCount } from '@/lib/db';
 import { publicRateLimit } from '@/lib/rate-limit';
 
@@ -14,7 +13,7 @@ export async function GET(
   if (!issue) {
     return NextResponse.json({ error: 'Issue not found', code: 'NOT_FOUND' }, { status: 404 });
   }
-  if (!isEmbargoed(issue.year, issue.month)) {
+  if (!issue.is_embargoed) {
     after(async () => {
       try {
         await incrementIssueReadCount(id);

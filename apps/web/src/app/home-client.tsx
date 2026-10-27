@@ -50,23 +50,20 @@ interface HomeClientProps {
   latestSubscriberEditions: ApiIssue[];
   carouselMagazines: ApiMagazine[];
   carouselIssues: ApiIssue[];
-  carouselCurrentYear: number;
-  carouselCurrentMonth: number;
-  carouselPrevYear: number;
-  carouselPrevMonth: number;
   navigation: PublicNavigation;
   collection: { listed: number; readable: number; languages: string[] };
 }
 
-function ContinueReadingShelf() {
+function ContinueReadingShelf({ featuredIds }: { featuredIds: string }) {
   const [entries, setEntries] = useState<ReadingHistoryEntry[]>([]);
 
   useEffect(() => {
     // Drop locally-saved entries for issues that fell back into the 5-year
     // embargo window — resuming them would just bounce the user off the
     // reader's locked-state screen.
-    setEntries(getRecentReads(6).filter((e) => !isEmbargoed(e.year, e.month)).slice(0, 3));
-  }, []);
+    const featured = new Set(featuredIds.split(','));
+    setEntries(getRecentReads(6).filter((e) => featured.has(e.issueId) || !isEmbargoed(e.year, e.month)).slice(0, 3));
+  }, [featuredIds]);
 
   if (entries.length === 0) return null;
 
@@ -171,10 +168,6 @@ export function HomeClient({
   latestSubscriberEditions,
   carouselMagazines,
   carouselIssues,
-  carouselCurrentYear,
-  carouselCurrentMonth,
-  carouselPrevYear,
-  carouselPrevMonth,
   navigation,
   collection,
 }: HomeClientProps) {
@@ -187,10 +180,6 @@ export function HomeClient({
           <ThisMonthFeatured
             magazines={carouselMagazines}
             issues={carouselIssues}
-            currentYear={carouselCurrentYear}
-            currentMonth={carouselCurrentMonth}
-            prevYear={carouselPrevYear}
-            prevMonth={carouselPrevMonth}
           />
 
           <section className="mx-auto mt-8 w-full max-w-[1440px] border-y border-gold-200/70 px-2 py-6 sm:mt-16 sm:px-6 sm:py-10 lg:px-10" aria-labelledby="archive-intro-title">
@@ -206,7 +195,7 @@ export function HomeClient({
                   Writings of Sri Aurobindo and The Mother, preserved for discovery and reading.
                 </p>
                 <p className="mt-1 text-base leading-relaxed text-gray-700 sm:mt-2 sm:text-lg">
-                  Editions become freely readable after five years.
+                  Featured current editions and older archive issues are available to read.
                 </p>
               </div>
             </div>
@@ -223,7 +212,7 @@ export function HomeClient({
             <AnimatedBookshelf issues={recentIssues} years={shelfYears} />
           </motion.div>
 
-          <ContinueReadingShelf />
+          <ContinueReadingShelf featuredIds={carouselIssues.map((issue) => issue.id).join(',')} />
           <LatestSubscriberEditions issues={latestSubscriberEditions} />
 
           {/* Archive Stats */}
@@ -269,7 +258,7 @@ export function HomeClient({
               Begin your exploration
             </motion.h2>
             <motion.p variants={fadeInUp} className="mt-4 text-lg text-gray-600">
-              Explore the public archive. Editions become freely readable five years after publication.
+              Explore featured issues and the public archive. Other editions become freely readable five years after publication.
             </motion.p>
             <motion.div variants={fadeInUp} className="mt-8">
               <Link

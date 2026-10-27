@@ -3,11 +3,12 @@ import { getDb } from './db/client';
 import { getR2Client, r2Bucket } from './r2-client';
 import { assetKeyFromLocator, PDF_HEADERS, validCatalogueId } from './pdf-access';
 import { currentAdmin } from './pdf-delivery';
+import { releasedIssueSql } from './embargo';
 
 const MAX_COVER_BYTES = 4 * 1024 * 1024;
 async function coverLocator(id: string, magazine: boolean, admin = false): Promise<string | null> {
   const { rows } = await getDb().execute({
-    sql: magazine ? 'SELECT cover_image_url FROM magazines WHERE id=? LIMIT 1' : `SELECT cover_image_url FROM issues WHERE id=? ${admin ? '' : 'AND is_published=1'} LIMIT 1`, args: [id],
+    sql: magazine ? 'SELECT cover_image_url FROM magazines WHERE id=? LIMIT 1' : `SELECT cover_image_url FROM issues WHERE id=? ${admin ? '' : `AND ${releasedIssueSql('issues')}`} LIMIT 1`, args: [id],
   });
   return typeof rows[0]?.cover_image_url === 'string' ? rows[0].cover_image_url : null;
 }

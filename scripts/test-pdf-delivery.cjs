@@ -38,7 +38,8 @@ client.send = async (command, options) => {
     return new ReadableStream({pull(c){if(sent)c.close();else{sent=true;c.enqueue(new Uint8Array(bytes));}},cancel(){cancelled=true;}},{highWaterMark:0});
   }}};
 };
-const handle = createPdfDelivery({client:()=>client,bucket:()=> 'fixture-bucket',now:()=>clock});
+let featuredId = null;
+const handle = createPdfDelivery({client:()=>client,bucket:()=> 'fixture-bucket',now:()=>clock,featured:async(id)=>id===featuredId});
 const request = (id,mode='grant',method='GET',headers={}) => handle(new Request('https://site.example.test/api',{method,headers}),id,mode);
 function cacheSafe(response) {assert.match(response.headers.get('Cache-Control'),/private, no-store/);assert.equal(response.headers.get('Vercel-CDN-Cache-Control'),'no-store');}
 // Independent SigV4 verification: catches changed object/method/query and expiry.
@@ -78,6 +79,16 @@ function signatureValid(raw, method, at) {
     }
   }
   authenticated=false;
+  const featuredIssue = fixtures.issues.find(issue => issue.name === 'restricted');
+  featuredId = featuredIssue.id;
+  assert.equal((await request(featuredIssue.id, 'public')).status, 307, 'featured published issue permits current PDF access');
+  featuredId = null;
+  assert.equal((await request(featuredIssue.id, 'public')).status, 404, 'removing hero selection restores the embargo');
+  db.prepare('UPDATE issues SET year=2026,month=11 WHERE id=?').run(featuredIssue.id);
+  featuredId = featuredIssue.id;
+  assert.equal((await request(featuredIssue.id, 'public')).status, 404, 'future issue remains private even if selected as hero');
+  db.prepare('UPDATE issues SET year=?,month=? WHERE id=?').run(featuredIssue.year,featuredIssue.month,featuredIssue.id);
+  featuredId = null;
   for(const i of fixtures.issues){
     calls=[];const r=await request(i.id);cacheSafe(r);assert.equal(r.status,i.expected.publicPdf?200:404);
     if(!i.expected.publicPdf)assert.equal(calls.length,0);

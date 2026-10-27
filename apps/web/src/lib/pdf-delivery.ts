@@ -4,6 +4,7 @@ import { verifyAdmin } from './admin-auth';
 import { getDb } from './db/client';
 import { getR2Client, r2Bucket } from './r2-client';
 import { authorizePdf, parsePdfRange, PDF_CACHE_CONTROL, PDF_GRANT_SECONDS, PDF_HEADERS, validCatalogueId, type PdfAccessIssue } from './pdf-access';
+import { getLiveHeroIssueIds } from './hero-issues';
 
 // Intentionally bypass catalogue and admin identity caches for delivery decisions.
 async function currentIssue(id: string): Promise<PdfAccessIssue | null> {
@@ -34,9 +35,11 @@ export interface PdfDeliveryDependencies {
   bucket: typeof r2Bucket;
   sign: typeof getSignedUrl;
   now: () => Date;
+  featured: (id: string, now: Date) => Promise<boolean>;
 }
 const defaults: PdfDeliveryDependencies = {
   issue: currentIssue, admin: currentAdmin, client: getR2Client, bucket: r2Bucket, sign: getSignedUrl, now: () => new Date(),
+  featured: async (id, now) => (await getLiveHeroIssueIds(now)).has(id),
 };
 
 /** Dependency seam permits isolated tests with the actual handler and signer. */
@@ -51,7 +54,10 @@ export function createPdfDelivery(overrides: Partial<PdfDeliveryDependencies> = 
     if (!validCatalogueId(id)) return failure(404, head);
     try {
       if (mode === 'admin' && !await deps.admin()) return failure(401, head);
-      const key = authorizePdf(await deps.issue(id), mode === 'admin', deps.now());
+      const firstIssue = await deps.issue(id);
+      const firstNow = deps.now();
+      const featured = mode !== 'admin' && firstIssue?.is_published === 1 && await deps.featured(id, firstNow);
+      const key = authorizePdf(firstIssue, mode === 'admin', firstNow, featured);
       if (!key) return failure(404, head);
       const client = deps.client();
       const Bucket = deps.bucket();
@@ -63,7 +69,9 @@ export function createPdfDelivery(overrides: Partial<PdfDeliveryDependencies> = 
 
       // Check again after remote I/O, including publication changes and replacement.
       const current = await deps.issue(id);
-      if (authorizePdf(current, mode === 'admin', deps.now()) !== key) return failure(404, head);
+      const secondNow = deps.now();
+      const stillFeatured = mode !== 'admin' && current?.is_published === 1 && await deps.featured(id, secondNow);
+      if (authorizePdf(current, mode === 'admin', secondNow, stillFeatured) !== key) return failure(404, head);
       if (mode === 'admin' && !await deps.admin()) return failure(401, head);
       const filename = (current?.title || id).replace(/[\x00-\x1f\x7f/\\]/g, '-').slice(0, 160) + '.pdf';
       const encodedFilename = encodeURIComponent(filename).replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase());

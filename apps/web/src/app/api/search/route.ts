@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   try {
   if (suggestions) {
     const topics = await listSearchTopics({ query: '', magazineId, yearFrom, yearTo, availability });
-    return NextResponse.json({ topics }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
+    return NextResponse.json({ topics }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const [ftsResults, metaIssues] = await Promise.all([
     searchIssueText({
@@ -131,7 +131,9 @@ export async function GET(request: NextRequest) {
   const metaResults: FtsRow[] = metaIssues
     .filter((i) => !ftsIssueIds.has(i.id))
     .map((i) => {
-      const state = getEmbargoState(i.year, i.month, now);
+      const state = i.pdf_url
+        ? { isEmbargoed: false, embargoLiftLabel: null, embargoLiftAt: null }
+        : getEmbargoState(i.year, i.month, now);
       return {
         issue_id: i.id,
         issue_title: i.title,
@@ -165,7 +167,7 @@ export async function GET(request: NextRequest) {
     },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'no-store',
       },
     },
   );

@@ -105,7 +105,7 @@ export function LatestSubscriberEditions({ issues }: LatestSubscriberEditionsPro
             Metadata visible now
           </div>
           <p className="w-full text-sm leading-relaxed text-gray-600 sm:col-span-2">
-            Recent editions remain in print circulation. Covers, themes, and topics are listed here; public reading opens five years after publication.
+            Recent editions remain in print circulation. Covers, themes, and topics are listed here; public reading opens after five years unless an issue is featured on the home page.
           </p>
         </div>
 

@@ -1,4 +1,5 @@
 import { supportedAssetSql } from '../asset-url';
+import { releasedIssueSql } from '../embargo';
 import type {
   NavigationDestinations,
   NavigationItem,
@@ -62,7 +63,7 @@ export async function listNavigationDestinationsFromDb(): Promise<NavigationDest
     getDb().execute(`
       SELECT id, title, year, month
       FROM issues
-      WHERE is_published = 1
+      WHERE ${releasedIssueSql('issues')}
         AND ${supportedAssetSql('pdf_url')}
       ORDER BY year DESC, month DESC, title ASC
       LIMIT 200
@@ -82,19 +83,19 @@ export async function listNavigationDestinationsFromDb(): Promise<NavigationDest
 
   return {
     routes: NAVIGATION_ROUTES,
-    magazines: magazines.rows.map((row) => ({
+    magazines: Array.from(magazines.rows, (row) => ({
       id: String(row.id),
       label: String(row.name),
       href: `/browse?magazine=${encodeURIComponent(String(row.id))}`,
       helper: String(row.language ?? ''),
     })),
-    issues: issues.rows.map((row) => ({
+    issues: Array.from(issues.rows, (row) => ({
       id: String(row.id),
       label: String(row.title),
       href: `/issue/${encodeURIComponent(String(row.id))}`,
       helper: `${row.month}/${row.year}`,
     })),
-    topics: topics.rows.map((row) => ({
+    topics: Array.from(topics.rows, (row) => ({
       id: String(row.name),
       label: String(row.name),
       href: `/browse?subject=${encodeURIComponent(String(row.name))}`,
@@ -282,7 +283,7 @@ async function listNavigationItems(includeUnpublished: boolean): Promise<Navigat
     ORDER BY menu_key ASC, parent_id ASC, sort_order ASC, label ASC
   `);
 
-  const items = result.rows.map(rowToNavigationItem);
+  const items = Array.from(result.rows, rowToNavigationItem);
   if (!includeUnpublished) {
     return items.filter((item) => !isProtectedAdminHref(item.href));
   }

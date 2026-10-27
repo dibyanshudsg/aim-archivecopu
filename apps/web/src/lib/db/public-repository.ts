@@ -4,11 +4,12 @@ import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import type { ShelfIssue, ShelfYear } from '@/lib/home-shelf';
 import { normalizePublicAssetUrl } from '../asset-url';
 import { hasSearchIndex, literalFtsPhrase } from './search-capabilities';
-import { applyEmbargoToIssueRow, readableCutoffIssueMonth } from '@/lib/embargo';
+import { applyEmbargoToIssueRow, readableCutoffIssueMonth, releasedIssueSql } from '@/lib/embargo';
 import type { BrowseFacets, PublicIssueListInput, PublicIssueListResult } from '@/lib/public-issues';
 import { LANGUAGE_NAMES, MONTH_NAMES, type Language, type MonthIndex } from '@aim-archive/shared';
 import type { ResultSet } from '@libsql/client';
 import { getDb } from './client';
+import { getLiveHeroIssueIds } from '../hero-issues';
 import { AsyncTtlCache } from './cache';
 import { issueSelectSql, rowToIssue, rowToMagazine, type IssueJoinedRow, type MagazineRow } from './mappers';
 
@@ -41,7 +42,7 @@ export async function getNewestReadableIssueMonth(): Promise<{ year: number; mon
   const cutoff = readableCutoffIssueMonth();
   const result = await getDb().execute({
     sql: `SELECT i.year, i.month FROM issues i
-          WHERE i.is_published = 1
+          WHERE ${releasedIssueSql('i')}
             AND ${supportedAssetSql('i.pdf_url')}
             AND trim(i.pdf_url) <> ''
             AND (i.year < ? OR (i.year = ? AND i.month <= ?))
@@ -72,7 +73,7 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
         SELECT ${issueSelectSql()}
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
-        WHERE i.is_published = 1
+        WHERE ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
         ORDER BY i.created_at DESC
         LIMIT ?
@@ -81,9 +82,10 @@ export async function listRecentPublicIssues(limit = 8, overfetch = 32): Promise
     });
 
     const now = new Date();
+    const featured = await getLiveHeroIssueIds(now);
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .map((issue) => applyEmbargoToIssueRow(issue, now))
+      .map((issue) => applyEmbargoToIssueRow(issue, now, featured.has(issue.id)))
       .filter((issue) => !issue.is_embargoed)
       .slice(0, limit);
   });
@@ -96,7 +98,7 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
         SELECT ${issueSelectSql()}
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
-        WHERE i.is_published = 1
+        WHERE ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
         ORDER BY i.year DESC, i.month DESC, m.created_at ASC
         LIMIT ?
@@ -105,9 +107,10 @@ export async function listLatestEmbargoedIssues(limit = 4, overfetch = 24): Prom
     });
 
     const now = new Date();
+    const featured = await getLiveHeroIssueIds(now);
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .map((issue) => applyEmbargoToIssueRow(issue, now))
+      .map((issue) => applyEmbargoToIssueRow(issue, now, featured.has(issue.id)))
       .filter((issue) => issue.is_embargoed)
       .slice(0, limit);
   });
@@ -122,7 +125,7 @@ export async function listHomeShelfIssues(limit = 240, year?: number): Promise<S
           i.page_count, i.created_at, m.id AS magazine_id, m.name AS magazine_name
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
-        WHERE i.is_published = 1
+        WHERE ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
           AND trim(i.pdf_url) <> ''
           AND (i.year < ? OR (i.year = ? AND i.month <= ?))
@@ -147,7 +150,7 @@ export function listHomeShelfYears(): Promise<ShelfYear[]> {
   return shelfYearCache.get(embargoWindowCacheKey(), async () => {
     const cutoff = readableCutoffIssueMonth();
     const result = await getDb().execute({
-      sql: `SELECT year, count(*) AS count FROM issues WHERE is_published = 1
+      sql: `SELECT year, count(*) AS count FROM issues WHERE ${releasedIssueSql('issues')}
         AND ${supportedAssetSql('pdf_url')} AND trim(pdf_url) <> ''
         AND (year < ? OR (year = ? AND month <= ?)) GROUP BY year ORDER BY year`,
       args: [cutoff.year, cutoff.year, cutoff.month],
@@ -164,14 +167,15 @@ export async function getPublicCollectionSummary(): Promise<{
 }> {
   return summaryCache.get(embargoWindowCacheKey(), async () => {
   const cutoff = readableCutoffIssueMonth();
+  const featuredIds = [...await getLiveHeroIssueIds()];
   const result = await getDb().execute({
     sql: `SELECT m.language, count(*) AS listed,
-      sum(CASE WHEN i.year < ? OR (i.year = ? AND i.month <= ?) THEN 1 ELSE 0 END) AS readable
+      sum(CASE WHEN i.year < ? OR (i.year = ? AND i.month <= ?)${featuredIds.length ? ` OR i.id IN (${placeholders(featuredIds.length)})` : ''} THEN 1 ELSE 0 END) AS readable
       FROM issues i JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1 AND ${supportedAssetSql('i.pdf_url')}
+      WHERE ${releasedIssueSql('i')} AND ${supportedAssetSql('i.pdf_url')}
         AND trim(i.pdf_url) <> ''
       GROUP BY m.language ORDER BY m.language`,
-    args: [cutoff.year, cutoff.year, cutoff.month],
+    args: [cutoff.year, cutoff.year, cutoff.month, ...featuredIds],
   });
   return {
     listed: result.rows.reduce((sum, row) => sum + Number(row.listed), 0),
@@ -192,7 +196,7 @@ export async function listPublicIssuesForMonths(months: Array<{ year: number; mo
         SELECT ${issueSelectSql()}
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
-        WHERE i.is_published = 1
+        WHERE ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
           AND (${clauses})
         ORDER BY m.created_at ASC, i.year DESC, i.month DESC
@@ -201,9 +205,10 @@ export async function listPublicIssuesForMonths(months: Array<{ year: number; mo
     });
 
     const now = new Date();
+    const featured = await getLiveHeroIssueIds(now);
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .map((issue) => applyEmbargoToIssueRow(issue, now))
+      .map((issue) => applyEmbargoToIssueRow(issue, now, featured.has(issue.id)))
       .filter((issue) => !issue.is_embargoed);
   });
 }
@@ -220,16 +225,17 @@ export async function listPublicIssuesByIds(ids: string[]): Promise<ApiIssue[]> 
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.id IN (${placeholders(uniqueIds.length)})
-          AND i.is_published = 1
+          AND ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
       `,
       args: uniqueIds,
     });
 
     const now = new Date();
+    const featured = await getLiveHeroIssueIds(now);
     return result.rows
       .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-      .map((issue) => applyEmbargoToIssueRow(issue, now));
+      .map((issue) => applyEmbargoToIssueRow(issue, now, featured.has(issue.id)));
   });
 }
 
@@ -241,7 +247,7 @@ export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
         FROM issues i
         JOIN magazines m ON m.id = i.magazine_id
         WHERE i.id = ?
-          AND i.is_published = 1
+          AND ${releasedIssueSql('i')}
           AND ${supportedAssetSql('i.pdf_url')}
         LIMIT 1
       `,
@@ -250,7 +256,8 @@ export async function getPublicIssueById(id: string): Promise<ApiIssue | null> {
 
     const row = result.rows[0];
     if (!row) return null;
-    return applyEmbargoToIssueRow(rowToIssue(row as unknown as IssueJoinedRow));
+    const issue = rowToIssue(row as unknown as IssueJoinedRow);
+    return applyEmbargoToIssueRow(issue, new Date(), (await getLiveHeroIssueIds()).has(issue.id));
   });
 }
 
@@ -258,7 +265,7 @@ export async function listRelatedReadableIssues(issue: ApiIssue, limit = 3): Pro
   const cutoff = readableCutoffIssueMonth();
   const result = await getDb().execute({
     sql: `SELECT ${issueSelectSql()} FROM issues i JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1 AND i.id <> ? AND m.language = ?
+      WHERE ${releasedIssueSql('i')} AND i.id <> ? AND m.language = ?
         AND ${supportedAssetSql('i.pdf_url')} AND trim(i.pdf_url) <> ''
         AND (i.year < ? OR (i.year = ? AND i.month <= ?))
       ORDER BY EXISTS (SELECT 1 FROM json_each(i.topics_json) topic
@@ -267,7 +274,11 @@ export async function listRelatedReadableIssues(issue: ApiIssue, limit = 3): Pro
     args: [issue.id, issue.magazines.language, cutoff.year, cutoff.year, cutoff.month,
       JSON.stringify(issue.topics), issue.magazine_id, limit],
   });
-  return result.rows.map((row) => applyEmbargoToIssueRow(rowToIssue(row as unknown as IssueJoinedRow)));
+  const featured = await getLiveHeroIssueIds();
+  return result.rows.map((row) => {
+    const related = rowToIssue(row as unknown as IssueJoinedRow);
+    return applyEmbargoToIssueRow(related, new Date(), featured.has(related.id));
+  });
 }
 
 export async function getPublicIssueMetadataById(id: string): Promise<{
@@ -281,7 +292,7 @@ export async function getPublicIssueMetadataById(id: string): Promise<{
       FROM issues i
       JOIN magazines m ON m.id = i.magazine_id
       WHERE i.id = ?
-        AND i.is_published = 1
+        AND ${releasedIssueSql('i')}
         AND ${supportedAssetSql('i.pdf_url')}
       LIMIT 1
     `,
@@ -301,7 +312,7 @@ export async function listSitemapIssues(): Promise<Array<{ id: string; updated_a
   const result = await getDb().execute(`
     SELECT id, updated_at
     FROM issues
-    WHERE is_published = 1
+    WHERE ${releasedIssueSql('issues')}
       AND ${supportedAssetSql('pdf_url')}
     ORDER BY year DESC, month DESC
   `);
@@ -317,7 +328,7 @@ export async function getPublicIssueDownloadTarget(id: string): Promise<{ id: st
       SELECT id, pdf_url, year, month
       FROM issues
       WHERE id = ?
-        AND is_published = 1
+        AND ${releasedIssueSql('issues')}
         AND pdf_url IS NOT NULL
         AND ${supportedAssetSql('pdf_url')}
       LIMIT 1
@@ -349,7 +360,7 @@ async function incrementIssueCounter(id: string, column: 'read_count' | 'downloa
       UPDATE issues
       SET ${column} = ${column} + 1
       WHERE id = ?
-        AND is_published = 1
+        AND ${releasedIssueSql('issues')}
     `,
     args: [id],
   });
@@ -361,13 +372,14 @@ export async function listPublicIssues(input: PublicIssueListInput): Promise<Pub
 
 async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<PublicIssueListResult> {
   const magazines = await listMagazines();
+  const featuredIds = [...await getLiveHeroIssueIds()];
   const searchIssueIds = await queryIssueIdsMatchingSearch(input.q);
-  const where = buildIssueWhere(input, magazines, undefined, searchIssueIds);
+  const where = buildIssueWhere(input, magazines, featuredIds, undefined, searchIssueIds);
   const order = buildOrderBy(input);
   const offset = (input.page - 1) * input.pageSize;
 
   const facetQueries = FACET_DIMENSIONS.map((dimension) =>
-    facetCountQuery(buildIssueWhere(input, magazines, dimension, searchIssueIds), dimension),
+    facetCountQuery(buildIssueWhere(input, magazines, featuredIds, dimension, searchIssueIds), dimension),
   );
   const filterInput = { ...input, page: undefined, pageSize: undefined, sort: undefined, dir: undefined };
   const [rowsResult, [countResult, ...facetResults]] = await Promise.all([
@@ -400,9 +412,10 @@ async function listPublicIssuesUncached(input: PublicIssueListInput): Promise<Pu
   const facets = buildFacets(input, magazines, facetResults);
 
   const now = new Date();
+  const featured = await getLiveHeroIssueIds(now);
   const data = rowsResult.rows
     .map((row) => rowToIssue(row as unknown as IssueJoinedRow))
-    .map((row) => applyEmbargoToIssueRow(row, now));
+    .map((row) => applyEmbargoToIssueRow(row, now, featured.has(row.id)));
   const issueCacheSuffix = embargoWindowCacheKey();
   for (const issue of data) {
     issueCache.set(`${issue.id}:${issueCacheSuffix}`, issue);
@@ -435,16 +448,17 @@ type FacetCount = { value: FacetCountValue; count: number };
 function buildIssueWhere(
   input: PublicIssueListInput,
   magazines: ApiMagazine[],
+  featuredIds: string[],
   exclude?: FacetDimension,
   searchIssueIds?: SqlPart | null,
 ): SqlPart {
   const clauses = [
-    'i.is_published = 1',
+    releasedIssueSql('i'),
     supportedAssetSql('i.pdf_url'),
     "trim(i.pdf_url) <> ''",
   ];
   const args: SqlArg[] = [];
-  const availability = availabilityWhere(input.availability);
+  const availability = availabilityWhere(input.availability, featuredIds);
   if (availability) {
     clauses.push(availability.sql);
     args.push(...availability.args);
@@ -476,7 +490,7 @@ function buildIssueWhere(
   return { sql: `WHERE ${clauses.join(' AND ')}`, args };
 }
 
-function availabilityWhere(availability: PublicIssueListInput['availability']): SqlPart | null {
+function availabilityWhere(availability: PublicIssueListInput['availability'], featuredIds: string[]): SqlPart | null {
   if (availability === 'all') return null;
 
   const cutoff = readableCutoffIssueMonth();
@@ -485,14 +499,14 @@ function availabilityWhere(availability: PublicIssueListInput['availability']): 
 
   if (availability === 'subscriber') {
     return {
-      sql: '(i.year > ? OR (i.year = ? AND i.month > ?))',
-      args: [cutoffYear, cutoffYear, cutoffMonth],
+      sql: `(i.year > ? OR (i.year = ? AND i.month > ?))${featuredIds.length ? ` AND i.id NOT IN (${placeholders(featuredIds.length)})` : ''}`,
+      args: [cutoffYear, cutoffYear, cutoffMonth, ...featuredIds],
     };
   }
 
   return {
-    sql: '(i.year < ? OR (i.year = ? AND i.month <= ?))',
-    args: [cutoffYear, cutoffYear, cutoffMonth],
+    sql: `(i.year < ? OR (i.year = ? AND i.month <= ?)${featuredIds.length ? ` OR i.id IN (${placeholders(featuredIds.length)})` : ''})`,
+    args: [cutoffYear, cutoffYear, cutoffMonth, ...featuredIds],
   };
 }
 

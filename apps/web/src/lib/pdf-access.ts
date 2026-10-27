@@ -1,5 +1,5 @@
 import { supportedAssetBases } from './asset-url';
-import { isEmbargoed } from './embargo';
+import { isEmbargoed, isIssueMonthReleased } from './embargo';
 
 export const PDF_GRANT_SECONDS = 300;
 export const PDF_CACHE_CONTROL = 'private, no-store, max-age=0';
@@ -45,10 +45,10 @@ export function pdfKeyFromLocator(locator: string): string | null {
   return key && /\.pdf$/i.test(key) ? key : null;
 }
 
-export function authorizePdf(issue: PdfAccessIssue | null, admin: boolean, now: Date): string | null {
+export function authorizePdf(issue: PdfAccessIssue | null, admin: boolean, now: Date, featured = false): string | null {
   if (!issue || !Number.isInteger(issue.year) || issue.year < 1000 || issue.year > 9999 ||
       !Number.isInteger(issue.month) || issue.month < 1 || issue.month > 12 || !Number.isFinite(now.getTime())) return null;
-  if (!admin && (issue.is_published !== 1 || isEmbargoed(issue.year, issue.month, now))) return null;
+  if (!admin && (issue.is_published !== 1 || !isIssueMonthReleased(issue.year, issue.month, now) || (isEmbargoed(issue.year, issue.month, now) && !featured))) return null;
   return pdfKeyFromLocator(issue.pdf_url);
 }
 

@@ -2,7 +2,7 @@
 const {spawnSync}=require('node:child_process');
 const path=require('node:path');
 const tests=[
-  'test-pdf-access-fixtures.cjs','test-pdf-delivery.cjs','test-public-delivery.cjs',
+  'test-pdf-access-fixtures.cjs','test-pdf-delivery.cjs','test-public-delivery.cjs','test-hero-schedule.cjs',
   'test-private-maintenance.cjs','test-local-pdf-denial.cjs','test-pdf-origins.cjs',
   'test-indexing-jobs.cjs','test-indexing-controls.cjs','test-indexing.cjs',
 ];

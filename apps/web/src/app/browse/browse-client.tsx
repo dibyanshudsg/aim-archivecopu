@@ -93,7 +93,7 @@ const availabilityCopy: Record<AvailabilityFilter, { heading: string; subtitle: 
   },
   subscriber: {
     heading: 'Awaiting Public Release',
-    subtitle: 'Current circulation editions are visible for discovery and open publicly after the rolling 5-year archive window.',
+    subtitle: 'Current circulation editions are visible for discovery. Featured home issues are readable now; other editions open after five years.',
     countLabel: 'restricted',
   },
   all: {

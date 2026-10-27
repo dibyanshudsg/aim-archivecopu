@@ -1,10 +1,11 @@
 import { supportedAssetSql } from '../asset-url';
 import type { FullTextSearchResult } from '@/lib/api';
-import { getEmbargoState, readableCutoffIssueMonth } from '@/lib/embargo';
+import { getEmbargoState, readableCutoffIssueMonth, releasedIssueSql } from '@/lib/embargo';
 import { displayableAssetUrl, getDb } from './client';
 import { buildSearchSnippet } from '../search-text-quality';
 import { hasSearchIndex, literalFtsPhrase } from './search-capabilities';
 import { publicPdfRoute, publicCoverRoute, magazineCoverRoute } from '../public-asset-routes';
+import { getLiveHeroIssueIds } from '../hero-issues';
 
 
 export interface SearchInput {
@@ -66,7 +67,7 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
   if (!query) return [];
   const indexed = Array.from(query).length >= 3 && await hasSearchIndex('issue_metadata_fts');
 
-  const filters = buildSearchFilters(input);
+  const filters = buildSearchFilters(input, [...await getLiveHeroIssueIds()]);
   const pattern = `%${query.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
   const result = await getDb().execute({
     sql: `
@@ -87,7 +88,7 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
         m.cover_image_url AS magazine_cover_image_url
       FROM issues i
       JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1
+      WHERE ${releasedIssueSql('i')}
         AND ${supportedAssetSql('i.pdf_url')}
         ${indexed ? 'AND i.rowid IN (SELECT rowid FROM issue_metadata_fts WHERE issue_metadata_fts MATCH ?)' : ''}
         AND (
@@ -103,6 +104,7 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
     args: [...(indexed ? [literalFtsPhrase(query)] : []), pattern, pattern, pattern, pattern, ...filters.args, input.limit ?? 50],
   });
 
+  const featured = await getLiveHeroIssueIds();
   return result.rows.map((row) => ({
     id: String(row.id),
     title: String(row.title),
@@ -112,7 +114,7 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
     year: Number(row.year),
     month: Number(row.month),
     cover_image_url: displayableAssetUrl(row.cover_image_url == null ? null : String(row.cover_image_url)) ? publicCoverRoute(String(row.id)) : null,
-    pdf_url: row.pdf_url == null || getEmbargoState(Number(row.year), Number(row.month)).isEmbargoed ? null : publicPdfRoute(String(row.id)),
+    pdf_url: row.pdf_url == null || (getEmbargoState(Number(row.year), Number(row.month)).isEmbargoed && !featured.has(String(row.id))) ? null : publicPdfRoute(String(row.id)),
     magazines: {
       id: String(row.magazine_id),
       name: String(row.magazine_name),
@@ -124,11 +126,11 @@ export async function searchIssueMetadata(input: SearchInput): Promise<MetadataS
 }
 
 export async function listSearchTopics(input: SearchInput): Promise<string[]> {
-  const filters = buildSearchFilters(input);
+  const filters = buildSearchFilters(input, [...await getLiveHeroIssueIds()]);
   const result = await getDb().execute({
     sql: `SELECT trim(topic.value) AS topic, count(DISTINCT i.id) AS uses
       FROM issues i JOIN json_each(i.topics_json) topic ON true
-      WHERE i.is_published = 1 AND ${supportedAssetSql('i.pdf_url')}
+      WHERE ${releasedIssueSql('i')} AND ${supportedAssetSql('i.pdf_url')}
         AND topic.type = 'text' AND length(trim(topic.value)) BETWEEN 1 AND 100
         ${filters.sql}
       GROUP BY trim(topic.value) ORDER BY uses DESC, topic COLLATE NOCASE LIMIT 12`,
@@ -138,7 +140,7 @@ export async function listSearchTopics(input: SearchInput): Promise<string[]> {
 }
 
 async function searchWithLikeFallback(input: SearchInput, indexed = false): Promise<FullTextSearchResult[]> {
-  const filters = buildSearchFilters(input);
+  const filters = buildSearchFilters(input, [...await getLiveHeroIssueIds()]);
   const pattern = `%${input.query.toLowerCase().replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
   const result = await getDb().execute({
     sql: `
@@ -159,7 +161,7 @@ async function searchWithLikeFallback(input: SearchInput, indexed = false): Prom
       FROM issue_search_index idx
       JOIN issues i ON i.id = idx.issue_id
       JOIN magazines m ON m.id = i.magazine_id
-      WHERE i.is_published = 1
+      WHERE ${releasedIssueSql('i')}
         AND ${supportedAssetSql('i.pdf_url')}
         ${indexed ? 'AND idx.rowid IN (SELECT rowid FROM issue_text_fts WHERE issue_text_fts MATCH ?)' : ''}
         AND lower(replace(replace(idx.content, char(10), ' '), char(13), ' ')) LIKE ? ESCAPE '\\'
@@ -176,15 +178,16 @@ async function searchWithLikeFallback(input: SearchInput, indexed = false): Prom
   })));
 }
 
-function buildSearchFilters(input: SearchInput) {
+function buildSearchFilters(input: SearchInput, featuredIds: string[]) {
   const clauses: string[] = ["AND trim(i.pdf_url) <> ''"];
   const args: Array<string | number> = [];
   if (input.availability !== 'all') {
     const cutoff = readableCutoffIssueMonth();
     clauses.push(input.availability === 'subscriber'
-      ? 'AND (i.year > ? OR (i.year = ? AND i.month > ?))'
-      : 'AND (i.year < ? OR (i.year = ? AND i.month <= ?))');
+      ? `AND (i.year > ? OR (i.year = ? AND i.month > ?))${featuredIds.length ? ` AND i.id NOT IN (${featuredIds.map(() => '?').join(',')})` : ''}`
+      : `AND (i.year < ? OR (i.year = ? AND i.month <= ?)${featuredIds.length ? ` OR i.id IN (${featuredIds.map(() => '?').join(',')})` : ''})`);
     args.push(cutoff.year, cutoff.year, cutoff.month);
+    args.push(...featuredIds);
   }
   if (input.magazineId) {
     clauses.push('AND i.magazine_id = ?');
@@ -201,13 +204,16 @@ function buildSearchFilters(input: SearchInput) {
   return { sql: clauses.join('\n'), args };
 }
 
-function decorateSearchRows(rows: SearchRow[]): FullTextSearchResult[] {
+async function decorateSearchRows(rows: SearchRow[]): Promise<FullTextSearchResult[]> {
   const now = new Date();
+  const featured = await getLiveHeroIssueIds(now);
   const seenEmbargoed = new Set<string>();
   const results: FullTextSearchResult[] = [];
 
   for (const row of rows) {
-    const state = getEmbargoState(Number(row.year), Number(row.month), now);
+    const state = featured.has(String(row.issue_id))
+      ? { isEmbargoed: false, embargoLiftLabel: null, embargoLiftAt: null }
+      : getEmbargoState(Number(row.year), Number(row.month), now);
     if (state.isEmbargoed) {
       if (seenEmbargoed.has(row.issue_id)) continue;
       seenEmbargoed.add(row.issue_id);

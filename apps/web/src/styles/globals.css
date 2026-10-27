@@ -130,6 +130,17 @@ html {
   .reader-search-highlight { animation: none; }
 }
 
+@keyframes admin-dialog-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.admin-dialog[open] { animation: admin-dialog-enter 120ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-dialog[open] { animation: none; }
+}
+
 @keyframes aim-shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }

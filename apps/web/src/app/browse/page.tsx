@@ -9,9 +9,7 @@ import {
   type BrowseFacets,
 } from '@/lib/public-issues';
 
-// searchParams makes this route dynamic. Repository caches bound query work;
-// this declaration does not turn every filtered HTML response into ISR.
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 async function fetchInitialBrowseData(
   searchParams: Record<string, string | string[] | undefined>,

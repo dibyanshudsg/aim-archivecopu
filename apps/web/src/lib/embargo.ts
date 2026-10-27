@@ -5,7 +5,8 @@ import { MONTH_NAMES, type MonthIndex } from '@aim-archive/shared';
  * readable on the 1st of the month exactly `EMBARGO_MONTHS` later. Before
  * that, the public archive shows its cover / theme / topics but the PDF
  * itself is withheld so paying print subscribers keep their head start.
- * Applies equally to every language edition. See project memory:
+ * Applies equally to every language edition, except the per-magazine issue
+ * currently selected for the home hero. See project memory:
  * "5-Year Rolling Embargo Policy".
  */
 export const EMBARGO_MONTHS = 60;
@@ -29,12 +30,23 @@ function shiftIssueMonth(year: number, month: number, deltaMonths: number): Issu
   };
 }
 
-function monthInIndia(now: Date): IssueMonth {
+export function monthInIndia(now: Date): IssueMonth {
   const indiaDate = new Date(now.getTime() + INDIA_OFFSET_MINUTES * MS_PER_MINUTE);
   return {
     year: indiaDate.getUTCFullYear(),
     month: (indiaDate.getUTCMonth() + 1) as MonthIndex,
   };
+}
+
+/** Issue-month publication gate, evaluated on every public request in India time. */
+export function isIssueMonthReleased(year: number, month: number, now: Date = new Date()): boolean {
+  const current = monthInIndia(now);
+  return year * 12 + month <= current.year * 12 + current.month;
+}
+
+export function releasedIssueSql(alias = 'i', now: Date = new Date()): string {
+  const current = monthInIndia(now);
+  return `${alias}.is_published = 1 AND (${alias}.year * 12 + ${alias}.month) <= ${current.year * 12 + current.month}`;
 }
 
 export function computeEmbargoLiftMonth(year: number, month: number): IssueMonth {
@@ -100,13 +112,16 @@ export function applyEmbargoToIssueRow<
 >(
   row: T,
   now: Date = new Date(),
+  featured = false,
 ): T & {
   is_embargoed: boolean;
   embargo_lift_label: string | null;
   embargo_lift_at: string | null;
   server_now: string;
 } {
-  const state = getEmbargoState(row.year, row.month, now);
+  const state = featured && isIssueMonthReleased(row.year, row.month, now)
+    ? { isEmbargoed: false, embargoLiftLabel: null, embargoLiftAt: null }
+    : getEmbargoState(row.year, row.month, now);
   return {
     ...row,
     pdf_url: state.isEmbargoed ? null : row.pdf_url,

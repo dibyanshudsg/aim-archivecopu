@@ -9,9 +9,8 @@ export async function GET(request: NextRequest) {
     const result = await listPublicIssues(parsePublicIssueListInput(request.nextUrl.searchParams));
     return NextResponse.json(result, {
       headers: {
-        // Edge-cache listings briefly; SWR absorbs the next request while a
-        // fresh copy is fetched. Admin publishes show up within ~1 minute.
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        // Month-boundary publication and admin hero changes are immediate.
+        'Cache-Control': 'no-store',
       },
     });
   } catch {

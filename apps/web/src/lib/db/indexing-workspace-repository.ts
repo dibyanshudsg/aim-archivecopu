@@ -39,6 +39,19 @@ export const coverageSql = `WITH page_counts AS (
   FROM base
 )`;
 
+export async function getIndexingAttentionCounts(): Promise<{ missing: number; failed: number; review: number; unverified: number }> {
+  const result = await getDb().execute({
+    sql: coverageSql + ` SELECT status, COUNT(*) AS count FROM coverage WHERE status IN ('missing','failed','review','unverified') GROUP BY status`,
+    args: [EXTRACTION_VERSION, EXTRACTION_VERSION],
+  });
+  const counts = { missing: 0, failed: 0, review: 0, unverified: 0 };
+  for (const row of result.rows) {
+    const status = String(row.status) as keyof typeof counts;
+    if (status in counts) counts[status] = Number(row.count ?? 0);
+  }
+  return counts;
+}
+
 function conditions(filters: IndexingFilters) {
   const clauses: string[] = [];
   const args: InValue[] = [EXTRACTION_VERSION, EXTRACTION_VERSION];
@@ -124,7 +137,7 @@ export async function listIndexingCatalogue(
   const summary = Object.fromEntries(counts.rows.map((r) => [String(r.status), Number(r.n)]));
   const lastHeartbeat = worker.rows[0]?.last_seen == null ? null : Number(worker.rows[0].last_seen);
   return {
-    issues: rows.rows.map(mapIssue),
+    issues: Array.from(rows.rows, mapIssue),
     total,
     page,
     pageSize,
@@ -140,8 +153,8 @@ export async function listIndexingCatalogue(
           lastResult: String(schedule.rows[0].last_result),
         }
       : null,
-    magazines: magazines.rows as unknown as { id: string; name: string }[],
-    years: years.rows.map((r) => Number(r.year)),
+    magazines: Array.from(magazines.rows, (row) => ({ id: String(row.id), name: String(row.name) })),
+    years: Array.from(years.rows, (r) => Number(r.year)),
   };
 }
 
@@ -157,7 +170,7 @@ export async function getIndexingIssueDetails(id: string) {
   });
   return {
     issue: mapIssue(result.rows[0]),
-    runs: runs.rows as unknown as IndexingRun[],
+    runs: Array.from(runs.rows, (row) => ({ ...row })) as unknown as IndexingRun[],
     reviews: await listPageReviews(id),
   };
 }
@@ -169,7 +182,7 @@ export async function listIndexingHistory(page = 1) {
     sql: `SELECT r.*,i.title,i.theme FROM indexing_runs r JOIN issues i ON i.id=r.issue_id ORDER BY r.created_at DESC,r.id LIMIT 25 OFFSET ?`,
     args: [(page - 1) * 25],
   });
-  return { runs: result.rows as unknown as IndexingRun[], total, page, pageSize: 25 };
+  return { runs: Array.from(result.rows, (row) => ({ ...row })) as unknown as IndexingRun[], total, page, pageSize: 25 };
 }
 
 export async function queueWorkspaceIssues(input: {

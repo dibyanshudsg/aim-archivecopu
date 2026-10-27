@@ -15,6 +15,8 @@ const db=new DatabaseSync(':memory:');
 db.exec(fs.readFileSync(path.join(root,'packages/turso/migrations/00001_initial_schema.sql'),'utf8'));
 db.prepare('INSERT INTO magazines(id,name,language,cover_image_url,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('fixture-magazine','Synthetic','english',fixtures.issues[0].cover_image_url,fixtures.now,fixtures.now);
 for(const i of fixtures.issues)db.prepare('INSERT INTO issues(id,magazine_id,title,year,month,is_published,pdf_url,cover_image_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(i.id,i.magazine_id,i.title,i.year,i.month,i.is_published,i.pdf_url,i.cover_image_url,fixtures.now,fixtures.now);
+const futureId='00000000-0000-4000-8000-000000000099';
+db.prepare('INSERT INTO issues(id,magazine_id,title,year,month,is_published,pdf_url,cover_image_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(futureId,'fixture-magazine','Future issue',2026,11,1,fixtures.issues[0].pdf_url,fixtures.issues[0].cover_image_url,fixtures.now,fixtures.now);
 require('../apps/web/src/lib/db/client.ts').getDb=()=>({execute:async statement=>{const {sql,args=[]}=typeof statement==='string'?{sql:statement}:statement;return {rows:db.prepare(sql).all(...args)};}});
 const {createCoverDelivery}=require('../apps/web/src/lib/cover-delivery.ts');
 const objects=fixtures.createObjects();let gets=0,hook=null,bodyOverride=null,sizeOverride=null;
@@ -28,15 +30,26 @@ const req=(id,magazine=false,method='GET')=>cover(new Request('https://site.exam
   const repo=require('../apps/web/src/lib/db/public-repository.ts');
   const search=require('../apps/web/src/lib/db/search-repository.ts');
   const released=fixtures.issues[0],restricted=fixtures.issues[1];
+  assert.equal(await repo.getPublicIssueById(futureId),null,'next-month issue is absent before India-time release');
+  assert.equal((await req(futureId)).status,404,'next-month cover stays private');
   for(const issue of fixtures.issues){
     const result=await repo.getPublicIssueById(issue.id);
     if(!issue.is_published){assert.equal(result,null);continue;}
-    assert.equal(result.pdf_url,issue.expected.publicPdf?`/api/issues/${issue.id}/pdf`:null);
+    assert.equal(result.pdf_url,(issue.expected.publicPdf || issue.id === restricted.id)?`/api/issues/${issue.id}/pdf`:null);
     assert.equal(result.cover_image_url,`/api/issues/${issue.id}/cover`);
     assert.equal(result.magazines.cover_image_url,'/api/magazines/fixture-magazine/cover');
     assert.ok(!JSON.stringify(result).includes(fixtures.currentBase));
   }
+  db.prepare('INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?)').run('hero_issue_controls',JSON.stringify({hidden:[restricted.id],pinned:{}}),fixtures.now);
+  repo.clearPublicRepositoryCaches();
+  assert.equal((await repo.getPublicIssueById(restricted.id)).pdf_url,null,'hiding the featured issue restores its embargo');
+  db.prepare('DELETE FROM site_settings WHERE key=?').run('hero_issue_controls');
+  repo.clearPublicRepositoryCaches();
   for(const rows of [await repo.listRecentPublicIssues(),await repo.listLatestEmbargoedIssues(),await repo.listHomeShelfIssues(),await search.searchIssueMetadata({query:'Synthetic',availability:'all'})])assert.ok(!JSON.stringify(rows).includes(fixtures.currentBase));
+  const readableSearch=await search.searchIssueMetadata({query:'Synthetic',availability:'read'});
+  const subscriberSearch=await search.searchIssueMetadata({query:'Synthetic',availability:'subscriber'});
+  assert.ok(readableSearch.some(issue=>issue.id===restricted.id),'featured issue appears in readable search');
+  assert.ok(!subscriberSearch.some(issue=>issue.id===restricted.id),'featured issue leaves subscriber-only search');
   for(const i of fixtures.issues){const response=await req(i.id);assert.equal(response.status,i.expected.publicCover?200:404);assert.match(response.headers.get('cache-control'),/no-store/);}
   assert.equal((await req('fixture-magazine',true)).status,200);
   assert.equal((await req(restricted.id,false,'HEAD')).headers.get('content-type'),'image/png');

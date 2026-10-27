@@ -5,13 +5,13 @@ import {
   listHomeShelfYears,
   listLatestEmbargoedIssues,
   listMagazines,
-  listPublicIssuesForMonths,
-  getNewestReadableIssueMonth,
+  getPublicIssueById,
 } from '@/lib/db';
 import type { ApiIssue, ApiMagazine } from '@/lib/api';
 import type { ShelfIssue } from '@/lib/home-shelf';
 import { HomeClient } from './home-client';
 import { readableCutoffIssueMonth } from '@/lib/embargo';
+import { getHeroSchedule } from '@/lib/hero-issues';
 import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
@@ -34,34 +34,20 @@ async function fetchLatestSubscriberEditions(): Promise<ApiIssue[]> {
 interface CarouselData {
   magazines: ApiMagazine[];
   issues: ApiIssue[];
-  currentYear: number;
-  currentMonth: number;
-  prevYear: number;
-  prevMonth: number;
 }
 
 /**
- * Feature the newest publicly readable issue, even if no edition became
- * readable this calendar month. Load its adjacent previous issue month for
- * the manual selector. Magazine order keeps AIM first when dates tie.
+ * Feature the currently selected issue for each magazine. The schedule handles
+ * the India-time release gate, persistent hides and optional manual selection.
  */
 async function fetchCarouselData(): Promise<CarouselData> {
-  const cutoff = readableCutoffIssueMonth();
-  const latest = await getNewestReadableIssueMonth();
-  const currentYear = latest?.year ?? cutoff.year;
-  const currentMonth = latest?.month ?? cutoff.month;
-  const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-  const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-
-  const [magazines, issues] = await Promise.all([
+  const [magazines, schedule] = await Promise.all([
     listMagazines({ orderBy: 'created_at' }),
-    listPublicIssuesForMonths([
-      { year: currentYear, month: currentMonth },
-      { year: prevYear, month: prevMonth },
-    ]),
+    getHeroSchedule(),
   ]);
-
-  return { magazines, issues, currentYear, currentMonth, prevYear, prevMonth };
+  const ids = schedule.map((item) => item.live?.id).filter((id): id is string => Boolean(id));
+  const issues = (await Promise.all(ids.map((id) => getPublicIssueById(id)))).filter((issue): issue is ApiIssue => issue !== null);
+  return { magazines, issues };
 }
 
 export default async function HomePage() {
@@ -82,10 +68,6 @@ export default async function HomePage() {
       latestSubscriberEditions={latestSubscriberEditions}
       carouselMagazines={carousel.magazines}
       carouselIssues={carousel.issues}
-      carouselCurrentYear={carousel.currentYear}
-      carouselCurrentMonth={carousel.currentMonth}
-      carouselPrevYear={carousel.prevYear}
-      carouselPrevMonth={carousel.prevMonth}
       navigation={navigation}
       collection={collection}
     />
