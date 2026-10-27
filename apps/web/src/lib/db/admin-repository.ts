@@ -81,7 +81,7 @@ export async function getAdminStatsFromDb(): Promise<AdminStats> {
     totalIssues: issueRows.length,
     totalReads: issueRows.reduce((sum, row) => sum + Number(row.read_count ?? 0), 0),
     totalDownloads: issueRows.reduce((sum, row) => sum + Number(row.download_count ?? 0), 0),
-    popularIssues: popular.rows.map((row) => ({
+    popularIssues: Array.from(popular.rows, (row) => ({
       id: String(row.id),
       title: String(row.title),
       read_count: Number(row.read_count ?? 0),
@@ -92,7 +92,7 @@ export async function getAdminStatsFromDb(): Promise<AdminStats> {
 
 export async function listAdminMagazinesFromDb(): Promise<AdminMagazine[]> {
   const result = await getDb().execute('SELECT id, name, language, description FROM magazines ORDER BY name ASC');
-  return result.rows.map((row) => ({
+  return Array.from(result.rows, (row) => ({
     id: String(row.id),
     name: String(row.name),
     language: String(row.language),
@@ -181,7 +181,7 @@ export async function listAdminIssuesFromDb(): Promise<AdminIssue[]> {
     ORDER BY i.year DESC, i.month DESC
   `);
 
-  return result.rows.map(rowToAdminIssue);
+  return Array.from(result.rows, rowToAdminIssue);
 }
 
 export async function listAdminIssuesPageFromDb(input: AdminIssueListInput): Promise<AdminIssueListResult> {
@@ -229,14 +229,14 @@ export async function listAdminIssuesPageFromDb(input: AdminIssueListInput): Pro
 
   const total = Number(countResult.rows[0]?.count ?? 0);
   return {
-    data: rowsResult.rows.map(rowToAdminIssue),
+    data: Array.from(rowsResult.rows, rowToAdminIssue),
     total,
     page,
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
     facets: {
-      years: yearsResult.rows.map((row) => Number(row.year)).filter(Number.isFinite),
-      topics: topicsResult.rows.map((row) => ({
+      years: Array.from(yearsResult.rows, (row) => Number(row.year)).filter(Number.isFinite),
+      topics: Array.from(topicsResult.rows, (row) => ({
         name: String(row.name),
         count: Number(row.count ?? 0),
       })),

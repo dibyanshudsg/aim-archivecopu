@@ -31,6 +31,12 @@ async function main() {
     assert.equal(simultaneous.filter(result => result.allowed).length, 2);
     const request = new Request('http://localhost/', { headers: { 'x-forwarded-for': '203.0.113.25' } });
     assert.equal(clientAddress(request), '203.0.113.25');
+    await db.execute({ sql: 'INSERT INTO admins(id,email,name,created_at,password_hash,role_id) VALUES(?,?,?,?,?,?)', args: ['viewer-1', 'viewer@example.test', 'Viewer', new Date().toISOString(), 'synthetic-hash', 'viewer'] });
+    const { findAdminAccountByEmail } = require('../apps/web/src/lib/db/admin-accounts.ts');
+    const viewer = await findAdminAccountByEmail('viewer@example.test');
+    assert.equal(viewer.roleName, 'Viewer');
+    assert.ok(viewer.permissions.includes('catalogue.view'));
+    assert.ok(!viewer.permissions.includes('catalogue.edit'));
     // An audit failure must roll back account creation rather than leave an unlogged admin.
     await db.execute('DROP TABLE admin_audit_log');
     const { createAdminAccount } = require('../apps/web/src/lib/db/admin-accounts.ts');

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, LoaderCircle, Lock } from 'lucide-react';
 import { adminLandingPath } from '@/lib/admin-permissions';
 
 const LOGIN_SUCCESS_KEY = 'aim-admin-login-success';
@@ -16,11 +16,13 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setOpening(false);
 
     try {
       const res = await fetch('/api/admin/auth', {
@@ -42,6 +44,7 @@ export default function AdminLoginPage() {
 
       const data = await res.json().catch(() => ({}));
       const permissions = Array.isArray(data.admin?.permissions) ? data.admin.permissions : [];
+      setOpening(true);
       router.replace(data.mustChangePassword ? '/admin/password' : adminLandingPath(permissions));
     } catch {
       setError('Something went wrong');
@@ -67,7 +70,8 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Image
-            src="/logo.png"
+            src="/api/brand/logo"
+            unoptimized
             alt="AIM Archive"
             width={56}
             height={56}
@@ -128,8 +132,8 @@ export default function AdminLoginPage() {
             disabled={loading}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-flame-500 py-3 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(190,140,46,0.22)] transition-all hover:from-gold-600 hover:to-flame-600 disabled:opacity-50"
           >
-            <Lock className="h-4 w-4" />
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Lock className="h-4 w-4" />}
+            {opening ? 'Opening admin…' : loading ? 'Checking credentials…' : 'Sign In'}
           </button>
         </form>
       </div>

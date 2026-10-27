@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifyAdmin } from '@/lib/admin-auth';
+import { getAdminForPage } from './admin-page-auth';
 import { AdminDashboardShell } from './admin-shell';
 import { publicAdmin } from '@/lib/db/admin-accounts';
 
@@ -8,7 +8,7 @@ export default async function AdminDashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const admin = await verifyAdmin();
+  const admin = await getAdminForPage();
   if (!admin) redirect('/admin/login');
   if (admin.mustChangePassword) redirect('/admin/password');
 

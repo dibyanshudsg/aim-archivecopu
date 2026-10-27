@@ -47,21 +47,26 @@ async function consumeOnce(buckets: Bucket[]): Promise<{ allowed: true } | { all
   try {
     const updates: { key: string; tokens: number; expires: number }[] = [];
     let retryAfter = 0;
-    for (const bucket of buckets) {
-      const key = keyHash(bucket.scope, bucket.identity);
+    const keys = buckets.map(bucket => keyHash(bucket.scope, bucket.identity));
+    const existing = await tx.execute({
+      sql: `SELECT key_hash,tokens,updated_at_ms FROM rate_limit_buckets WHERE key_hash IN (${keys.map(() => '?').join(',')})`,
+      args: keys,
+    });
+    const previousByKey = new Map(existing.rows.map(row => [String(row.key_hash), row]));
+    for (const [index, bucket] of buckets.entries()) {
+      const key = keys[index];
       const capacity = Math.max(1, Math.floor(bucket.capacity * capacityScale()));
       const refillPerMs = capacity / (bucket.windowSeconds * 1000);
-      const result = await tx.execute({ sql: 'SELECT tokens,updated_at_ms FROM rate_limit_buckets WHERE key_hash=?', args: [key] });
-      const previous = result.rows[0];
+      const previous = previousByKey.get(key);
       const available = previous ? Math.min(capacity, Number(previous.tokens) + Math.max(0, now - Number(previous.updated_at_ms)) * refillPerMs) : capacity;
       const cost = bucket.cost ?? 1;
       if (available < cost) retryAfter = Math.max(retryAfter, Math.ceil((cost - available) / refillPerMs / 1000));
       updates.push({ key, tokens: Math.max(0, available - cost), expires: now + bucket.windowSeconds * 2000 });
     }
     if (retryAfter) { await tx.rollback(); return { allowed: false, retryAfter: Math.max(1, Math.min(retryAfter, 3600)) }; }
-    for (const entry of updates) await tx.execute({
-      sql: 'INSERT INTO rate_limit_buckets(key_hash,tokens,updated_at_ms,expires_at_ms) VALUES(?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET tokens=excluded.tokens,updated_at_ms=excluded.updated_at_ms,expires_at_ms=excluded.expires_at_ms',
-      args: [entry.key, entry.tokens, now, entry.expires],
+    await tx.execute({
+      sql: `INSERT INTO rate_limit_buckets(key_hash,tokens,updated_at_ms,expires_at_ms) VALUES ${updates.map(() => '(?,?,?,?)').join(',')} ON CONFLICT(key_hash) DO UPDATE SET tokens=excluded.tokens,updated_at_ms=excluded.updated_at_ms,expires_at_ms=excluded.expires_at_ms`,
+      args: updates.flatMap(entry => [entry.key, entry.tokens, now, entry.expires]),
     });
     if (Math.random() < 0.002) await tx.execute({ sql: 'DELETE FROM rate_limit_buckets WHERE expires_at_ms<?', args: [now] });
     await tx.commit();
