@@ -44,7 +44,6 @@ import { TagsInput, type ManagedTopic } from '@/components/admin/tags-input';
 import { useUI } from '@/components/ui/toast';
 import type { AdminIssue, AdminIssueListResult, AdminMagazine } from '@/lib/admin-data';
 import { renderPdfFirstPageCoverFromUrl } from '@/lib/pdf-cover-client';
-import { IndexingPanel } from '@/components/admin/indexing-panel';
 import { AdminPageTitle } from '../admin-page-title';
 
 type Issue = AdminIssue;
@@ -582,8 +581,6 @@ export function AdminIssuesClient({
           </Link>
         </div>
       </div>
-
-      <IndexingPanel />
 
       {/* Search & Filters */}
       <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-[0_12px_34px_rgba(15,23,42,0.04)] ring-1 ring-white">

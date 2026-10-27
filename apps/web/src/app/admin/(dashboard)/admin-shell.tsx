@@ -17,12 +17,12 @@ import {
   UsersRound,
   ShieldCheck,
   ScrollText,
-  KeyRound,
   Navigation,
   X,
   ExternalLink,
   ChevronsLeft,
   ChevronsRight,
+  LoaderCircle,
 } from 'lucide-react';
 import { UIProvider, useUI } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -38,7 +38,6 @@ const navItems = [
   { href: '/admin/users', icon: UsersRound, label: 'Admin Users', permission: 'users.manage' },
   { href: '/admin/roles', icon: ShieldCheck, label: 'Roles & Permissions', permission: 'roles.manage' },
   { href: '/admin/activity', icon: ScrollText, label: 'Activity Log', permission: 'audit.view' },
-  { href: '/admin/account', icon: KeyRound, label: 'Your Account', permission: null },
 ];
 
 const COLLAPSED_WIDTH = 64;
@@ -80,6 +79,14 @@ function AdminDashboardFrame({
   const pathname = usePathname();
   const { toast } = useUI();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [avatarVersion, setAvatarVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setAvatarVersion(Date.now());
+    window.addEventListener('admin-avatar-changed', refresh);
+    return () => window.removeEventListener('admin-avatar-changed', refresh);
+  }, []);
 
   // Collapse + resize state (desktop only)
   const [collapsed, setCollapsed] = useState(false);
@@ -147,6 +154,14 @@ function AdminDashboardFrame({
   }
 
   useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  function beginNavigation(href: string) {
+    if (href !== pathname) setPendingHref(href);
+  }
+
+  useEffect(() => {
     try {
       if (sessionStorage.getItem(LOGIN_SUCCESS_KEY) !== '1') return;
       sessionStorage.removeItem(LOGIN_SUCCESS_KEY);
@@ -182,7 +197,7 @@ function AdminDashboardFrame({
             collapsed ? 'flex-col items-center gap-2 px-2 py-4' : 'items-center gap-3 px-6 py-5',
           )}
         >
-          <Image src="/logo.png" alt="AIM" width={32} height={32} className="shrink-0 rounded-lg" />
+          <Image src="/api/brand/logo" unoptimized alt="AIM" width={32} height={32} className="shrink-0 rounded-lg" />
           {!collapsed && (
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="font-heading truncate text-sm font-bold text-gray-900">AIM Archive</p>
@@ -208,22 +223,25 @@ function AdminDashboardFrame({
           {navItems.filter(item => !item.permission || admin.permissions.includes(item.permission)).map((item) => {
             const active =
               pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
+            const pending = pendingHref === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onMouseEnter={() => prefetchAdminRoute(item.href)}
                 onFocus={() => prefetchAdminRoute(item.href)}
+                onClick={() => beginNavigation(item.href)}
                 title={collapsed ? item.label : undefined}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'mb-1 flex items-center rounded-xl text-sm font-medium transition-colors',
                   collapsed ? 'h-10 justify-center px-2' : 'gap-3 px-4 py-2.5',
-                  active
+                  active || pending
                     ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
                 )}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
+                {pending ? <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" /> : <item.icon className="h-4 w-4 shrink-0" />}
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
@@ -248,12 +266,10 @@ function AdminDashboardFrame({
 
         {/* User info + sign out */}
         <div className={cn('shrink-0 border-t border-gray-100 bg-white', collapsed ? 'p-2' : 'p-4')}>
-          {!collapsed && (
-            <div className="mb-3 px-2">
-              <p className="truncate text-sm font-medium text-gray-900">{admin.name}</p>
-              <p className="truncate text-xs text-gray-400">{admin.email}</p>
-            </div>
-          )}
+          <Link href="/admin/account" onClick={() => beginNavigation('/admin/account')} title={collapsed ? 'Your profile' : undefined} aria-label={collapsed ? 'Your profile' : undefined} className={cn('mb-2 flex items-center rounded-xl transition-colors hover:bg-flame-50 focus-visible:outline-2 focus-visible:outline-flame-600', collapsed ? 'justify-center p-1' : 'gap-3 p-2')}>
+            <Image src={`/api/admin/avatar?v=${avatarVersion}`} unoptimized alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-full bg-flame-50 object-cover" />
+            {!collapsed && <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-gray-900">{admin.name}</span><span className="block truncate text-xs text-gray-500">{admin.email}</span></span>}
+          </Link>
           <button
             onClick={handleLogout}
             title={collapsed ? `Sign Out (${admin.email})` : undefined}
@@ -290,12 +306,7 @@ function AdminDashboardFrame({
             </button>
             <span className="font-heading text-sm font-bold text-gray-900">Admin</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-gray-500 hover:text-red-600"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <Link href="/admin/account" aria-label="Your profile" className="rounded-full focus-visible:outline-2 focus-visible:outline-flame-600"><Image src={`/api/admin/avatar?v=${avatarVersion}`} unoptimized alt="" width={36} height={36} className="h-9 w-9 rounded-full bg-flame-50 object-cover" /></Link>
         </header>
 
         {/* Mobile sidebar overlay */}
@@ -315,18 +326,20 @@ function AdminDashboardFrame({
               <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
                 {navItems.filter(item => !item.permission || admin.permissions.includes(item.permission)).map((item) => {
                   const active = pathname === item.href;
+                  const pending = pendingHref === item.href;
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onMouseEnter={() => prefetchAdminRoute(item.href)}
                       onFocus={() => prefetchAdminRoute(item.href)}
-                      onClick={() => setSidebarOpen(false)}
+                      onClick={() => { beginNavigation(item.href); setSidebarOpen(false); }}
+                      aria-current={active ? 'page' : undefined}
                       className={`mb-1 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium ${
-                        active ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700' : 'text-gray-600'
+                        active || pending ? 'bg-gradient-to-r from-gold-50 to-flame-50 text-flame-700' : 'text-gray-600'
                       }`}
                     >
-                      <item.icon className="h-4 w-4" />
+                      {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <item.icon className="h-4 w-4" />}
                       {item.label}
                     </Link>
                   );
@@ -341,13 +354,17 @@ function AdminDashboardFrame({
                   <ExternalLink className="h-4 w-4" />
                   View Site
                 </Link>
+                <button type="button" onClick={handleLogout} className="mt-2 flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-700"><LogOut className="h-4 w-4" />Sign Out</button>
               </nav>
             </div>
           </div>
         )}
 
         {/* Content */}
-        <main className="flex-1 p-6 lg:p-8">{children}</main>
+        <main className="relative flex-1 p-6 lg:p-8" aria-busy={pendingHref !== null}>
+          {pendingHref && <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-flame-100" role="status" aria-label="Loading admin page"><div className="h-full w-1/3 animate-pulse rounded-full bg-flame-500" /></div>}
+          {children}
+        </main>
       </div>
     </div>
   );

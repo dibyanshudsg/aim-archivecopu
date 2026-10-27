@@ -17,19 +17,19 @@ export function publicAdmin(account: AdminAccount): Omit<AdminAccount, 'password
 }
 
 const select = `SELECT a.id, a.email, a.name, a.role_id, a.is_active, a.session_version,
- a.password_hash, a.must_change_password, a.temporary_password_expires_at, COALESCE(r.name, 'Unknown') AS role_name
+ a.password_hash, a.must_change_password, a.temporary_password_expires_at, COALESCE(r.name, 'Unknown') AS role_name,
+ COALESCE((SELECT json_group_array(permission) FROM admin_role_permissions WHERE role_id=a.role_id), '[]') AS permissions_json
  FROM admins a LEFT JOIN admin_roles r ON r.id=a.role_id`;
 
-async function mapAccount(row: Record<string, unknown>): Promise<AdminAccount> {
+function mapAccount(row: Record<string, unknown>): AdminAccount {
   const roleId = String(row.role_id);
-  const result = await getDb().execute({ sql: 'SELECT permission FROM admin_role_permissions WHERE role_id=?', args: [roleId] });
   return {
     id: String(row.id), email: String(row.email), name: String(row.name), roleId,
     roleName: String(row.role_name), isActive: Boolean(row.is_active),
     sessionVersion: Number(row.session_version), mustChangePassword: Boolean(row.must_change_password),
     passwordHash: row.password_hash ? String(row.password_hash) : null,
     temporaryPasswordExpiresAt: row.temporary_password_expires_at ? String(row.temporary_password_expires_at) : null,
-    permissions: roleId === 'owner' ? [...ADMIN_PERMISSIONS] : result.rows.map(r => String(r.permission) as AdminPermission),
+    permissions: roleId === 'owner' ? [...ADMIN_PERMISSIONS] : JSON.parse(String(row.permissions_json ?? '[]')) as AdminPermission[],
   };
 }
 
@@ -45,16 +45,16 @@ export async function findAdminAccountByEmail(email: string): Promise<AdminAccou
 
 export async function listAdminAccounts() {
   const result = await getDb().execute(`${select} ORDER BY a.name COLLATE NOCASE`);
-  return Promise.all(result.rows.map(mapAccount));
+  return Array.from(result.rows, mapAccount);
 }
 
 export async function listAdminRoles() {
   const roles = await getDb().execute('SELECT id, name, description, is_system FROM admin_roles ORDER BY is_system DESC, name');
   const permissions = await getDb().execute('SELECT role_id, permission FROM admin_role_permissions');
-  return roles.rows.map(row => ({
+  return Array.from(roles.rows, row => ({
     id: String(row.id), name: String(row.name), description: String(row.description),
     isSystem: Boolean(row.is_system),
-    permissions: String(row.id) === 'owner' ? [...ADMIN_PERMISSIONS] : permissions.rows.filter(p => p.role_id === row.id).map(p => String(p.permission)),
+    permissions: String(row.id) === 'owner' ? [...ADMIN_PERMISSIONS] : Array.from(permissions.rows, p => p).filter(p => p.role_id === row.id).map(p => String(p.permission)),
   }));
 }
 
@@ -96,12 +96,19 @@ export async function listAdminActivity(input: { page: number; q?: string; actio
   const db = getDb();
   const count = await db.execute({ sql: `SELECT count(*) AS total FROM admin_audit_log l LEFT JOIN admins a ON a.id=l.actor_id ${where}`, args });
   const rows = await db.execute({ sql: `SELECT l.id,l.actor_id,l.action,l.subject_id,l.detail,l.created_at,a.name AS actor_name,a.email AS actor_email FROM admin_audit_log l LEFT JOIN admins a ON a.id=l.actor_id ${where} ORDER BY l.created_at DESC,l.id DESC LIMIT 30 OFFSET ?`, args: [...args, (page - 1) * 30] });
-  return { items: rows.rows.map(row => ({ id: String(row.id), actorId: row.actor_id ? String(row.actor_id) : null, actorName: row.actor_name ? String(row.actor_name) : 'System', actorEmail: row.actor_email ? String(row.actor_email) : null, action: String(row.action), subjectId: row.subject_id ? String(row.subject_id) : null, detail: row.detail ? String(row.detail) : null, createdAt: String(row.created_at) })), total: Number(count.rows[0]?.total ?? 0), page, pageSize: 30 };
+  return { items: Array.from(rows.rows, row => ({ id: String(row.id), actorId: row.actor_id ? String(row.actor_id) : null, actorName: row.actor_name ? String(row.actor_name) : 'System', actorEmail: row.actor_email ? String(row.actor_email) : null, action: String(row.action), subjectId: row.subject_id ? String(row.subject_id) : null, detail: row.detail ? String(row.detail) : null, createdAt: String(row.created_at) })), total: Number(count.rows[0]?.total ?? 0), page, pageSize: 30 };
 }
 
 export async function countActiveOwners() {
   const result = await getDb().execute("SELECT count(*) AS count FROM admins WHERE role_id='owner' AND is_active=1");
   return Number(result.rows[0]?.count ?? 0);
+}
+
+export async function updateOwnAdminName(adminId: string, name: string): Promise<void> {
+  await getDb().batch([
+    { sql: 'UPDATE admins SET name=? WHERE id=?', args: [name, adminId] },
+    auditStatement(adminId, 'admin.profile.updated', adminId),
+  ], 'write');
 }
 
 export async function createAdminAccount(input: { name: string; email: string; roleId: string; hash: string }, actorId: string) {
