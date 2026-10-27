@@ -1,6 +1,8 @@
 # AIM Archive — Project Bible
 
-**Current release, 17 October 2026:** GitHub `main` and the Vercel review site contain the deployed web release with individual Admin accounts/roles, audit logging, rate limits, CSP and request-body limits. See [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md). Older dated implementation and release notes below are historical where they conflict.
+**Source candidate, 27 October 2026 (hosted verification pending):** The owner requested home-hero scheduling in India time, with current issues hidden publicly until 00:00 on the first of their issue month. The selected live hero issue for each magazine may be read during the normal five-year embargo; all other recent issues remain restricted. Admin can persistently hide an issue, let the previous eligible issue show, or manually feature an older issue (prefer the same month five years earlier when available). The dashboard shows the live and next-month status. Settings can independently upload/reset the main logo, favicon and social image; the feedback form is collapsed. Account password fields have visibility controls. Hosted behavior must be verified before these are release facts.
+
+**Last verified hosted release, 17 October 2026:** The Vercel review site contained the deployed web release with individual Admin accounts/roles, audit logging, rate limits, CSP and request-body limits. See [current handover status](docs/handover/CURRENT_STATUS_2026-10-17.md). Newer source needs hosted verification before it supersedes this record.
 
 > **All India Magazine Digital Archive** — A state-of-the-art spiritual magazine archive platform (Web + Android + iOS) for Sri Aurobindo Society's publications.
 
@@ -124,7 +126,7 @@ Domain/CDN setup and spending are explicitly deferred. EPUB/MOBI conversion, pub
 - **Implemented as**: Tailwind CSS 4 custom theme in `globals.css` with `gold-*` and `flame-*` color scales
 
 ### Logo
-- Runtime file: `apps/web/public/logo.png`; original brand artwork is preserved separately from developer source.
+- Default fallback file: `apps/web/public/logo.png`; Admin Settings can select replacement main, favicon and social images stored in R2. Original brand artwork is preserved separately from developer source.
 - A luminous golden flame with a figure of light — deeply spiritual
 - Logo should be used as-is, not modified
 - Copied to `apps/web/public/logo.png` for web use
