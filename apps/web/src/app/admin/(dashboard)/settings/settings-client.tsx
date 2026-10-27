@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { ExternalLink, MessageSquareText, Save, Settings } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { ChevronDown, ExternalLink, ImageUp, MessageSquareText, Save, Settings } from 'lucide-react';
 import { useUI } from '@/components/ui/toast';
 import type { AdminSiteSettings } from '@/lib/admin-data';
 import { AdminPageTitle } from '../admin-page-title';
+import type { BrandAssets, BrandSlot } from '@/lib/brand-assets';
+
+const brandPlacements: { slot: BrandSlot; label: string; description: string }[] = [
+  { slot: 'logo', label: 'Main logo', description: 'Header, footer and admin screens' },
+  { slot: 'favicon', label: 'Favicon', description: 'Browser tab and saved shortcut' },
+  { slot: 'social', label: 'Social image', description: 'Shared links and preview cards' },
+];
 
 interface SiteSettingsForm {
   feedback_form_url: string;
@@ -13,9 +21,11 @@ interface SiteSettingsForm {
 
 export function AdminSettingsClient({
   initialSettings,
+  initialBrand,
   initialError = '',
 }: {
   initialSettings: AdminSiteSettings;
+  initialBrand: BrandAssets;
   initialError?: string;
 }) {
   const { toast } = useUI();
@@ -23,6 +33,46 @@ export function AdminSettingsClient({
   const [loading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(initialError);
+  const [brand, setBrand] = useState(initialBrand);
+  const [brandFile, setBrandFile] = useState<File | null>(null);
+  const [brandPreview, setBrandPreview] = useState<string | null>(null);
+  const [selected, setSelected] = useState<BrandAssets>({ logo: true, favicon: true, social: true });
+  const [brandSaving, setBrandSaving] = useState(false);
+  const [brandVersion, setBrandVersion] = useState(0);
+
+  useEffect(() => {
+    if (!brandFile) { setBrandPreview(null); return; }
+    const url = URL.createObjectURL(brandFile);
+    setBrandPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [brandFile]);
+
+  async function uploadBrand() {
+    if (!brandFile || !Object.values(selected).some(Boolean)) { setError('Choose an image and at least one placement.'); return; }
+    setBrandSaving(true); setError('');
+    try {
+      const body = new FormData();
+      body.set('image', brandFile);
+      for (const slot of brandPlacements) body.set(slot.slot, String(selected[slot.slot]));
+      const response = await fetch('/api/admin/brand', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not upload image');
+      setBrand(data); setBrandFile(null); setBrandVersion(Date.now());
+      toast.success('Selected brand images updated');
+    } catch (cause) { const message = cause instanceof Error ? cause.message : 'Could not upload image'; setError(message); toast.error(message); }
+    finally { setBrandSaving(false); }
+  }
+
+  async function restoreBrand(slot: BrandSlot) {
+    setBrandSaving(true); setError('');
+    try {
+      const response = await fetch(`/api/admin/brand?slot=${slot}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not restore default');
+      setBrand(data); setBrandVersion(Date.now()); toast.success('Default image restored');
+    } catch (cause) { const message = cause instanceof Error ? cause.message : 'Could not restore default'; setError(message); toast.error(message); }
+    finally { setBrandSaving(false); }
+  }
 
   async function saveSettings() {
     setSaving(true);
@@ -69,9 +119,6 @@ export function AdminSettingsClient({
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <p className="bg-gradient-to-r from-gold-600 to-flame-500 bg-clip-text text-xs font-semibold uppercase text-transparent">
-          Site controls
-        </p>
         <AdminPageTitle title="Settings" description="Manage public links and small site-level controls without changing code." />
       </div>
 
@@ -81,20 +128,42 @@ export function AdminSettingsClient({
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-4">
+      <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm" aria-labelledby="brand-images-title">
+        <div className="mb-5 flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flame-50 text-flame-700"><ImageUp className="h-5 w-5" /></span>
+          <div><h2 id="brand-images-title" className="text-base font-semibold text-gray-900">Brand images</h2><p className="mt-1 text-sm text-gray-600">Upload one image and select where it should appear. Each placement can also be restored independently.</p></div>
+        </div>
+        <label className="block text-sm font-medium text-gray-800" htmlFor="brand-image-upload">Image to upload</label>
+        <input id="brand-image-upload" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setBrandFile(event.target.files?.[0] ?? null)} className="mt-2 block w-full rounded-xl border border-gray-200 p-3 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-flame-50 file:px-3 file:py-2 file:font-semibold file:text-flame-700" />
+        <p className="mt-1 text-xs text-gray-600">PNG, JPEG or WebP, at least 128 × 128 pixels, up to 5 MB. The system prepares the selected sizes.</p>
+        {brandPreview && <div className="mt-4 flex items-center gap-3"><Image src={brandPreview} alt="Selected image preview" width={72} height={72} unoptimized className="h-[72px] w-[72px] rounded-lg object-contain" /><span className="text-sm text-gray-700">{brandFile?.name}</span></div>}
+        <div className="mt-5 divide-y divide-gray-100 border-y border-gray-100">
+          {brandPlacements.map(({ slot, label, description }) => <div key={slot} className="flex flex-wrap items-center gap-3 py-3">
+            <input id={`brand-${slot}`} type="checkbox" checked={selected[slot]} onChange={(event) => setSelected((current) => ({ ...current, [slot]: event.target.checked }))} className="h-4 w-4 accent-flame-600" />
+            <label htmlFor={`brand-${slot}`} className="min-w-0 flex-1 cursor-pointer"><span className="block text-sm font-semibold text-gray-900">{label}</span><span className="block text-xs text-gray-600">{description}</span></label>
+            <Image src={`/api/brand/${slot}?v=${brandVersion}`} alt={`${label} currently in use`} width={44} height={44} unoptimized className="h-11 w-11 rounded-lg bg-gray-50 object-contain" />
+            <span className="text-xs text-gray-600">{brand[slot] ? 'Custom' : 'Default'}</span>
+            {brand[slot] && <button type="button" disabled={brandSaving} onClick={() => restoreBrand(slot)} className="text-sm font-medium text-flame-700 underline underline-offset-2 disabled:opacity-50">Restore default</button>}
+          </div>)}
+        </div>
+        <button type="button" disabled={brandSaving || !brandFile || !Object.values(selected).some(Boolean)} onClick={uploadBrand} className="mt-5 rounded-xl bg-flame-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-flame-700 disabled:opacity-50">{brandSaving ? 'Updating images…' : 'Update selected images'}</button>
+      </section>
+
+      <details className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 focus-visible:outline-2 focus-visible:outline-flame-600 [&::-webkit-details-marker]:hidden">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold-50 to-flame-50 text-flame-600">
             <MessageSquareText className="h-5 w-5" />
           </span>
-          <div>
+          <div className="flex-1">
             <h2 className="text-base font-semibold text-gray-900">Feedback form</h2>
             <p className="text-sm text-gray-500">
               The footer feedback button appears only when the public form URL is set.
             </p>
           </div>
-        </div>
+          <ChevronDown aria-hidden="true" className="h-5 w-5 text-gray-500 transition-transform group-open:rotate-180" />
+        </summary>
 
-        <div className="space-y-5 p-5">
+        <div className="space-y-5 border-t border-gray-100 p-5">
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Public Google Form link</span>
             <input
@@ -166,7 +235,7 @@ export function AdminSettingsClient({
             </button>
           </div>
         </div>
-      </section>
+      </details>
     </div>
   );
 }

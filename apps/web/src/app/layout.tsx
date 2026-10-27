@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     template: '%s | AIM Archive',
   },
   description:
-    'Explore Sri Aurobindo Society magazine editions and writings by Sri Aurobindo and The Mother. Editions enter the free public archive five years after publication.',
+    'Explore Sri Aurobindo Society magazine editions and writings by Sri Aurobindo and The Mother. Featured issues are readable now; other editions enter the free public archive after five years.',
   keywords: [
     'Sri Aurobindo',
     'The Mother',
@@ -68,18 +68,18 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
     description:
-      'Explore Sri Aurobindo Society magazines. Editions become freely readable five years after publication.',
+      'Explore featured Sri Aurobindo Society issues and a growing public archive.',
     type: 'website',
     locale: 'en_IN',
     siteName: 'AIM Archive',
-    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AIM Archive Logo' }],
+    images: [{ url: '/api/brand/social', width: 1200, height: 1200, alt: 'AIM Archive Logo' }],
   },
   twitter: {
     card: 'summary',
     title: 'AIM Archive — Sri Aurobindo Society Magazine Archive',
     description:
-      'Explore Sri Aurobindo Society magazines. Editions become freely readable five years after publication.',
-    images: ['/logo.png'],
+      'Explore featured Sri Aurobindo Society issues and a growing public archive.',
+    images: ['/api/brand/social'],
   },
   robots: {
     index: true,
@@ -89,6 +89,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
+  icons: { icon: '/api/brand/favicon', apple: '/api/brand/favicon' },
 };
 
 const jsonLd = {
@@ -104,7 +105,7 @@ const jsonLd = {
     url: 'https://aurosociety.org',
     logo: {
       '@type': 'ImageObject',
-      url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org'}/logo.png`,
+      url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://aimarchive.aurosociety.org'}/api/brand/logo`,
     },
   },
   potentialAction: {

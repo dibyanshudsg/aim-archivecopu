@@ -132,7 +132,8 @@ export function Header({
             )}
           >
             <Image
-              src="/logo.png"
+              src="/api/brand/logo"
+              unoptimized
               alt="AIM Archive"
               width={40}
               height={40}
